@@ -5,6 +5,7 @@
  */
 const DEFAULT_ALLOWED = [
   "lucianoolivabianco@gmail.com",
+  "kathonejo@gmail.com",
 ];
 
 export function getAllowedEmails(): string[] {
