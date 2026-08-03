@@ -1,6 +1,5 @@
 "use client";
 
-import { authClient } from "@/lib/auth/client";
 import { useState } from "react";
 
 function GoogleMark() {
@@ -36,43 +35,74 @@ export function LoginClient({
   allowedHint?: string[];
 }) {
   const [loading, setLoading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
+  /**
+   * Direct fetch + hard redirect. The Neon Auth client sometimes returns
+   * { url, redirect: true } without navigating (plugin no-op), so we own the redirect.
+   */
   async function signInGoogle() {
     setLoading(true);
+    setLocalError(null);
     const origin = window.location.origin;
+
     try {
-      const result = await authClient.signIn.social({
-        provider: "google",
-        callbackURL: `${origin}/dashboard`,
-        errorCallbackURL: `${origin}/login?error=oauth`,
+      const res = await fetch("/api/auth/sign-in/social", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          provider: "google",
+          callbackURL: `${origin}/dashboard`,
+          errorCallbackURL: `${origin}/login?error=oauth`,
+        }),
       });
-      const err =
-        result && typeof result === "object" && "error" in result
-          ? (result as { error?: { code?: string; message?: string } }).error
-          : null;
-      if (err) {
-        const code = err.code ?? "";
-        const msg = err.message ?? "";
-        if (
-          code === "INVALID_CALLBACKURL" ||
-          /callbackurl|trusted|domain/i.test(msg)
-        ) {
+
+      const data = (await res.json().catch(() => null)) as {
+        url?: string;
+        redirect?: boolean;
+        error?: string | { message?: string; code?: string };
+        message?: string;
+        code?: string;
+      } | null;
+
+      if (!res.ok) {
+        const msg =
+          (typeof data?.error === "object" && data.error?.message) ||
+          (typeof data?.error === "string" && data.error) ||
+          data?.message ||
+          `Error ${res.status}`;
+        if (/callbackurl|trusted|domain|INVALID_CALLBACKURL/i.test(msg)) {
           window.location.href = "/login?error=domain";
           return;
         }
-        window.location.href = "/login?error=oauth";
+        setLocalError(msg);
+        setLoading(false);
+        return;
       }
+
+      if (data?.url) {
+        // Full navigation to Neon Auth → Google
+        window.location.assign(data.url);
+        return;
+      }
+
+      setLocalError(
+        "No se recibió URL de Google. Revisá Neon Auth / dominios confiables.",
+      );
+      setLoading(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/callbackurl|trusted|domain|INVALID_CALLBACKURL/i.test(msg)) {
         window.location.href = "/login?error=domain";
         return;
       }
-      window.location.href = "/login?error=oauth";
-    } finally {
+      setLocalError(msg || "Error de red al iniciar sesión");
       setLoading(false);
     }
   }
+
+  const shownError = localError;
 
   return (
     <div className="space-y-4">
@@ -91,13 +121,18 @@ export function LoginClient({
       )}
       {error === "oauth" && (
         <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">
-          No se pudo completar el login con Google. Reintentá o revisá que Auth
-          esté habilitado en Neon.
+          No se pudo completar el login con Google. Reintentá o revisá que el
+          dominio esté en Neon Auth → Domains.
         </p>
       )}
       {error === "auth_not_configured" && (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
           Auth no está configurado en este entorno.
+        </p>
+      )}
+      {shownError && (
+        <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">
+          {shownError}
         </p>
       )}
 
@@ -109,7 +144,7 @@ export function LoginClient({
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium shadow-sm hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
         >
           <GoogleMark />
-          {loading ? "Redirigiendo…" : "Continuar con Google"}
+          {loading ? "Redirigiendo a Google…" : "Continuar con Google"}
         </button>
       ) : (
         <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
@@ -134,21 +169,14 @@ export function LoginClient({
               Configuration → Domains → agregá{" "}
               <code>https://llevacuentas.vercel.app</code>
             </li>
-            <li>
-              En Vercel, re-sync del integration Neon (o redeploy) para que
-              llegue <code>NEON_AUTH_BASE_URL</code>
-            </li>
+            <li>Redeploy en Vercel</li>
           </ol>
-          <p className="text-xs opacity-80">
-            Es el mismo flujo que en lulox.dev: Google sin Google Cloud Console.
-          </p>
         </div>
       )}
 
       {allowedHint && allowedHint.length > 0 && (
         <p className="text-xs text-zinc-500">
           Acceso limitado a: {allowedHint.join(", ")}
-          {allowedHint.length >= 1 ? " (+ mails en ALLOWED_EMAILS)" : ""}
         </p>
       )}
     </div>
