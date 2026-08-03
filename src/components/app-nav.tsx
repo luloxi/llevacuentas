@@ -1,0 +1,94 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  Home,
+  List,
+  PieChart,
+  ShoppingCart,
+  Upload,
+  Users,
+  LogOut,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { signOut } from "next-auth/react";
+
+const links = [
+  { href: "/dashboard", label: "Inicio", icon: Home },
+  { href: "/consumos", label: "Consumos", icon: List },
+  { href: "/mes-a-mes", label: "Mes a mes", icon: PieChart },
+  { href: "/supermercado", label: "Súper", icon: ShoppingCart },
+  { href: "/importar", label: "Importar", icon: Upload },
+  { href: "/pareja", label: "Pareja", icon: Users },
+];
+
+export function AppNav() {
+  const pathname = usePathname();
+
+  return (
+    <>
+      {/* Desktop top bar */}
+      <header className="hidden border-b border-emerald-900/10 bg-white/80 backdrop-blur md:block dark:border-emerald-100/10 dark:bg-zinc-950/80">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+          <Link href="/dashboard" className="flex items-center gap-2 font-semibold tracking-tight">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-sm text-white">
+              LC
+            </span>
+            <span>LlevaCuentas</span>
+          </Link>
+          <nav className="flex items-center gap-1">
+            {links.map(({ href, label, icon: Icon }) => {
+              const active = pathname.startsWith(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition",
+                    active
+                      ? "bg-emerald-600 text-white"
+                      : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800",
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </Link>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="ml-2 flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            >
+              <LogOut className="h-4 w-4" />
+              Salir
+            </button>
+          </nav>
+        </div>
+      </header>
+
+      {/* Mobile bottom nav */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 backdrop-blur md:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
+        <div className="mx-auto grid max-w-lg grid-cols-6 gap-0.5 px-1 py-1">
+          {links.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  "flex flex-col items-center gap-0.5 rounded-lg px-1 py-2 text-[10px]",
+                  active ? "text-emerald-600" : "text-zinc-500",
+                )}
+              >
+                <Icon className="h-5 w-5" />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    </>
+  );
+}

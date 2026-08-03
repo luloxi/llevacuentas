@@ -1,0 +1,227 @@
+import {
+  boolean,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  index,
+} from "drizzle-orm/pg-core";
+import type { AdapterAccountType } from "next-auth/adapters";
+
+// ─── Auth.js tables ───────────────────────────────────────────────
+
+export const users = pgTable("users", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name"),
+  email: text("email").unique(),
+  emailVerified: timestamp("email_verified", { mode: "date" }),
+  image: text("image"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const accounts = pgTable(
+  "accounts",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").$type<AdapterAccountType>().notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("provider_account_id").notNull(),
+    refresh_token: text("refresh_token"),
+    access_token: text("access_token"),
+    expires_at: integer("expires_at"),
+    token_type: text("token_type"),
+    scope: text("scope"),
+    id_token: text("id_token"),
+    session_state: text("session_state"),
+  },
+  (t) => [primaryKey({ columns: [t.provider, t.providerAccountId] })],
+);
+
+export const sessions = pgTable("sessions", {
+  sessionToken: text("session_token").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expires: timestamp("expires", { mode: "date" }).notNull(),
+});
+
+export const verificationTokens = pgTable(
+  "verification_tokens",
+  {
+    identifier: text("identifier").notNull(),
+    token: text("token").notNull(),
+    expires: timestamp("expires", { mode: "date" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.identifier, t.token] })],
+);
+
+// ─── Domain ───────────────────────────────────────────────────────
+
+export const households = pgTable("households", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().default("Nuestro hogar"),
+  inviteCode: text("invite_code").notNull().unique(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const householdMembers = pgTable(
+  "household_members",
+  {
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").$type<"owner" | "member">().notNull().default("member"),
+    displayName: text("display_name"),
+    joinedAt: timestamp("joined_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.householdId, t.userId] }),
+    index("hm_user_idx").on(t.userId),
+  ],
+);
+
+export const categories = pgTable("categories", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  kind: text("kind").$type<"expense" | "payment" | "interest">().notNull(),
+  defaultOwnership: text("default_ownership")
+    .$type<"personal" | "shared">()
+    .notNull()
+    .default("personal"),
+  isSystem: boolean("is_system").notNull().default(true),
+});
+
+export const merchantRules = pgTable("merchant_rules", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  householdId: text("household_id").references(() => households.id, {
+    onDelete: "cascade",
+  }),
+  pattern: text("pattern").notNull(),
+  categoryId: text("category_id")
+    .notNull()
+    .references(() => categories.id, { onDelete: "cascade" }),
+  priority: integer("priority").notNull().default(50),
+});
+
+export const cardStatements = pgTable("card_statements", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  householdId: text("household_id")
+    .notNull()
+    .references(() => households.id, { onDelete: "cascade" }),
+  source: text("source").notNull().default("bbva_xlsx"),
+  fileName: text("file_name"),
+  importedBy: text("imported_by").references(() => users.id),
+  importedAt: timestamp("imported_at", { mode: "date" }).defaultNow().notNull(),
+  rowCount: integer("row_count").notNull().default(0),
+});
+
+export const transactions = pgTable(
+  "transactions",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    statementId: text("statement_id").references(() => cardStatements.id, {
+      onDelete: "set null",
+    }),
+    date: text("date").notNull(), // YYYY-MM-DD
+    descriptionRaw: text("description_raw").notNull(),
+    descriptionNormalized: text("description_normalized").notNull(),
+    amountArs: numeric("amount_ars", { precision: 14, scale: 2 }),
+    amountUsd: numeric("amount_usd", { precision: 14, scale: 2 }),
+    installment: text("installment"),
+    isPayment: boolean("is_payment").notNull().default(false),
+    isCredit: boolean("is_credit").notNull().default(false),
+    categoryId: text("category_id").references(() => categories.id),
+    ownership: text("ownership")
+      .$type<"personal" | "shared">()
+      .notNull()
+      .default("personal"),
+    paidByUserId: text("paid_by_user_id").references(() => users.id),
+    splitPct: integer("split_pct").notNull().default(50), // % for paid_by user; partner gets 100-split
+    externalFingerprint: text("external_fingerprint").notNull(),
+    source: text("source").notNull().default("bbva_import"), // bbva_import | receipt | manual | transparencia
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("tx_household_fp_uidx").on(t.householdId, t.externalFingerprint),
+    index("tx_household_date_idx").on(t.householdId, t.date),
+    index("tx_household_cat_idx").on(t.householdId, t.categoryId),
+  ],
+);
+
+export const receipts = pgTable(
+  "receipts",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    imageUrl: text("image_url").notNull(),
+    merchantName: text("merchant_name"),
+    receiptDate: text("receipt_date"), // YYYY-MM-DD
+    totalArs: numeric("total_ars", { precision: 14, scale: 2 }),
+    currency: text("currency").default("ARS"),
+    ocrRaw: jsonb("ocr_raw"),
+    status: text("status")
+      .$type<"pending" | "parsed" | "matched" | "failed">()
+      .notNull()
+      .default("pending"),
+    transactionId: text("transaction_id").references(() => transactions.id, {
+      onDelete: "set null",
+    }),
+    createdBy: text("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("receipts_household_idx").on(t.householdId),
+    index("receipts_tx_idx").on(t.transactionId),
+  ],
+);
+
+export const receiptItems = pgTable("receipt_items", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  receiptId: text("receipt_id")
+    .notNull()
+    .references(() => receipts.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  quantity: numeric("quantity", { precision: 10, scale: 3 }).default("1"),
+  unitPrice: numeric("unit_price", { precision: 14, scale: 2 }),
+  lineTotal: numeric("line_total", { precision: 14, scale: 2 }),
+  productCategory: text("product_category"),
+});
+
+export type User = typeof users.$inferSelect;
+export type Household = typeof households.$inferSelect;
+export type Transaction = typeof transactions.$inferSelect;
+export type Category = typeof categories.$inferSelect;
+export type Receipt = typeof receipts.$inferSelect;
+export type ReceiptItem = typeof receiptItems.$inferSelect;
