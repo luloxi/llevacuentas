@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { auth } from "@/lib/auth";
+import { requireApiUser } from "@/lib/api-auth";
 import { getCategoryMap, requireHousehold } from "@/lib/household";
 import { getDb, schema } from "@/lib/db";
 
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const authResult = await requireApiUser();
+  if ("error" in authResult) return authResult.error;
+  const { user: sessionUser } = authResult;
 
   try {
-    const ctx = await requireHousehold(session.user.id);
+    const ctx = await requireHousehold(sessionUser.id);
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period"); // optional YYYY-MM
 

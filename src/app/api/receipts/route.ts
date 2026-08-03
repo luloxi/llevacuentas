@@ -2,19 +2,18 @@ import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { createHash } from "crypto";
-import { auth } from "@/lib/auth";
+import { requireApiUser } from "@/lib/api-auth";
 import { getCategoryMap, requireHousehold } from "@/lib/household";
 import { getDb, schema } from "@/lib/db";
 import { mockReceiptOcr, parseReceiptImage } from "@/lib/receipts/ocr";
 import { matchReceiptToTransactions } from "@/lib/receipts/match";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const authResult = await requireApiUser();
+  if ("error" in authResult) return authResult.error;
+  const { user: sessionUser } = authResult;
   try {
-    const ctx = await requireHousehold(session.user.id);
+    const ctx = await requireHousehold(sessionUser.id);
     const db = getDb();
     const rows = await db
       .select()
@@ -51,13 +50,12 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const authResult = await requireApiUser();
+  if ("error" in authResult) return authResult.error;
+  const { user: sessionUser } = authResult;
 
   try {
-    const ctx = await requireHousehold(session.user.id);
+    const ctx = await requireHousehold(sessionUser.id);
     const form = await req.formData();
     const file = form.get("file");
     if (!(file instanceof File)) {
@@ -111,7 +109,7 @@ export async function POST(req: Request) {
         currency: ocr.currency,
         ocrRaw: ocr,
         status,
-        createdBy: session.user.id,
+        createdBy: sessionUser.id,
       })
       .returning();
 
@@ -225,7 +223,7 @@ export async function POST(req: Request) {
             amountArs: String(ocr.total),
             categoryId: superCat?.id,
             ownership: "shared",
-            paidByUserId: session.user.id,
+            paidByUserId: sessionUser.id,
             externalFingerprint: fp,
             source: "receipt",
           })
@@ -279,12 +277,11 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const authResult = await requireApiUser();
+  if ("error" in authResult) return authResult.error;
+  const { user: sessionUser } = authResult;
   try {
-    const ctx = await requireHousehold(session.user.id);
+    const ctx = await requireHousehold(sessionUser.id);
     const body = await req.json();
     const db = getDb();
     const [row] = await db

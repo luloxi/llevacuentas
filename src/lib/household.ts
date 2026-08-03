@@ -1,11 +1,13 @@
 import { eq, sql } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 import { getDb, schema } from "@/lib/db";
+import { ensureSchema } from "@/lib/db/ensure-schema";
 import { CATEGORY_SEEDS } from "@/lib/categorize/rules";
 
 const inviteCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
 
 export async function ensureCategoriesSeeded() {
+  await ensureSchema();
   const db = getDb();
   const existing = await db.select().from(schema.categories).limit(1);
   if (existing.length > 0) return;
@@ -52,6 +54,7 @@ export type HouseholdContext = {
 export async function getUserHousehold(
   userId: string,
 ): Promise<HouseholdContext | null> {
+  await ensureSchema();
   const db = getDb();
   const [membership] = await db
     .select()
@@ -84,8 +87,8 @@ export async function getUserHousehold(
 }
 
 export async function createHousehold(userId: string, name = "Nuestro hogar") {
-  const db = getDb();
   await ensureCategoriesSeeded();
+  const db = getDb();
 
   const existing = await getUserHousehold(userId);
   if (existing) return existing;
@@ -105,8 +108,8 @@ export async function createHousehold(userId: string, name = "Nuestro hogar") {
 }
 
 export async function joinHousehold(userId: string, code: string) {
-  const db = getDb();
   await ensureCategoriesSeeded();
+  const db = getDb();
 
   const existing = await getUserHousehold(userId);
   if (existing) {
@@ -147,8 +150,8 @@ export async function requireHousehold(userId: string) {
 }
 
 export async function getCategoryMap() {
-  const db = getDb();
   await ensureCategoriesSeeded();
+  const db = getDb();
   const cats = await db.select().from(schema.categories);
   const bySlug = new Map(cats.map((c) => [c.slug, c]));
   const byId = new Map(cats.map((c) => [c.id, c]));

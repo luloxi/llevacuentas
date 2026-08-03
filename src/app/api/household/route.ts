@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireApiUser } from "@/lib/api-auth";
 import { createHousehold, getUserHousehold, joinHousehold } from "@/lib/household";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const authResult = await requireApiUser();
+  if ("error" in authResult) return authResult.error;
+  const { user: sessionUser } = authResult;
   try {
-    const ctx = await getUserHousehold(session.user.id);
+    const ctx = await getUserHousehold(sessionUser.id);
     return NextResponse.json({ household: ctx });
   } catch (e) {
     return NextResponse.json(
@@ -19,18 +18,17 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const authResult = await requireApiUser();
+  if ("error" in authResult) return authResult.error;
+  const { user: sessionUser } = authResult;
   try {
     const body = await req.json();
     if (body.action === "join") {
-      const ctx = await joinHousehold(session.user.id, body.code);
+      const ctx = await joinHousehold(sessionUser.id, body.code);
       return NextResponse.json({ household: ctx });
     }
     const ctx = await createHousehold(
-      session.user.id,
+      sessionUser.id,
       body.name || "Nuestro hogar",
     );
     return NextResponse.json({ household: ctx });

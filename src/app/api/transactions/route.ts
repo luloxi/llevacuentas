@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireApiUser } from "@/lib/api-auth";
 import { getCategoryMap, requireHousehold } from "@/lib/household";
 import { listTransactions, updateTransaction } from "@/lib/import/bbva";
 
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const authResult = await requireApiUser();
+  if ("error" in authResult) return authResult.error;
+  const { user: sessionUser } = authResult;
   try {
-    const ctx = await requireHousehold(session.user.id);
+    const ctx = await requireHousehold(sessionUser.id);
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period") ?? undefined;
     const categoryId = searchParams.get("categoryId") ?? undefined;
@@ -38,12 +37,11 @@ export async function GET(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const authResult = await requireApiUser();
+  if ("error" in authResult) return authResult.error;
+  const { user: sessionUser } = authResult;
   try {
-    const ctx = await requireHousehold(session.user.id);
+    const ctx = await requireHousehold(sessionUser.id);
     const body = await req.json();
     if (!body.id) {
       return NextResponse.json({ error: "Falta id" }, { status: 400 });

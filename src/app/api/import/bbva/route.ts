@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireApiUser } from "@/lib/api-auth";
 import { requireHousehold } from "@/lib/household";
 import {
   importBbvaFile,
@@ -7,13 +7,12 @@ import {
 } from "@/lib/import/bbva";
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const authResult = await requireApiUser();
+  if ("error" in authResult) return authResult.error;
+  const { user: sessionUser } = authResult;
 
   try {
-    const ctx = await requireHousehold(session.user.id);
+    const ctx = await requireHousehold(sessionUser.id);
     const form = await req.formData();
     const file = form.get("file");
     const kind = String(form.get("kind") ?? "bbva");
@@ -27,13 +26,13 @@ export async function POST(req: Request) {
       kind === "transparencia"
         ? await importTransparenciaConsumos({
             householdId: ctx.household.id,
-            userId: session.user.id,
+            userId: sessionUser.id,
             fileName: file.name,
             buffer,
           })
         : await importBbvaFile({
             householdId: ctx.household.id,
-            userId: session.user.id,
+            userId: sessionUser.id,
             fileName: file.name,
             buffer,
           });
