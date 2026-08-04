@@ -6,7 +6,6 @@ import {
   Home,
   List,
   PieChart,
-  Landmark,
   Users,
   LogOut,
   Shield,
@@ -19,7 +18,6 @@ const links = [
   { href: "/dashboard", label: "Inicio", icon: Home },
   { href: "/consumos", label: "Consumos", icon: List },
   { href: "/analisis", label: "Análisis", icon: PieChart },
-  { href: "/deuda", label: "Deuda", icon: Landmark },
   { href: "/compartido", label: "Hogar", icon: Users },
 ];
 

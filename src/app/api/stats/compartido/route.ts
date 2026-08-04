@@ -7,6 +7,7 @@ import {
   convertUsdToArs,
   getMonthEndBuyRates,
 } from "@/lib/fx/month-end-rates";
+import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
 
 /**
  * Shared-only household budget view (no “who owes whom”).
@@ -40,6 +41,7 @@ export async function GET(req: Request) {
 
     for (const r of rows) {
       if (r.isPayment) continue;
+      if (isBankAccountingEntry(r.descriptionNormalized)) continue;
       if (r.ownership !== "shared") continue;
       const p = r.date.slice(0, 7);
       periodsSet.add(p);

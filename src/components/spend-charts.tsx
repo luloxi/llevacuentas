@@ -17,12 +17,10 @@ const W = 720;
 const H = 260;
 const PAD = { top: 20, right: 16, bottom: 36, left: 56 };
 
-function niceMax(v: number): number {
-  if (v <= 0) return 1000;
-  const exp = Math.pow(10, Math.floor(Math.log10(v)));
-  const n = v / exp;
-  const nice = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
-  return nice * exp;
+/** Chart ceiling: 10% above the tallest data point (not a large "nice" round). */
+function chartMax(v: number): number {
+  if (!Number.isFinite(v) || v <= 0) return 1;
+  return v * 1.1;
 }
 
 function scaleX(i: number, n: number, width: number) {
@@ -49,7 +47,7 @@ export function TotalSpendChart({ totals }: { totals: TotalPoint[] }) {
   const chartH = H - PAD.top - PAD.bottom;
 
   const max = useMemo(
-    () => niceMax(Math.max(...totals.map((t) => t.amountArs), 0)),
+    () => chartMax(Math.max(...totals.map((t) => t.amountArs), 0)),
     [totals],
   );
 
@@ -226,7 +224,7 @@ export function CategoryLinesChart({
     for (const c of active) {
       for (const p of c.series) m = Math.max(m, p.amountArs);
     }
-    return niceMax(m);
+    return chartMax(m);
   }, [active]);
 
   if (periods.length === 0 || byCategory.length === 0) {

@@ -7,6 +7,7 @@ import {
 import { looksLikePdf, parseBbvaStatementPdf } from "@/lib/bbva/parse-pdf";
 import { matchCategory, categoryNameToSlug } from "@/lib/categorize/rules";
 import { matchCategoryWithLearning } from "@/lib/categorize/learn";
+import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
 import { getDb, schema } from "@/lib/db";
 import { getCategoryMap } from "@/lib/household";
 
@@ -485,6 +486,8 @@ export async function listTransactions(
     q?: string;
     /** Only rows with no category or Uncategorized */
     uncategorizedOnly?: boolean;
+    /** Include card payments / credits (default false — Consumos shows expenses only) */
+    includePayments?: boolean;
   },
 ) {
   const db = getDb();
@@ -498,6 +501,14 @@ export async function listTransactions(
     .orderBy(desc(schema.transactions.date));
 
   return rows.filter((r) => {
+    if (!opts?.includePayments && r.isPayment) return false;
+    // Pesificación / transferencia deuda: not a real spend
+    if (
+      !opts?.includePayments &&
+      isBankAccountingEntry(r.descriptionNormalized)
+    ) {
+      return false;
+    }
     if (opts?.period && !r.date.startsWith(opts.period)) return false;
     if (opts?.categoryId && r.categoryId !== opts.categoryId) return false;
     if (opts?.uncategorizedOnly) {

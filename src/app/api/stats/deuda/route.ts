@@ -7,16 +7,10 @@ import {
   convertUsdToArs,
   getMonthEndBuyRates,
 } from "@/lib/fx/month-end-rates";
-
-function isCardPayment(desc: string): boolean {
-  const u = desc.toUpperCase();
-  return (
-    u.includes("SU PAGO") ||
-    u.includes("PAGO EN PESOS") ||
-    u.includes("PAGO EN USD") ||
-    u.includes("PAGO RECIBIDO")
-  );
-}
+import {
+  isBankAccountingEntry,
+  isCardPaymentEntry,
+} from "@/lib/bbva/bank-entries";
 
 export async function GET() {
   const authResult = await requireApiUser();
@@ -82,8 +76,13 @@ export async function GET() {
       const usd = r.amountUsd != null ? Math.abs(Number(r.amountUsd)) : 0;
       const b = bucket(p);
 
+      // Currency reclassifications (pesificación / deuda USD→ARS): not new spend nor cash payment
+      if (isBankAccountingEntry(r.descriptionNormalized)) {
+        continue;
+      }
+
       if (r.isPayment) {
-        const cardPay = isCardPayment(r.descriptionNormalized);
+        const cardPay = isCardPaymentEntry(r.descriptionNormalized);
         if (cardPay) {
           b.paymentsArs += ars;
           b.paymentsUsd += usd;

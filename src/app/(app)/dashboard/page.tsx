@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { formatArs } from "@/lib/utils";
 import { getDb, schema } from "@/lib/db";
 import { eq } from "drizzle-orm";
-import { List, Users, PieChart, Landmark } from "lucide-react";
+import { List, Users, PieChart } from "lucide-react";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -62,13 +62,7 @@ export default async function DashboardPage() {
           href="/analisis"
           icon={<PieChart className="h-5 w-5" />}
           title="Análisis"
-          desc="Por mes, categorías y gráficos"
-        />
-        <QuickLink
-          href="/deuda"
-          icon={<Landmark className="h-5 w-5" />}
-          title="Deuda"
-          desc="Pagos y evolución de la tarjeta"
+          desc="Resumen, gráficos y deuda"
         />
         <QuickLink
           href="/compartido"

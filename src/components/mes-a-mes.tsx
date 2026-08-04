@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  LayoutGrid,
+  Landmark,
   LineChart,
+  LayoutList,
 } from "lucide-react";
 import { cn, formatArs, formatUsd, formatDateAr } from "@/lib/utils";
 import { formatPeriodLabel } from "@/lib/period-label";
 import { colorForCategory } from "@/lib/category-colors";
 import { CategoryLinesChart, TotalSpendChart } from "@/components/spend-charts";
+import { DeudaView } from "@/components/deuda-view";
 
 type CategoryOpt = { id: string; slug: string; name: string };
 
@@ -80,12 +81,81 @@ type Tx = {
   category: CategoryOpt | null;
 };
 
-type ViewMode = "month" | "all" | "charts";
+type MainTab = "resumen" | "charts" | "deuda";
+
+function aggregateMonths(months: MonthBlock[]): MonthBlock {
+  const bySlug = new Map<
+    string,
+    {
+      slug: string;
+      name: string;
+      amountArs: number;
+      amountUsd: number;
+      amountArsFromUsd: number;
+      amountArsCombined: number;
+      count: number;
+    }
+  >();
+  let totalArs = 0;
+  let totalUsd = 0;
+  let totalArsFromUsd = 0;
+  let totalCount = 0;
+
+  for (const m of months) {
+    totalArs += m.totalArs;
+    totalUsd += m.totalUsd;
+    totalArsFromUsd += m.totalArsFromUsd ?? 0;
+    totalCount += m.totalCount;
+    for (const c of m.categories) {
+      const fromUsd = c.amountArsFromUsd ?? 0;
+      const combined = c.amountArsCombined ?? c.amountArs + fromUsd;
+      const cur = bySlug.get(c.slug) ?? {
+        slug: c.slug,
+        name: c.name,
+        amountArs: 0,
+        amountUsd: 0,
+        amountArsFromUsd: 0,
+        amountArsCombined: 0,
+        count: 0,
+      };
+      cur.amountArs += c.amountArs;
+      cur.amountUsd += c.amountUsd;
+      cur.amountArsFromUsd += fromUsd;
+      cur.amountArsCombined += combined;
+      cur.count += c.count;
+      if (c.name) cur.name = c.name;
+      bySlug.set(c.slug, cur);
+    }
+  }
+
+  const totalArsCombined = totalArs + totalArsFromUsd;
+  const categories = [...bySlug.values()]
+    .map((c) => ({
+      ...c,
+      categoryId: null as string | null,
+      pct:
+        totalArsCombined > 0
+          ? (c.amountArsCombined / totalArsCombined) * 100
+          : 0,
+    }))
+    .sort((a, b) => b.amountArsCombined - a.amountArsCombined);
+
+  return {
+    period: "total",
+    totalArs,
+    totalUsd,
+    totalArsFromUsd,
+    totalArsCombined,
+    totalCount,
+    categories,
+  };
+}
 
 export function MesAMesView() {
-  const [mode, setMode] = useState<ViewMode>("all");
+  const [mainTab, setMainTab] = useState<MainTab>("resumen");
+  /** "all" or YYYY-MM */
+  const [filterPeriod, setFilterPeriod] = useState<string>("all");
   const [periods, setPeriods] = useState<string[]>([]);
-  const [periodIndex, setPeriodIndex] = useState(0); // 0 = latest
   const [months, setMonths] = useState<MonthBlock[]>([]);
   const [chart, setChart] = useState<ChartData | null>(null);
   const [categories, setCategories] = useState<CategoryOpt[]>([]);
@@ -97,25 +167,11 @@ export function MesAMesView() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const currentPeriod = periods[periodIndex] ?? "";
-
-  const statsQuery = useMemo(() => {
-    if (mode === "all" || mode === "charts") return "all";
-    if (currentPeriod) return currentPeriod;
-    return ""; // latest
-  }, [mode, currentPeriod]);
-
   const loadStats = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params =
-        statsQuery === "all"
-          ? "?period=all"
-          : statsQuery
-            ? `?period=${encodeURIComponent(statsQuery)}`
-            : "";
-      const res = await fetch(`/api/stats/mes-a-mes${params}`, {
+      const res = await fetch(`/api/stats/mes-a-mes?period=all`, {
         credentials: "include",
       });
       const data = await res.json();
@@ -127,27 +183,20 @@ export function MesAMesView() {
       setMonths(data.months ?? []);
       setChart(data.chart ?? null);
       setCategories(data.categories ?? []);
-
-      // Keep periodIndex in range; default to latest (0)
-      if (data.periods?.length) {
-        setPeriodIndex((i) =>
-          Math.min(Math.max(i, 0), data.periods.length - 1),
-        );
-      }
     } catch {
       setError("Error de red");
     } finally {
       setLoading(false);
     }
-  }, [statsQuery]);
+  }, []);
 
   useEffect(() => {
     void loadStats();
   }, [loadStats]);
 
-  // Load transactions for current month (expand + recategorize)
+  // Load transactions for expand + recategorize (one month or all)
   useEffect(() => {
-    if (mode !== "month" || !currentPeriod) {
+    if (mainTab !== "resumen") {
       setTxs([]);
       return;
     }
@@ -155,10 +204,13 @@ export function MesAMesView() {
     async function loadTxs() {
       setTxsLoading(true);
       try {
-        const res = await fetch(
-          `/api/transactions?period=${encodeURIComponent(currentPeriod)}`,
-          { credentials: "include" },
-        );
+        const q =
+          filterPeriod && filterPeriod !== "all"
+            ? `?period=${encodeURIComponent(filterPeriod)}`
+            : "";
+        const res = await fetch(`/api/transactions${q}`, {
+          credentials: "include",
+        });
         const data = await res.json();
         if (cancelled) return;
         if (res.ok) {
@@ -180,7 +232,14 @@ export function MesAMesView() {
     return () => {
       cancelled = true;
     };
-  }, [mode, currentPeriod]);
+  }, [mainTab, filterPeriod]);
+
+  const grand = useMemo(() => aggregateMonths(months), [months]);
+
+  const selectedMonth = useMemo(() => {
+    if (filterPeriod === "all") return null;
+    return months.find((m) => m.period === filterPeriod) ?? null;
+  }, [months, filterPeriod]);
 
   const txsByCat = useMemo(() => {
     const map = new Map<string, Tx[]>();
@@ -195,12 +254,15 @@ export function MesAMesView() {
     return map;
   }, [txs]);
 
+  const periodIndex = periods.indexOf(filterPeriod);
+
   function goPrev() {
-    // periods[0] is latest; higher index = older
-    setPeriodIndex((i) => Math.min(i + 1, periods.length - 1));
+    if (periodIndex < 0 || periodIndex >= periods.length - 1) return;
+    setFilterPeriod(periods[periodIndex + 1]!);
   }
   function goNext() {
-    setPeriodIndex((i) => Math.max(i - 1, 0));
+    if (periodIndex <= 0) return;
+    setFilterPeriod(periods[periodIndex - 1]!);
   }
 
   function toggleExpand(slug: string) {
@@ -216,9 +278,7 @@ export function MesAMesView() {
     setSavingId(txId);
     setToast(null);
     const prev = txs;
-    const cat =
-      categories.find((c) => c.id === categoryId) ??
-      (categoryId ? null : null);
+    const cat = categories.find((c) => c.id === categoryId) ?? null;
     setTxs((list) =>
       list.map((t) =>
         t.id === txId
@@ -249,13 +309,14 @@ export function MesAMesView() {
           `Categoría actualizada. También ${data.similarUpdated} gasto(s) similar(es).`,
         );
       }
-      // Refresh aggregates so amounts move between categories
       void loadStats();
-      // Reload txs for accurate grouping
-      const res2 = await fetch(
-        `/api/transactions?period=${encodeURIComponent(currentPeriod)}`,
-        { credentials: "include" },
-      );
+      const q =
+        filterPeriod && filterPeriod !== "all"
+          ? `?period=${encodeURIComponent(filterPeriod)}`
+          : "";
+      const res2 = await fetch(`/api/transactions${q}`, {
+        credentials: "include",
+      });
       if (res2.ok) {
         const d2 = await res2.json();
         setTxs(
@@ -274,11 +335,11 @@ export function MesAMesView() {
     }
   }
 
-  if (loading && months.length === 0 && !chart) {
+  if (loading && months.length === 0 && !chart && mainTab !== "deuda") {
     return <p className="text-sm text-zinc-500">Calculando análisis…</p>;
   }
 
-  if (error && months.length === 0 && !chart) {
+  if (error && months.length === 0 && mainTab !== "deuda") {
     return (
       <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
         {error}
@@ -286,39 +347,24 @@ export function MesAMesView() {
     );
   }
 
-  const single =
-    mode === "month"
-      ? (months.find((m) => m.period === currentPeriod) ??
-        (months[0]?.period === currentPeriod || !currentPeriod
-          ? months[0]
-          : undefined) ??
-        null)
-      : null;
-  const monthStale =
-    mode === "month" &&
-    Boolean(currentPeriod) &&
-    single != null &&
-    single.period !== currentPeriod;
-
   return (
     <div className="space-y-4">
-      {/* Mode tabs */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex rounded-xl border border-zinc-200/80 bg-zinc-100/80 p-1 shadow-inner dark:border-zinc-700/80 dark:bg-zinc-900/80">
           {(
             [
-              { id: "month" as const, label: "Por mes", icon: CalendarDays },
-              { id: "all" as const, label: "Todos", icon: LayoutGrid },
+              { id: "resumen" as const, label: "Resumen", icon: LayoutList },
               { id: "charts" as const, label: "Gráficos", icon: LineChart },
+              { id: "deuda" as const, label: "Deuda", icon: Landmark },
             ] as const
           ).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
-              onClick={() => setMode(id)}
+              onClick={() => setMainTab(id)}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all",
-                mode === id
+                mainTab === id
                   ? "bg-white text-emerald-700 shadow-sm ring-1 ring-black/5 dark:bg-zinc-800 dark:text-emerald-400 dark:ring-white/10"
                   : "text-zinc-600 hover:bg-white/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100",
               )}
@@ -329,15 +375,13 @@ export function MesAMesView() {
           ))}
         </div>
 
-        {mode === "month" && periods.length > 0 && (
+        {mainTab === "resumen" && periods.length > 0 && (
           <select
-            value={currentPeriod}
-            onChange={(e) => {
-              const idx = periods.indexOf(e.target.value);
-              if (idx >= 0) setPeriodIndex(idx);
-            }}
+            value={filterPeriod}
+            onChange={(e) => setFilterPeriod(e.target.value)}
             className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           >
+            <option value="all">Todos los meses</option>
             {periods.map((p) => (
               <option key={p} value={p}>
                 {formatPeriodLabel(p)}
@@ -348,30 +392,55 @@ export function MesAMesView() {
       </div>
 
       {toast && (
-        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+        <div
+          role="status"
+          className="fixed bottom-20 right-4 z-50 max-w-sm rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 shadow-lg md:bottom-6 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100"
+        >
           {toast}
-        </p>
+        </div>
       )}
-      {error && months.length > 0 && (
+      {error && months.length > 0 && mainTab === "resumen" && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40">
           {error}
         </p>
       )}
 
-      {periods.length === 0 ? (
+      {mainTab === "deuda" ? (
+        <DeudaView />
+      ) : mainTab === "charts" ? (
+        periods.length === 0 ? (
+          <p className="text-sm text-zinc-500">
+            Todavía no hay datos. Importá el resumen de la tarjeta.
+          </p>
+        ) : (
+          <ChartsPanel chart={chart} />
+        )
+      ) : periods.length === 0 ? (
         <p className="text-sm text-zinc-500">
           Todavía no hay datos. Importá el resumen de la tarjeta.
         </p>
-      ) : mode === "charts" ? (
-        <ChartsPanel chart={chart} />
-      ) : mode === "all" ? (
-        <AllMonthsView months={months} />
-      ) : loading || monthStale ? (
-        <p className="text-sm text-zinc-500">Cargando mes…</p>
-      ) : single ? (
+      ) : filterPeriod === "all" ? (
         <MonthDetail
-          month={single}
-          canPrev={periodIndex < periods.length - 1}
+          month={grand}
+          title="Resumen de gastos"
+          subtitle={`${months.length} ${months.length === 1 ? "mes" : "meses"} · ${grand.totalCount} movimientos · tocá una categoría para ver y recategorizar · USD al TC compra fin de cada mes`}
+          variant="grand"
+          canPrev={false}
+          canNext={false}
+          onPrev={() => {}}
+          onNext={() => {}}
+          expanded={expanded}
+          onToggle={toggleExpand}
+          txsByCat={txsByCat}
+          categories={categories}
+          txsLoading={txsLoading}
+          savingId={savingId}
+          onChangeCategory={changeCategory}
+        />
+      ) : selectedMonth ? (
+        <MonthDetail
+          month={selectedMonth}
+          canPrev={periodIndex >= 0 && periodIndex < periods.length - 1}
           canNext={periodIndex > 0}
           onPrev={goPrev}
           onNext={goNext}
@@ -386,108 +455,6 @@ export function MesAMesView() {
       ) : (
         <p className="text-sm text-zinc-500">Sin datos para este mes.</p>
       )}
-    </div>
-  );
-}
-
-function AllMonthsView({ months }: { months: MonthBlock[] }) {
-  const grand = useMemo(() => {
-    const bySlug = new Map<
-      string,
-      {
-        slug: string;
-        name: string;
-        amountArs: number;
-        amountUsd: number;
-        amountArsFromUsd: number;
-        amountArsCombined: number;
-        count: number;
-      }
-    >();
-    let totalArs = 0;
-    let totalUsd = 0;
-    let totalArsFromUsd = 0;
-    let totalCount = 0;
-
-    for (const m of months) {
-      totalArs += m.totalArs;
-      totalUsd += m.totalUsd;
-      totalArsFromUsd += m.totalArsFromUsd ?? 0;
-      totalCount += m.totalCount;
-      for (const c of m.categories) {
-        const fromUsd = c.amountArsFromUsd ?? 0;
-        const combined = c.amountArsCombined ?? c.amountArs + fromUsd;
-        const cur = bySlug.get(c.slug) ?? {
-          slug: c.slug,
-          name: c.name,
-          amountArs: 0,
-          amountUsd: 0,
-          amountArsFromUsd: 0,
-          amountArsCombined: 0,
-          count: 0,
-        };
-        cur.amountArs += c.amountArs;
-        cur.amountUsd += c.amountUsd;
-        cur.amountArsFromUsd += fromUsd;
-        cur.amountArsCombined += combined;
-        cur.count += c.count;
-        if (c.name) cur.name = c.name;
-        bySlug.set(c.slug, cur);
-      }
-    }
-
-    const totalArsCombined = totalArs + totalArsFromUsd;
-    const categories = [...bySlug.values()]
-      .map((c) => ({
-        ...c,
-        categoryId: null as string | null,
-        pct:
-          totalArsCombined > 0
-            ? (c.amountArsCombined / totalArsCombined) * 100
-            : 0,
-      }))
-      .sort((a, b) => b.amountArsCombined - a.amountArsCombined);
-
-    return {
-      period: "total",
-      totalArs,
-      totalUsd,
-      totalArsFromUsd,
-      totalArsCombined,
-      totalCount,
-      categories,
-    } satisfies MonthBlock;
-  }, [months]);
-
-  if (months.length === 0) {
-    return (
-      <p className="text-sm text-zinc-500">
-        Todavía no hay datos. Importá el resumen de la tarjeta.
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <MonthSummaryCard
-        month={grand}
-        title="Total de todos los meses"
-        subtitle={`${months.length} ${months.length === 1 ? "mes" : "meses"} · ${grand.totalCount} movimientos · USD al TC compra fin de cada mes`}
-        variant="grand"
-        showUsd
-      />
-      <div className="space-y-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-          Por mes
-        </p>
-        {months.map((m) => (
-          <MonthSummaryCard
-            key={m.period}
-            month={m}
-            showUsd
-          />
-        ))}
-      </div>
     </div>
   );
 }
@@ -523,40 +490,54 @@ function ChartsPanel({ chart }: { chart: ChartData | null }) {
   );
 }
 
-function MonthSummaryCard({
+function MonthDetail({
   month,
   title,
   subtitle,
   variant = "month",
-  showUsd = false,
+  canPrev,
+  canNext,
+  onPrev,
+  onNext,
+  expanded,
+  onToggle,
+  txsByCat,
+  categories,
+  txsLoading,
+  savingId,
+  onChangeCategory,
 }: {
   month: MonthBlock;
   title?: string;
   subtitle?: string;
   variant?: "month" | "grand";
-  /** Always show $ and USD columns (recommended for grand total). */
-  showUsd?: boolean;
+  canPrev: boolean;
+  canNext: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+  expanded: Set<string>;
+  onToggle: (slug: string) => void;
+  txsByCat: Map<string, Tx[]>;
+  categories: CategoryOpt[];
+  txsLoading: boolean;
+  savingId: string | null;
+  onChangeCategory: (txId: string, categoryId: string) => void;
 }) {
   const isGrand = variant === "grand";
-  const withUsd = showUsd || isGrand || month.totalUsd > 0;
-  const textSize = isGrand ? "text-sm sm:text-base" : "text-sm";
-  const totalPesos = monthTotalArs(month);
-  const rateLabel = formatUsdRateLabel(month.usdRate);
-  const pesosNative = month.totalArs;
-  const pesosFromUsd = month.totalArsFromUsd ?? 0;
+  const showNav = canPrev || canNext;
 
   return (
     <section
       className={cn(
         "overflow-hidden rounded-2xl border",
         isGrand
-          ? "border-2 border-emerald-500/80 shadow-sm shadow-emerald-500/10 dark:border-emerald-400/70 dark:shadow-emerald-900/20"
+          ? "border-2 border-emerald-500/80 shadow-sm shadow-emerald-500/10 dark:border-emerald-400/70"
           : "border-zinc-200 dark:border-zinc-800",
       )}
     >
       <div
         className={cn(
-          "flex flex-wrap items-end justify-between gap-3 border-b px-4 py-3",
+          "flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3",
           isGrand
             ? "border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/50 dark:bg-emerald-950/40"
             : "border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900",
@@ -572,236 +553,114 @@ function MonthSummaryCard({
             {title ?? formatPeriodLabel(month.period)}
           </h3>
           <p className="text-xs text-zinc-500">
-            {subtitle ?? `${month.totalCount} movimientos`}
-            {rateLabel ? ` · ${rateLabel}` : ""}
+            {subtitle ??
+              `${month.totalCount} movimientos · tocá una categoría para ver y recategorizar`}
           </p>
-          {!isGrand && pesosFromUsd > 0 && (
-            <p className="mt-0.5 text-[11px] text-zinc-500">
-              {formatArs(pesosNative)} en $ + {formatArs(pesosFromUsd)} por USD
+          {formatUsdRateLabel(month.usdRate) && (
+            <p className="text-[10px] text-zinc-400">
+              {formatUsdRateLabel(month.usdRate)}
             </p>
           )}
         </div>
-        <div className="flex flex-wrap items-end justify-end gap-x-5 gap-y-1 text-right">
-          <div>
+        <div className="flex items-center gap-3">
+          <div className="text-right text-sm">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
               Total pesos
             </p>
-            <p
+            <div
               className={cn(
                 "font-semibold tabular-nums",
-                isGrand
-                  ? "text-xl text-emerald-800 dark:text-emerald-200"
-                  : "text-base",
+                isGrand && "text-xl text-emerald-800 dark:text-emerald-200",
               )}
             >
-              {formatArs(totalPesos)}
-            </p>
-          </div>
-          <div>
+              {formatArs(monthTotalArs(month))}
+            </div>
             <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
               Total dólares
             </p>
-            <p
-              className={cn(
-                "font-semibold tabular-nums",
-                isGrand
-                  ? "text-xl text-emerald-800 dark:text-emerald-200"
-                  : "text-base text-zinc-700 dark:text-zinc-200",
-              )}
-            >
+            <div className="tabular-nums text-zinc-600 dark:text-zinc-300">
               {formatUsd(month.totalUsd)}
-            </p>
+            </div>
           </div>
-        </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className={cn("min-w-full", textSize)}>
-          <thead className="text-xs uppercase text-zinc-500">
-            <tr>
-              <th className="px-4 py-2.5 text-left">Categoría</th>
-              <th className="px-4 py-2.5 text-right whitespace-nowrap">
-                Total $
-              </th>
-              <th className="px-4 py-2.5 text-right whitespace-nowrap">
-                Pesos
-              </th>
-              {withUsd && (
-                <th className="px-4 py-2.5 text-right whitespace-nowrap">
-                  Dólares
-                </th>
-              )}
-              <th className="px-4 py-2.5 text-right">Cant.</th>
-              <th className="min-w-[7rem] px-4 py-2.5 text-right">% del total</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {month.categories.map((c) => {
-              const combined =
-                c.amountArsCombined ??
-                c.amountArs + (c.amountArsFromUsd ?? 0);
-              return (
-              <tr
-                key={c.slug + c.name}
-                className={cn(isGrand && "hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20")}
+          {showNav && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onPrev}
+                disabled={!canPrev}
+                aria-label="Mes anterior"
+                className="rounded-lg border border-zinc-200 p-2 text-zinc-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30 dark:border-zinc-700 dark:hover:bg-zinc-800"
               >
-                <td className="px-4 py-2.5 font-medium">
-                  <span className="inline-flex items-center gap-2">
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: colorForCategory(c.slug) }}
-                    />
-                    <span className="min-w-0">{c.name}</span>
-                  </span>
-                </td>
-                <td className="px-4 py-2.5 text-right tabular-nums whitespace-nowrap font-semibold">
-                  {combined > 0 ? formatArs(combined) : "—"}
-                </td>
-                <td className="px-4 py-2.5 text-right tabular-nums whitespace-nowrap text-zinc-600">
-                  {c.amountArs > 0 ? formatArs(c.amountArs) : "—"}
-                </td>
-                {withUsd && (
-                  <td className="px-4 py-2.5 text-right tabular-nums whitespace-nowrap text-zinc-700 dark:text-zinc-300">
-                    {c.amountUsd > 0 ? formatUsd(c.amountUsd) : "—"}
-                  </td>
-                )}
-                <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600">
-                  {c.count}
-                </td>
-                <td className="px-4 py-2.5 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <div className="h-1.5 w-14 overflow-hidden rounded-full bg-zinc-100 sm:w-20 dark:bg-zinc-800">
-                      <div
-                        className={cn(
-                          "h-full rounded-full",
-                          isGrand ? "bg-emerald-500" : "bg-zinc-400",
-                        )}
-                        style={{
-                          width: `${Math.max(c.pct > 0 ? 2 : 0, Math.min(c.pct, 100))}%`,
-                        }}
-                      />
-                    </div>
-                    <span className="w-12 tabular-nums text-zinc-600">
-                      {c.pct < 0.1 && c.pct > 0
-                        ? "<0.1%"
-                        : `${c.pct.toFixed(1)}%`}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-function MonthDetail({
-  month,
-  canPrev,
-  canNext,
-  onPrev,
-  onNext,
-  expanded,
-  onToggle,
-  txsByCat,
-  categories,
-  txsLoading,
-  savingId,
-  onChangeCategory,
-}: {
-  month: MonthBlock;
-  canPrev: boolean;
-  canNext: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-  expanded: Set<string>;
-  onToggle: (slug: string) => void;
-  txsByCat: Map<string, Tx[]>;
-  categories: CategoryOpt[];
-  txsLoading: boolean;
-  savingId: string | null;
-  onChangeCategory: (txId: string, categoryId: string) => void;
-}) {
-  return (
-    <section className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-        <div>
-          <h3 className="text-lg font-semibold capitalize">
-            {formatPeriodLabel(month.period)}
-          </h3>
-          <p className="text-xs text-zinc-500">
-            {month.totalCount} movimientos · tocá una categoría para ver los
-            gastos
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right text-sm">
-            <div className="font-semibold tabular-nums">
-              {formatArs(monthTotalArs(month))}
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={onNext}
+                disabled={!canNext}
+                aria-label="Mes siguiente"
+                className="rounded-lg border border-zinc-200 p-2 text-zinc-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30 dark:border-zinc-700 dark:hover:bg-zinc-800"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
-            <div className="text-zinc-500 tabular-nums">
-              {formatUsd(month.totalUsd)}
-            </div>
-            {formatUsdRateLabel(month.usdRate) && (
-              <div className="text-[10px] text-zinc-400">
-                {formatUsdRateLabel(month.usdRate)}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={onPrev}
-              disabled={!canPrev}
-              aria-label="Mes anterior"
-              className="rounded-lg border border-zinc-200 p-2 text-zinc-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={onNext}
-              disabled={!canNext}
-              aria-label="Mes siguiente"
-              className="rounded-lg border border-zinc-200 p-2 text-zinc-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+          )}
         </div>
       </div>
 
       <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+        <div className="hidden grid-cols-[1fr_auto_auto_auto_auto] items-center gap-2 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 sm:grid sm:grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_4.5rem_3.5rem]">
+          <span className="pl-9">Categoría</span>
+          <span className="text-right">Total $</span>
+          <span className="text-right">Pesos</span>
+          <span className="text-right">USD</span>
+          <span className="text-right">%</span>
+        </div>
         {month.categories.map((c) => {
           const open = expanded.has(c.slug);
           const list = txsByCat.get(c.slug) ?? [];
+          const combined =
+            c.amountArsCombined ?? c.amountArs + (c.amountArsFromUsd ?? 0);
           return (
             <div key={c.slug + c.name}>
               <button
                 type="button"
                 onClick={() => onToggle(c.slug)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
+                className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left transition hover:bg-zinc-50 sm:grid sm:grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_4.5rem_3.5rem] sm:gap-2 dark:hover:bg-zinc-900/50"
               >
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 shrink-0 text-zinc-400 transition",
-                    open && "rotate-180",
-                  )}
-                />
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: colorForCategory(c.slug) }}
-                />
-                <span className="min-w-0 flex-1 font-medium">{c.name}</span>
-                <span className="hidden text-xs text-zinc-500 sm:inline">
-                  {c.count} {c.count === 1 ? "gasto" : "gastos"}
+                <span className="flex min-w-0 flex-1 items-center gap-3 sm:flex-none">
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 shrink-0 text-zinc-400 transition",
+                      open && "rotate-180",
+                    )}
+                  />
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: colorForCategory(c.slug) }}
+                  />
+                  <span className="min-w-0 truncate font-medium">{c.name}</span>
+                  <span className="shrink-0 text-xs text-zinc-500 sm:hidden">
+                    {c.count}×
+                  </span>
                 </span>
-                <span className="w-28 text-right text-sm tabular-nums font-medium">
+                <span className="ml-auto text-right text-sm tabular-nums font-semibold sm:ml-0 sm:w-auto">
+                  {combined > 0 ? formatArs(combined) : "—"}
+                </span>
+                <span className="hidden text-right text-sm tabular-nums text-zinc-600 sm:block">
                   {c.amountArs > 0 ? formatArs(c.amountArs) : "—"}
                 </span>
-                <span className="w-14 text-right text-xs tabular-nums text-zinc-500">
+                <span className="hidden text-right text-sm tabular-nums text-zinc-600 sm:block">
+                  {c.amountUsd > 0 ? formatUsd(c.amountUsd) : "—"}
+                </span>
+                {/* Mobile: show ARS + USD under the name */}
+                <span className="w-full pl-9 text-xs tabular-nums text-zinc-500 sm:hidden">
+                  {c.amountArs > 0 ? formatArs(c.amountArs) : "— $"}
+                  {" · "}
+                  {c.amountUsd > 0 ? formatUsd(c.amountUsd) : "— USD"}
+                  {" · "}
+                  {c.pct.toFixed(1)}%
+                </span>
+                <span className="hidden text-right text-xs tabular-nums text-zinc-500 sm:block">
                   {c.pct.toFixed(1)}%
                 </span>
               </button>
@@ -818,7 +677,16 @@ function MonthDetail({
                     </p>
                   ) : (
                     <ul className="space-y-1">
-                      {list.map((t) => (
+                      {list.map((t) => {
+                        const hasArs =
+                          t.amountArs != null &&
+                          Number.isFinite(t.amountArs) &&
+                          Math.abs(t.amountArs) > 0;
+                        const hasUsd =
+                          t.amountUsd != null &&
+                          Number.isFinite(t.amountUsd) &&
+                          Math.abs(t.amountUsd) > 0;
+                        return (
                         <li
                           key={t.id}
                           className="flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm dark:bg-zinc-900"
@@ -829,12 +697,30 @@ function MonthDetail({
                           <span className="min-w-0 flex-1 truncate font-medium">
                             {t.descriptionNormalized}
                           </span>
-                          <span className="tabular-nums text-zinc-700 dark:text-zinc-200">
-                            {t.amountArs != null
-                              ? formatArs(Math.abs(t.amountArs))
-                              : t.amountUsd != null
-                                ? formatUsd(Math.abs(t.amountUsd))
-                                : "—"}
+                          <span className="flex shrink-0 flex-col items-end gap-0.5">
+                            {hasArs && (
+                              <span className="inline-flex items-center gap-1.5 tabular-nums">
+                                <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                                  ARS
+                                </span>
+                                <span className="font-medium text-zinc-800 dark:text-zinc-100">
+                                  {formatArs(Math.abs(t.amountArs!))}
+                                </span>
+                              </span>
+                            )}
+                            {hasUsd && (
+                              <span className="inline-flex items-center gap-1.5 tabular-nums">
+                                <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-950 dark:text-sky-200">
+                                  USD
+                                </span>
+                                <span className="font-medium text-sky-900 dark:text-sky-100">
+                                  {formatUsd(Math.abs(t.amountUsd!))}
+                                </span>
+                              </span>
+                            )}
+                            {!hasArs && !hasUsd && (
+                              <span className="text-zinc-400">—</span>
+                            )}
                           </span>
                           <select
                             value={t.category?.id ?? ""}
@@ -853,7 +739,8 @@ function MonthDetail({
                             ))}
                           </select>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   )}
                 </div>

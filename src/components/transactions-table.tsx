@@ -94,6 +94,16 @@ export function TransactionsTable({
   const [savingId, setSavingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -115,7 +125,8 @@ export function TransactionsTable({
         setError(data.error || "Error");
         return;
       }
-      setRows(data.transactions ?? []);
+      // Expenses only — payments live under Deuda
+      setRows((data.transactions ?? []).filter((t) => !t.isPayment));
       setCategories(data.categories ?? []);
       setMembers(data.members ?? []);
     } catch (e) {
@@ -131,9 +142,9 @@ export function TransactionsTable({
 
   async function patch(id: string, body: Record<string, unknown>) {
     setError(null);
-    setToast(null);
     setSavingId(id);
     const prev = rows;
+    const edited = rows.find((r) => r.id === id);
     const catId =
       "categoryId" in body ? (body.categoryId as string | null) : undefined;
     const nextCat =
@@ -143,7 +154,7 @@ export function TransactionsTable({
           ? null
           : (categories.find((c) => c.id === catId) ?? null);
 
-    // Optimistic: update row, and if filtering uncategorized, drop it when categorized
+    // Optimistic: only touch the edited row (and similar merchant if learned)
     setRows((list) => {
       const mapped = list.map((r) => {
         if (r.id !== id) return r;
@@ -181,14 +192,28 @@ export function TransactionsTable({
         setError(data?.error || "No se pudo guardar el cambio");
         return;
       }
-      if (data?.similarUpdated && data.similarUpdated > 0) {
-        setToast(
-          `Aprendido. También actualicé ${data.similarUpdated} gasto(s) similar(es).`,
+      // Similar merchants: update in place, never full reload
+      if (nextCat && data?.similarUpdated && data.similarUpdated > 0 && edited) {
+        const desc = edited.descriptionNormalized;
+        setRows((list) => {
+          const next = list.map((r) => {
+            if (r.id === id) return { ...r, category: nextCat };
+            if (r.descriptionNormalized !== desc) return r;
+            if (r.category && r.category.slug !== "uncategorized") return r;
+            return { ...r, category: nextCat };
+          });
+          if (uncategorizedOnly && nextCat.slug !== "uncategorized") {
+            return next.filter(
+              (r) => !r.category || r.category.slug === "uncategorized",
+            );
+          }
+          return next;
+        });
+        showToast(
+          `Guardado. También actualicé ${data.similarUpdated} gasto(s) similar(es).`,
         );
-        // Refresh so similar rows disappear from uncategorized view
-        if (uncategorizedOnly) void load();
       } else if (data?.learned && data.learned > 0 && catId) {
-        setToast("Listo. Voy a recordar esta categoría para el mismo comercio.");
+        showToast("Guardado. Recordaré esta categoría para el mismo comercio.");
       }
     } catch {
       setRows(prev);
@@ -306,16 +331,19 @@ export function TransactionsTable({
         </button>
       </div>
 
-      {toast && (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
-          {toast}
-        </p>
-      )}
-
       {error && (
         <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
           {error}
         </p>
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          className="fixed bottom-20 right-4 z-50 max-w-sm animate-in rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 shadow-lg md:bottom-6 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100"
+        >
+          {toast}
+        </div>
       )}
 
       <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
