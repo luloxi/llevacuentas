@@ -1,11 +1,11 @@
 import { createHash } from "crypto";
-import { PDFParse } from "pdf-parse";
 import {
   amountFingerprintKey,
   fingerprintParts,
   normalizeMovementCurrency,
 } from "@/lib/money";
 import type { BbvaMovement } from "@/lib/bbva/parse";
+import { ensurePdfDomPolyfills } from "@/lib/bbva/pdf-polyfill";
 
 const MONTHS: Record<string, number> = {
   ene: 1,
@@ -251,6 +251,10 @@ function makeFingerprint(m: Omit<BbvaMovement, "fingerprint">, cupon: string | n
 export async function parseBbvaStatementPdf(
   data: ArrayBuffer | Buffer,
 ): Promise<BbvaMovement[]> {
+  // Polyfill browser APIs *before* loading pdf-parse (pdfjs needs DOMMatrix).
+  ensurePdfDomPolyfills();
+  const { PDFParse } = await import("pdf-parse");
+
   const bytes = data instanceof Buffer ? new Uint8Array(data) : new Uint8Array(data);
   const parser = new PDFParse({ data: bytes });
   let text: string;

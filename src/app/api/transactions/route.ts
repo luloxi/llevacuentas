@@ -3,7 +3,7 @@ import { createHash } from "crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { requireApiUser } from "@/lib/api-auth";
 import { getCategoryMap, requireHousehold } from "@/lib/household";
-import { listTransactions, updateTransaction } from "@/lib/import/bbva";
+import { listTransactions, updateTransaction } from "@/lib/transactions";
 import { getDb, schema } from "@/lib/db";
 
 export async function GET(req: Request) {

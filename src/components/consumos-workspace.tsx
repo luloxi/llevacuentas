@@ -54,7 +54,12 @@ export function ConsumosWorkspace() {
     try {
       const res = await fetch("/api/transactions", { credentials: "include" });
       if (!res.ok) return;
-      const data = await res.json();
+      const text = await res.text();
+      if (!text || text.trimStart().startsWith("<")) return;
+      const data = JSON.parse(text) as {
+        categories?: Category[];
+        members?: Member[];
+      };
       setCategories(data.categories ?? []);
       setMembers(data.members ?? []);
     } catch {

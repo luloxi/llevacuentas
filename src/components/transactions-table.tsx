@@ -74,9 +74,32 @@ async function readErrorMessage(res: Response): Promise<string> {
     if (res.status === 413 || /entity too large/i.test(text)) {
       return "El archivo es demasiado grande.";
     }
+    // Server returned HTML (framework error page / redirect)
+    if (/^\s*<!DOCTYPE/i.test(text) || /^\s*<html/i.test(text)) {
+      return `Error del servidor (${res.status}). Reintentá en un momento.`;
+    }
     if (text.length < 200) return text;
   }
   return `Error ${res.status}`;
+}
+
+async function parseJsonResponse<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  if (!text) {
+    throw new Error(
+      res.ok ? "Respuesta vacía del servidor" : `Error ${res.status}`,
+    );
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    if (/^\s*<!DOCTYPE/i.test(text) || /^\s*<html/i.test(text)) {
+      throw new Error(
+        `Error del servidor (${res.status}). La API no respondió JSON.`,
+      );
+    }
+    throw new Error(`Respuesta inválida del servidor (${res.status})`);
+  }
 }
 
 export function TransactionsTable({
@@ -118,14 +141,14 @@ export function TransactionsTable({
       const res = await fetch(`/api/transactions?${params}`, {
         credentials: "include",
       });
-      const data = (await res.json()) as {
+      const data = await parseJsonResponse<{
         error?: string;
         transactions?: Tx[];
         categories?: Category[];
         members?: Member[];
-      };
+      }>(res);
       if (!res.ok) {
-        setError(data.error || "Error");
+        setError(data.error || `Error ${res.status}`);
         return;
       }
       // Expenses only — payments live under Deuda
