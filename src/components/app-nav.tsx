@@ -41,16 +41,21 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
 
   return (
     <>
-      <header className="hidden border-b border-emerald-900/10 bg-white/80 backdrop-blur md:block dark:border-emerald-100/10 dark:bg-zinc-950/80">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+      <header className="sticky top-0 z-40 hidden border-b border-emerald-900/8 bg-white/75 shadow-sm shadow-emerald-900/[0.03] backdrop-blur-xl md:block dark:border-white/5 dark:bg-zinc-950/70 dark:shadow-black/20">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2.5 md:px-6">
           <Link
             href="/dashboard"
-            className="flex items-center gap-2.5 font-semibold tracking-tight"
+            className="group flex items-center gap-2.5 font-semibold tracking-tight"
           >
-            <BrandLogo size={32} />
-            <span>LlevaCuentas</span>
+            <BrandLogo
+              size={34}
+              className="transition-transform duration-200 group-hover:scale-105"
+            />
+            <span className="bg-gradient-to-r from-zinc-900 to-zinc-600 bg-clip-text text-transparent dark:from-white dark:to-zinc-400">
+              LlevaCuentas
+            </span>
           </Link>
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-0.5">
             {allLinks.map(({ href, label, icon: Icon }) => {
               const active = pathname.startsWith(href);
               return (
@@ -58,13 +63,13 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
                   key={href}
                   href={href}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition",
+                    "relative flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-150",
                     active
-                      ? "bg-emerald-600 text-white"
-                      : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800",
+                      ? "bg-gradient-to-b from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-600/25"
+                      : "text-zinc-600 hover:bg-emerald-50/80 hover:text-emerald-900 dark:text-zinc-300 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-100",
                   )}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className={cn("h-4 w-4", active && "drop-shadow-sm")} />
                   {label}
                 </Link>
               );
@@ -72,7 +77,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
             <button
               type="button"
               onClick={() => void logout()}
-              className="ml-2 flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              className="ml-1.5 flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
             >
               <LogOut className="h-4 w-4" />
               Salir
@@ -81,10 +86,10 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
         </div>
       </header>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 backdrop-blur md:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200/80 bg-white/90 shadow-[0_-8px_30px_-12px_rgb(0_0_0/0.12)] backdrop-blur-xl md:hidden dark:border-zinc-800/80 dark:bg-zinc-950/90 dark:shadow-black/40">
         <div
           className={cn(
-            "mx-auto grid max-w-lg gap-0.5 px-1 py-1",
+            "mx-auto grid max-w-lg gap-0.5 px-1.5 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1",
             allLinks.length >= 5 ? "grid-cols-5" : "grid-cols-4",
           )}
         >
@@ -95,11 +100,22 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
                 key={href}
                 href={href}
                 className={cn(
-                  "flex flex-col items-center gap-0.5 rounded-lg px-1 py-2 text-[10px]",
-                  active ? "text-emerald-600" : "text-zinc-500",
+                  "relative flex flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[10px] font-medium transition-colors",
+                  active
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-zinc-500",
                 )}
               >
-                <Icon className="h-5 w-5" />
+                <span
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-xl transition-all",
+                    active
+                      ? "bg-emerald-100 text-emerald-700 shadow-sm dark:bg-emerald-950 dark:text-emerald-300"
+                      : "text-zinc-500",
+                  )}
+                >
+                  <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 2} />
+                </span>
                 {label}
               </Link>
             );

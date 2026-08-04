@@ -102,25 +102,28 @@ export function TotalSpendChart({ totals }: { totals: TotalPoint[] }) {
           </g>
         ))}
 
-        <path
-          d={linePath(points)}
-          fill="none"
-          stroke="#059669"
-          strokeWidth={2.5}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
+        <defs>
+          <linearGradient id="totalFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.45" />
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="totalStroke" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#059669" />
+            <stop offset="100%" stopColor="#14b8a6" />
+          </linearGradient>
+        </defs>
         <path
           d={`${linePath(points)} L ${points[points.length - 1]!.x} ${PAD.top + chartH} L ${points[0]!.x} ${PAD.top + chartH} Z`}
           fill="url(#totalFill)"
-          opacity={0.25}
         />
-        <defs>
-          <linearGradient id="totalFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#059669" stopOpacity="0.5" />
-            <stop offset="100%" stopColor="#059669" stopOpacity="0" />
-          </linearGradient>
-        </defs>
+        <path
+          d={linePath(points)}
+          fill="none"
+          stroke="url(#totalStroke)"
+          strokeWidth={2.75}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
 
         {points.map((p, i) => (
           <g key={p.period}>

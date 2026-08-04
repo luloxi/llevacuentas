@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/components/brand-logo";
+import { Home, UserPlus } from "lucide-react";
 
 export function HouseholdSetup() {
   const router = useRouter();
@@ -63,21 +65,29 @@ export function HouseholdSetup() {
   }
 
   return (
-    <div className="mx-auto max-w-md space-y-8">
+    <div className="app-shell mx-auto w-full max-w-md animate-fade-up space-y-6 px-1">
       <div className="text-center">
+        <div className="mb-4 flex justify-center">
+          <BrandLogo size={48} />
+        </div>
         <h1 className="text-2xl font-bold tracking-tight">Tu espacio</h1>
-        <p className="mt-2 text-sm text-zinc-500">
+        <p className="mt-2 text-sm leading-relaxed text-zinc-500">
           Creá un espacio para vos solo o compartilo con otras personas y
           lleven los gastos juntos.
         </p>
       </div>
 
-      <div className="space-y-3 rounded-2xl border border-zinc-200 p-5 dark:border-zinc-800">
-        <h2 className="font-semibold">Crear espacio</h2>
+      <div className="lc-card-elevated space-y-3 p-5">
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+            <Home className="h-4 w-4" />
+          </div>
+          <h2 className="font-semibold tracking-tight">Crear espacio</h2>
+        </div>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          className="lc-input w-full"
           placeholder="Nombre del espacio"
           disabled={loading !== null}
         />
@@ -85,18 +95,23 @@ export function HouseholdSetup() {
           type="button"
           disabled={loading !== null}
           onClick={() => void create()}
-          className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+          className="lc-btn lc-btn-primary w-full"
         >
           {loading === "create" ? "Creando…" : "Crear y continuar"}
         </button>
       </div>
 
-      <div className="space-y-3 rounded-2xl border border-zinc-200 p-5 dark:border-zinc-800">
-        <h2 className="font-semibold">Unirme con código</h2>
+      <div className="lc-card space-y-3 p-5">
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
+            <UserPlus className="h-4 w-4" />
+          </div>
+          <h2 className="font-semibold tracking-tight">Unirme con código</h2>
+        </div>
         <input
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
-          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm uppercase tracking-widest dark:border-zinc-700 dark:bg-zinc-900"
+          className="lc-input w-full uppercase tracking-widest"
           placeholder="ABCD1234"
           maxLength={8}
           disabled={loading !== null}
@@ -105,14 +120,14 @@ export function HouseholdSetup() {
           type="button"
           disabled={loading !== null || code.length < 6}
           onClick={() => void join()}
-          className="w-full rounded-xl border border-zinc-300 py-2.5 text-sm font-medium hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          className="lc-btn lc-btn-secondary w-full"
         >
           {loading === "join" ? "Uniéndome…" : "Unirme"}
         </button>
       </div>
 
       {error && (
-        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">
+        <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
           {error}
         </p>
       )}

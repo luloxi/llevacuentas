@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { cn, formatArs, formatUsd, formatDateAr } from "@/lib/utils";
 import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
+import {
+  LoadingBlock,
+  SegmentedControl,
+  StatTile,
+  Surface,
+} from "@/components/ui";
 
 type MonthRow = {
   period: string;
@@ -228,11 +234,13 @@ export function DeudaView() {
   }, []);
 
   if (loading) {
-    return <p className="text-sm text-zinc-500">Calculando deuda y pagos…</p>;
+    return <LoadingBlock label="Calculando deuda y pagos…" />;
   }
   if (error) {
     return (
-      <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>
+      <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40">
+        {error}
+      </p>
     );
   }
 
@@ -242,91 +250,67 @@ export function DeudaView() {
     <div className="space-y-4">
       {summary && (
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-red-200/80 bg-red-50/50 p-4 dark:border-red-900/50 dark:bg-red-950/20">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700/80 dark:text-red-300/80">
-              Deuda estimada actual
-            </p>
-            <p className="mt-1 text-xl font-bold tabular-nums text-red-800 dark:text-red-200">
-              {formatArs(Math.max(summary.currentBalanceArs, 0))}
-            </p>
-            {summary.currentBalanceUsd !== 0 && (
-              <p className="text-xs tabular-nums text-red-700/70">
-                + {formatUsd(Math.abs(summary.currentBalanceUsd))} en USD
-              </p>
-            )}
-          </div>
-          <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800/80 dark:text-emerald-300/80">
-              Total pagado
-            </p>
-            <p className="mt-1 text-xl font-bold tabular-nums text-emerald-900 dark:text-emerald-100">
-              {formatArs(summary.totalPaidArs)}
-            </p>
-            {summary.totalPaidUsd > 0 && (
-              <p className="text-xs tabular-nums text-emerald-800/70">
-                + {formatUsd(summary.totalPaidUsd)} en USD
-              </p>
-            )}
-          </div>
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-              Pico de deuda
-            </p>
-            <p className="mt-1 text-xl font-bold tabular-nums">
-              {formatArs(summary.peakBalanceArs)}
-            </p>
-            <p className="text-xs text-zinc-500">
-              en {summary.monthCount} meses con datos
-            </p>
-          </div>
+          <StatTile
+            label="Deuda estimada actual"
+            value={formatArs(Math.max(summary.currentBalanceArs, 0))}
+            hint={
+              summary.currentBalanceUsd !== 0
+                ? `+ ${formatUsd(Math.abs(summary.currentBalanceUsd))} en USD`
+                : undefined
+            }
+            tone="danger"
+          />
+          <StatTile
+            label="Total pagado"
+            value={formatArs(summary.totalPaidArs)}
+            hint={
+              summary.totalPaidUsd > 0
+                ? `+ ${formatUsd(summary.totalPaidUsd)} en USD`
+                : undefined
+            }
+            tone="brand"
+          />
+          <StatTile
+            label="Pico de deuda"
+            value={formatArs(summary.peakBalanceArs)}
+            hint={`en ${summary.monthCount} meses con datos`}
+          />
         </div>
       )}
 
-      <p className="text-xs text-zinc-500">
+      <p className="rounded-xl border border-zinc-200/80 bg-white/60 px-3 py-2 text-xs leading-relaxed text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/40">
         La deuda se estima sumando cargos del resumen y restando pagos (y
         créditos/devoluciones). USD se convierten al TC compra de fin de mes.
         Es una aproximación a partir de los movimientos importados.
       </p>
 
-      <div className="inline-flex rounded-xl border border-zinc-200/80 bg-zinc-100/80 p-1 shadow-inner dark:border-zinc-700/80 dark:bg-zinc-900/80">
-        {(
-          [
-            { id: "evolucion" as const, label: "Evolución" },
-            { id: "pagos" as const, label: "Pagos" },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={cn(
-              "rounded-lg px-3.5 py-2 text-sm font-medium transition-all",
-              tab === t.id
-                ? "bg-white text-emerald-700 shadow-sm ring-1 ring-black/5 dark:bg-zinc-800 dark:text-emerald-400 dark:ring-white/10"
-                : "text-zinc-600 hover:bg-white/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        value={tab}
+        onChange={setTab}
+        options={[
+          { id: "evolucion", label: "Evolución" },
+          { id: "pagos", label: "Pagos" },
+        ]}
+      />
 
       {tab === "evolucion" ? (
         <div className="space-y-4">
-          <section className="rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
-            <h2 className="mb-2 text-sm font-semibold">Deuda mes a mes</h2>
+          <Surface>
+            <h2 className="mb-2 text-sm font-semibold tracking-tight">
+              Deuda mes a mes
+            </h2>
             <DebtChart months={chartMonths} />
-          </section>
+          </Surface>
 
-          <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-zinc-800">
-            <table className="min-w-full text-sm">
-              <thead className="bg-zinc-50 text-xs uppercase text-zinc-500 dark:bg-zinc-900">
+          <div className="lc-table-wrap">
+            <table>
+              <thead>
                 <tr>
-                  <th className="px-3 py-2 text-left">Mes</th>
-                  <th className="px-3 py-2 text-right">Cargos</th>
-                  <th className="px-3 py-2 text-right">Pagos</th>
-                  <th className="px-3 py-2 text-right">Neto</th>
-                  <th className="px-3 py-2 text-right">Deuda al cierre</th>
+                  <th className="px-3 py-2.5 text-left">Mes</th>
+                  <th className="px-3 py-2.5 text-right">Cargos</th>
+                  <th className="px-3 py-2.5 text-right">Pagos</th>
+                  <th className="px-3 py-2.5 text-right">Neto</th>
+                  <th className="px-3 py-2.5 text-right">Deuda al cierre</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -377,14 +361,14 @@ export function DeudaView() {
           </div>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-zinc-800">
-          <table className="min-w-full text-sm">
-            <thead className="bg-zinc-50 text-xs uppercase text-zinc-500 dark:bg-zinc-900">
+        <div className="lc-table-wrap">
+          <table>
+            <thead>
               <tr>
-                <th className="px-3 py-2 text-left">Fecha</th>
-                <th className="px-3 py-2 text-left">Descripción</th>
-                <th className="px-3 py-2 text-left">Tipo</th>
-                <th className="px-3 py-2 text-right">Monto</th>
+                <th className="px-3 py-2.5 text-left">Fecha</th>
+                <th className="px-3 py-2.5 text-left">Descripción</th>
+                <th className="px-3 py-2.5 text-left">Tipo</th>
+                <th className="px-3 py-2.5 text-right">Monto</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">

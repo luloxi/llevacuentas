@@ -1,15 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f6f7f4;
-  --foreground: #14201a;
+  --background: #f3f6f3;
+  --foreground: #0f1a14;
   --surface: #ffffff;
-  --surface-muted: #f4f4f5;
-  --border: #e4e4e7;
+  --surface-muted: #eef2ef;
+  --border: #dfe6e1;
+  --border-strong: #c5d0c9;
   --input-bg: #ffffff;
-  --input-fg: #14201a;
+  --input-fg: #0f1a14;
   --option-bg: #ffffff;
-  --option-fg: #14201a;
+  --option-fg: #0f1a14;
+  --brand: #059669;
+  --brand-soft: #ecfdf5;
+  --shadow-color: 16 24 20;
+  --ring: #10b981;
 }
 
 @theme inline {
@@ -21,28 +26,48 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b1210;
+    --background: #070b09;
     --foreground: #e8efe9;
-    --surface: #09090b;
-    --surface-muted: #18181b;
-    --border: #3f3f46;
-    --input-bg: #18181b;
+    --surface: #0c1110;
+    --surface-muted: #141a17;
+    --border: #24302a;
+    --border-strong: #33443b;
+    --input-bg: #141a17;
     --input-fg: #e8efe9;
-    --option-bg: #18181b;
+    --option-bg: #141a17;
     --option-fg: #e8efe9;
+    --brand: #34d399;
+    --brand-soft: #064e3b55;
+    --shadow-color: 0 0 0;
+    --ring: #34d399;
   }
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--brand) 28%, transparent);
+  color: var(--foreground);
+}
+
+/* Focus: accessible without being noisy */
+:where(a, button, input, select, textarea, [role="button"]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 /*
  * Native <select> / <option> contrast
  * OS dropdowns often ignore page dark text and paint white-on-white.
- * Force solid surfaces and readable text app-wide.
  */
 select {
   color: var(--input-fg);
@@ -57,13 +82,11 @@ select optgroup {
   background-color: var(--option-bg);
 }
 
-/* Closed control + open list: never inherit transparent/white-on-white */
 select:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-/* Inputs that often share the same contrast trap */
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
 textarea {
   color: var(--input-fg);
@@ -75,4 +98,336 @@ textarea {
 input::placeholder,
 textarea::placeholder {
   color: color-mix(in srgb, var(--input-fg) 45%, transparent);
+}
+
+/* ——— Ambient app backdrop ——— */
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  min-height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell::before {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgb(16 185 129 / 0.12), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgb(45 212 191 / 0.1), transparent 50%),
+    radial-gradient(ellipse 50% 30% at 50% 100%, rgb(16 185 129 / 0.06), transparent 55%),
+    var(--background);
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-shell::before {
+    background:
+      radial-gradient(ellipse 80% 50% at 10% -10%, rgb(16 185 129 / 0.14), transparent 55%),
+      radial-gradient(ellipse 60% 40% at 100% 0%, rgb(20 184 166 / 0.1), transparent 50%),
+      radial-gradient(ellipse 50% 30% at 50% 100%, rgb(6 78 59 / 0.25), transparent 55%),
+      var(--background);
+  }
+}
+
+/* ——— Motion ——— */
+@keyframes lc-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lc-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes lc-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes lc-pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.animate-fade-up {
+  animation: lc-fade-up 0.35s ease-out both;
+}
+
+.animate-toast-in {
+  animation: lc-toast-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--surface-muted) 100%, transparent) 25%,
+    color-mix(in srgb, var(--border) 80%, transparent) 50%,
+    color-mix(in srgb, var(--surface-muted) 100%, transparent) 75%
+  );
+  background-size: 200% 100%;
+  animation: lc-shimmer 1.4s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-toast-in,
+  .skeleton {
+    animation: none;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* ——— Surfaces ——— */
+.lc-card {
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow:
+    0 1px 0 rgb(var(--shadow-color) / 0.03),
+    0 8px 24px -12px rgb(var(--shadow-color) / 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.lc-card-elevated {
+  border-radius: 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--brand) 12%, var(--border));
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow:
+    0 1px 0 rgb(var(--shadow-color) / 0.04),
+    0 16px 40px -20px rgb(16 185 129 / 0.25),
+    0 8px 20px -12px rgb(var(--shadow-color) / 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.lc-input {
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--input-fg);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.lc-input:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.lc-input:focus {
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent);
+  outline: none;
+}
+
+.lc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border-radius: 0.75rem;
+  padding: 0.55rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  transition:
+    transform 0.12s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.lc-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.lc-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.lc-btn-primary {
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.2) inset,
+    0 6px 16px -6px rgb(5 150 105 / 0.55);
+}
+
+.lc-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #14b8a6 0%, #047857 100%);
+}
+
+.lc-btn-secondary {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.lc-btn-secondary:hover:not(:disabled) {
+  background: var(--surface-muted);
+}
+
+.lc-btn-ghost {
+  color: color-mix(in srgb, var(--foreground) 70%, transparent);
+}
+
+.lc-btn-ghost:hover:not(:disabled) {
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
+.lc-seg {
+  display: inline-flex;
+  border-radius: 0.85rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-muted) 85%, transparent);
+  padding: 0.2rem;
+  box-shadow: inset 0 1px 2px rgb(var(--shadow-color) / 0.04);
+}
+
+.lc-seg-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 0.65rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--foreground) 58%, transparent);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.lc-seg-item:hover:not([data-active="true"]) {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+
+.lc-seg-item[data-active="true"] {
+  background: var(--surface);
+  color: #047857;
+  box-shadow:
+    0 1px 2px rgb(var(--shadow-color) / 0.08),
+    0 0 0 1px rgb(0 0 0 / 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  .lc-seg-item[data-active="true"] {
+    color: #6ee7b7;
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.35),
+      0 0 0 1px rgb(255 255 255 / 0.06);
+  }
+}
+
+.lc-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 5.5rem;
+  z-index: 50;
+  max-width: 22rem;
+  border-radius: 0.9rem;
+  border: 1px solid;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  box-shadow: 0 12px 32px -12px rgb(0 0 0 / 0.25);
+  animation: lc-toast-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (min-width: 768px) {
+  .lc-toast {
+    bottom: 1.5rem;
+  }
+}
+
+.lc-toast-ok {
+  border-color: rgb(167 243 208);
+  background: rgb(236 253 245);
+  color: rgb(2 44 34);
+}
+
+.lc-toast-warn {
+  border-color: rgb(253 230 138);
+  background: rgb(255 251 235);
+  color: rgb(69 26 3);
+}
+
+@media (prefers-color-scheme: dark) {
+  .lc-toast-ok {
+    border-color: rgb(6 78 59);
+    background: rgb(2 44 34);
+    color: rgb(209 250 229);
+  }
+
+  .lc-toast-warn {
+    border-color: rgb(120 53 15);
+    background: rgb(69 26 3 / 0.7);
+    color: rgb(254 243 199);
+  }
+}
+
+/* Table polish */
+.lc-table-wrap {
+  overflow-x: auto;
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  box-shadow: 0 1px 0 rgb(var(--shadow-color) / 0.03);
+}
+
+.lc-table-wrap table {
+  min-width: 100%;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.lc-table-wrap thead {
+  background: color-mix(in srgb, var(--surface-muted) 80%, transparent);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--foreground) 48%, transparent);
+}
+
+.lc-table-wrap tbody tr {
+  transition: background-color 0.12s ease;
+}
+
+.lc-table-wrap tbody tr:hover {
+  background: color-mix(in srgb, var(--brand-soft) 55%, transparent);
 }

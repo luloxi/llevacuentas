@@ -7,10 +7,15 @@ import {
   Plus,
   Upload,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { TransactionsTable } from "@/components/transactions-table";
 import { AddExpenseModal } from "@/components/add-expense-modal";
 import { UploadModal } from "@/components/upload-modal";
+import {
+  EmptyState,
+  PageStack,
+  SegmentedControl,
+  Toast,
+} from "@/components/ui";
 
 type Category = { id: string; slug: string; name: string };
 type Member = { userId: string; name: string };
@@ -60,6 +65,12 @@ export function ConsumosWorkspace() {
   useEffect(() => {
     void loadMeta();
   }, [loadMeta]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
 
   function refreshTable() {
     setTableKey((k) => k + 1);
@@ -119,43 +130,26 @@ export function ConsumosWorkspace() {
   }
 
   return (
-    <div className="space-y-4">
+    <PageStack>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Tabs */}
-        <div className="inline-flex rounded-xl border border-zinc-200/80 bg-zinc-100/80 p-1 shadow-inner dark:border-zinc-700/80 dark:bg-zinc-900/80">
-          <button
-            type="button"
-            onClick={() => setTab("gastos")}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition-all",
-              tab === "gastos"
-                ? "bg-white text-emerald-700 shadow-sm ring-1 ring-black/5 dark:bg-zinc-800 dark:text-emerald-400 dark:ring-white/10"
-                : "text-zinc-600 hover:bg-white/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100",
-            )}
-          >
-            <List className="h-4 w-4" />
-            Gastos
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("importar")}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition-all",
-              tab === "importar"
-                ? "bg-white text-emerald-700 shadow-sm ring-1 ring-black/5 dark:bg-zinc-800 dark:text-emerald-400 dark:ring-white/10"
-                : "text-zinc-600 hover:bg-white/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100",
-            )}
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            Importar tarjeta
-          </button>
-        </div>
+        <SegmentedControl
+          value={tab}
+          onChange={setTab}
+          options={[
+            { id: "gastos", label: "Gastos", icon: <List className="h-4 w-4" /> },
+            {
+              id: "importar",
+              label: "Importar tarjeta",
+              icon: <FileSpreadsheet className="h-4 w-4" />,
+            },
+          ]}
+        />
 
         {tab === "gastos" && (
           <button
             type="button"
             onClick={() => setAddOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+            className="lc-btn lc-btn-primary"
           >
             <Plus className="h-4 w-4" />
             Agregar
@@ -163,17 +157,7 @@ export function ConsumosWorkspace() {
         )}
       </div>
 
-      {toast && (
-        <p
-          className={
-            toastTone === "warn"
-              ? "rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
-              : "rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
-          }
-        >
-          {toast}
-        </p>
-      )}
+      {toast && <Toast tone={toastTone}>{toast}</Toast>}
 
       {tab === "gastos" ? (
         <TransactionsTable key={tableKey} compactToolbar />
@@ -203,48 +187,42 @@ export function ConsumosWorkspace() {
         onClose={() => setImportOpen(false)}
         onFiles={handleCardImportFiles}
       />
-    </div>
+    </PageStack>
   );
 }
 
 function ImportCardPanel({ onOpenModal }: { onOpenModal: () => void }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-gradient-to-b from-emerald-50/40 to-white p-6 dark:border-zinc-800 dark:from-emerald-950/20 dark:to-zinc-950">
-      <div className="mx-auto max-w-md space-y-4 text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
-          <Upload className="h-7 w-7" />
+    <EmptyState
+      icon={<Upload className="h-7 w-7" />}
+      title="Resumen de la tarjeta"
+      description="Importá el Excel de últimos movimientos o el PDF del resumen BBVA. Los movimientos nuevos se suman a Gastos; los duplicados se detectan solos."
+      action={
+        <div className="flex w-full max-w-sm flex-col items-stretch gap-4">
+          <ul className="space-y-2 text-left text-sm text-zinc-600 dark:text-zinc-400">
+            <li className="flex gap-2 rounded-xl bg-emerald-50/80 px-3 py-2 dark:bg-emerald-950/30">
+              <span className="font-semibold text-emerald-600">✓</span>
+              Home Banking → Últimos movimientos → exportar Excel
+            </li>
+            <li className="flex gap-2 rounded-xl bg-emerald-50/80 px-3 py-2 dark:bg-emerald-950/30">
+              <span className="font-semibold text-emerald-600">✓</span>
+              O el PDF del resumen de cuenta del mes
+            </li>
+            <li className="flex gap-2 rounded-xl bg-emerald-50/80 px-3 py-2 dark:bg-emerald-950/30">
+              <span className="font-semibold text-emerald-600">✓</span>
+              Varios archivos en una sola subida
+            </li>
+          </ul>
+          <button
+            type="button"
+            onClick={onOpenModal}
+            className="lc-btn lc-btn-primary w-full"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Elegir archivos
+          </button>
         </div>
-        <div>
-          <h2 className="text-lg font-semibold">Resumen de la tarjeta</h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            Importá el Excel de últimos movimientos o el PDF del resumen BBVA.
-            Los movimientos nuevos se suman a Gastos; los duplicados se
-            detectan solos.
-          </p>
-        </div>
-        <ul className="space-y-1.5 text-left text-sm text-zinc-600 dark:text-zinc-400">
-          <li className="flex gap-2">
-            <span className="text-emerald-600">✓</span>
-            Home Banking → Últimos movimientos → exportar Excel
-          </li>
-          <li className="flex gap-2">
-            <span className="text-emerald-600">✓</span>
-            O el PDF del resumen de cuenta del mes
-          </li>
-          <li className="flex gap-2">
-            <span className="text-emerald-600">✓</span>
-            Varios archivos en una sola subida
-          </li>
-        </ul>
-        <button
-          type="button"
-          onClick={onOpenModal}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 sm:w-auto"
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          Elegir archivos
-        </button>
-      </div>
-    </div>
+      }
+    />
   );
 }

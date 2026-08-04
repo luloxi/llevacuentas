@@ -262,19 +262,19 @@ export function AddExpenseModal({
     >
       <button
         type="button"
-        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-black/45 backdrop-blur-[3px]"
         aria-label="Cerrar"
         disabled={busy}
         onClick={() => {
           if (!busy) onClose();
         }}
       />
-      <div className="relative z-10 flex max-h-[92vh] w-full max-w-lg flex-col rounded-t-2xl border border-zinc-200 bg-white shadow-2xl sm:rounded-2xl dark:border-zinc-700 dark:bg-zinc-950">
-        <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
+      <div className="animate-fade-up relative z-10 flex max-h-[92vh] w-full max-w-lg flex-col rounded-t-3xl border border-emerald-900/10 bg-white shadow-2xl shadow-emerald-900/10 sm:rounded-3xl dark:border-white/10 dark:bg-zinc-950 dark:shadow-black/50">
+        <div className="flex items-start justify-between gap-3 border-b border-zinc-100/90 px-5 py-4 dark:border-zinc-800">
           <div>
             <h2
               id="add-expense-title"
-              className="text-lg font-semibold tracking-tight"
+              className="text-lg font-bold tracking-tight"
             >
               Agregar gasto
             </h2>
@@ -619,7 +619,7 @@ export function AddExpenseModal({
             type="button"
             disabled={busy || !description.trim()}
             onClick={() => void save()}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            className="lc-btn lc-btn-primary flex-1 !py-2.5 disabled:opacity-50"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             Guardar gasto

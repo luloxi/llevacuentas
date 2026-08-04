@@ -4,6 +4,9 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { formatArs, formatUsd, formatDateAr } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { formatPeriodLabel } from "@/lib/period-label";
+import { LoadingBlock, Toast } from "@/components/ui";
+import { RefreshCw, Search } from "lucide-react";
 
 type Category = { id: string; slug: string; name: string };
 type Member = { userId: string; name: string };
@@ -287,30 +290,33 @@ export function TransactionsTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar comercio…"
-          className="min-w-[140px] flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 sm:max-w-xs dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-        />
+      <div className="lc-card flex flex-wrap items-center gap-2 p-2.5 sm:p-3">
+        <div className="relative min-w-[140px] flex-1 sm:max-w-xs">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar comercio…"
+            className="lc-input w-full !pl-9"
+          />
+        </div>
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
-          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          className="lc-input"
         >
           <option value="">Todos los períodos</option>
           {periods.map((p) => (
             <option key={p} value={p}>
-              {p}
+              {formatPeriodLabel(p)}
             </option>
           ))}
         </select>
         <label
           className={cn(
-            "inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition",
+            "inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition",
             uncategorizedOnly
-              ? "border-amber-500 bg-amber-50 text-amber-950 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-100"
+              ? "border-amber-500 bg-amber-50 text-amber-950 shadow-sm dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-100"
               : "border-zinc-200 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200",
           )}
         >
@@ -325,50 +331,41 @@ export function TransactionsTable({
         <button
           type="button"
           onClick={() => void load()}
-          className="rounded-lg bg-zinc-900 px-3 py-2 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900"
+          className="lc-btn lc-btn-secondary"
         >
+          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
           Actualizar
         </button>
       </div>
 
       {error && (
-        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
+        <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
           {error}
         </p>
       )}
 
-      {toast && (
-        <div
-          role="status"
-          className="fixed bottom-20 right-4 z-50 max-w-sm animate-in rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 shadow-lg md:bottom-6 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100"
-        >
-          {toast}
-        </div>
-      )}
+      {toast && <Toast>{toast}</Toast>}
 
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-        <table className="min-w-full text-left text-sm">
-          <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900">
+      {loading && rows.length === 0 ? (
+        <LoadingBlock label="Cargando consumos…" />
+      ) : (
+      <div className="lc-table-wrap">
+        <table>
+          <thead>
             <tr>
-              <th className="w-8 px-2 py-2" />
-              <th className="px-3 py-2">Fecha</th>
-              <th className="px-3 py-2">Descripción</th>
-              <th className="px-3 py-2">Monto $</th>
-              <th className="px-3 py-2">USD</th>
-              <th className="px-3 py-2">Categoría</th>
-              <th className="px-3 py-2">Pagó</th>
+              <th className="w-8 px-2 py-2.5" />
+              <th className="px-3 py-2.5">Fecha</th>
+              <th className="px-3 py-2.5">Descripción</th>
+              <th className="px-3 py-2.5">Monto $</th>
+              <th className="px-3 py-2.5">USD</th>
+              <th className="px-3 py-2.5">Categoría</th>
+              <th className="px-3 py-2.5">Pagó</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {loading ? (
+          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+            {rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-zinc-500">
-                  Cargando…
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-zinc-500">
+                <td colSpan={7} className="px-3 py-12 text-center text-zinc-500">
                   {compactToolbar
                     ? "No hay consumos. Usá Agregar o importá el resumen de la tarjeta."
                     : "No hay consumos."}
@@ -386,7 +383,7 @@ export function TransactionsTable({
                           ? "bg-violet-50/80 dark:bg-violet-950/30"
                           : r.isPayment
                             ? "bg-sky-50/50 dark:bg-sky-950/20"
-                            : "hover:bg-zinc-50 dark:hover:bg-zinc-900/50",
+                            : undefined,
                       )}
                     >
                       <td className="px-2 py-2">
@@ -445,7 +442,7 @@ export function TransactionsTable({
                                 categoryId: e.target.value || null,
                               })
                             }
-                            className="max-w-[160px] rounded border border-zinc-200 bg-white px-1.5 py-1 text-xs text-zinc-900 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                            className="lc-input max-w-[160px] !px-1.5 !py-1 text-xs disabled:opacity-60"
                           >
                             {categories.map((c) => (
                               <option key={c.id} value={c.id}>
@@ -464,7 +461,7 @@ export function TransactionsTable({
                               paidByUserId: e.target.value || null,
                             })
                           }
-                          className="max-w-[120px] rounded border border-zinc-200 bg-white px-1.5 py-1 text-xs text-zinc-900 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                          className="lc-input max-w-[120px] !px-1.5 !py-1 text-xs disabled:opacity-60"
                         >
                           {members.map((m) => (
                             <option key={m.userId} value={m.userId}>
@@ -545,7 +542,10 @@ export function TransactionsTable({
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-zinc-500">{rows.length} movimientos</p>
+      )}
+      <p className="text-xs text-zinc-500">
+        {loading ? "Actualizando…" : `${rows.length} movimientos`}
+      </p>
     </div>
   );
 }

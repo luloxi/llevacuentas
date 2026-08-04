@@ -94,29 +94,31 @@ export function UploadModal({
     >
       <button
         type="button"
-        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-black/45 backdrop-blur-[3px]"
         aria-label="Cerrar"
         disabled={loading}
         onClick={() => {
           if (!loading) onClose();
         }}
       />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl dark:border-zinc-700 dark:bg-zinc-950">
+      <div className="animate-fade-up relative z-10 w-full max-w-md rounded-3xl border border-emerald-900/10 bg-white p-5 shadow-2xl shadow-emerald-900/10 dark:border-white/10 dark:bg-zinc-950 dark:shadow-black/50 sm:p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2
               id="upload-modal-title"
-              className="text-lg font-semibold tracking-tight"
+              className="text-lg font-bold tracking-tight"
             >
               {title}
             </h2>
-            <p className="mt-1 text-sm text-zinc-500">{description}</p>
+            <p className="mt-1 text-sm leading-relaxed text-zinc-500">
+              {description}
+            </p>
           </div>
           <button
             type="button"
             disabled={loading}
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50 dark:hover:bg-zinc-800"
+            className="rounded-xl p-1.5 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50 dark:hover:bg-zinc-800"
           >
             <X className="h-5 w-5" />
           </button>
@@ -144,20 +146,29 @@ export function UploadModal({
             if (list.length) void processMany(multiple ? list : list.slice(0, 1));
           }}
           className={cn(
-            "flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-4 py-10 text-center transition",
+            "flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-4 py-10 text-center transition-all",
             dragOver
-              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40"
-              : "border-zinc-300 bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900/50",
+              ? "scale-[1.01] border-emerald-500 bg-emerald-50 shadow-inner dark:bg-emerald-950/40"
+              : "border-zinc-300 bg-zinc-50/80 dark:border-zinc-600 dark:bg-zinc-900/50",
             loading && "pointer-events-none opacity-70",
           )}
         >
-          {loading ? (
-            <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
-          ) : (
-            <Upload className="h-10 w-10 text-emerald-600" />
-          )}
+          <div
+            className={cn(
+              "flex h-14 w-14 items-center justify-center rounded-2xl shadow-md",
+              loading
+                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950"
+                : "bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-emerald-600/30",
+            )}
+          >
+            {loading ? (
+              <Loader2 className="h-7 w-7 animate-spin" />
+            ) : (
+              <Upload className="h-7 w-7" />
+            )}
+          </div>
           <div>
-            <p className="text-sm font-medium">
+            <p className="text-sm font-semibold">
               {loading
                 ? processingLabel
                 : dragOver
@@ -177,7 +188,7 @@ export function UploadModal({
             type="button"
             disabled={loading}
             onClick={() => inputRef.current?.click()}
-            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+            className="lc-btn lc-btn-primary"
           >
             {multiple ? "Elegir archivos" : "Elegir archivo"}
           </button>
@@ -196,7 +207,7 @@ export function UploadModal({
         </div>
 
         {error && (
-          <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">
+          <p className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
             {error}
           </p>
         )}

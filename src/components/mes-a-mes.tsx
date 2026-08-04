@@ -14,6 +14,14 @@ import { formatPeriodLabel } from "@/lib/period-label";
 import { colorForCategory } from "@/lib/category-colors";
 import { CategoryLinesChart, TotalSpendChart } from "@/components/spend-charts";
 import { DeudaView } from "@/components/deuda-view";
+import {
+  EmptyState,
+  LoadingBlock,
+  PageStack,
+  SegmentedControl,
+  Surface,
+  Toast,
+} from "@/components/ui";
 
 type CategoryOpt = { id: string; slug: string; name: string };
 
@@ -194,6 +202,12 @@ export function MesAMesView() {
     void loadStats();
   }, [loadStats]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
   // Load transactions for expand + recategorize (one month or all)
   useEffect(() => {
     if (mainTab !== "resumen") {
@@ -336,50 +350,55 @@ export function MesAMesView() {
   }
 
   if (loading && months.length === 0 && !chart && mainTab !== "deuda") {
-    return <p className="text-sm text-zinc-500">Calculando análisis…</p>;
+    return <LoadingBlock label="Calculando análisis…" />;
   }
 
   if (error && months.length === 0 && mainTab !== "deuda") {
     return (
-      <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
+      <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
         {error}
       </p>
     );
   }
 
+  const emptyHint = (
+    <EmptyState
+      icon={<LayoutList className="h-7 w-7" />}
+      title="Todavía no hay datos"
+      description="Importá el resumen de la tarjeta en Consumos para ver el análisis mes a mes."
+    />
+  );
+
   return (
-    <div className="space-y-4">
+    <PageStack>
       <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-xl border border-zinc-200/80 bg-zinc-100/80 p-1 shadow-inner dark:border-zinc-700/80 dark:bg-zinc-900/80">
-          {(
-            [
-              { id: "resumen" as const, label: "Resumen", icon: LayoutList },
-              { id: "charts" as const, label: "Gráficos", icon: LineChart },
-              { id: "deuda" as const, label: "Deuda", icon: Landmark },
-            ] as const
-          ).map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setMainTab(id)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all",
-                mainTab === id
-                  ? "bg-white text-emerald-700 shadow-sm ring-1 ring-black/5 dark:bg-zinc-800 dark:text-emerald-400 dark:ring-white/10"
-                  : "text-zinc-600 hover:bg-white/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100",
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          value={mainTab}
+          onChange={setMainTab}
+          options={[
+            {
+              id: "resumen",
+              label: "Resumen",
+              icon: <LayoutList className="h-3.5 w-3.5" />,
+            },
+            {
+              id: "charts",
+              label: "Gráficos",
+              icon: <LineChart className="h-3.5 w-3.5" />,
+            },
+            {
+              id: "deuda",
+              label: "Deuda",
+              icon: <Landmark className="h-3.5 w-3.5" />,
+            },
+          ]}
+        />
 
         {mainTab === "resumen" && periods.length > 0 && (
           <select
             value={filterPeriod}
             onChange={(e) => setFilterPeriod(e.target.value)}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            className="lc-input"
           >
             <option value="all">Todos los meses</option>
             {periods.map((p) => (
@@ -391,16 +410,9 @@ export function MesAMesView() {
         )}
       </div>
 
-      {toast && (
-        <div
-          role="status"
-          className="fixed bottom-20 right-4 z-50 max-w-sm rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 shadow-lg md:bottom-6 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100"
-        >
-          {toast}
-        </div>
-      )}
+      {toast && <Toast>{toast}</Toast>}
       {error && months.length > 0 && mainTab === "resumen" && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40">
+        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40">
           {error}
         </p>
       )}
@@ -409,16 +421,12 @@ export function MesAMesView() {
         <DeudaView />
       ) : mainTab === "charts" ? (
         periods.length === 0 ? (
-          <p className="text-sm text-zinc-500">
-            Todavía no hay datos. Importá el resumen de la tarjeta.
-          </p>
+          emptyHint
         ) : (
           <ChartsPanel chart={chart} />
         )
       ) : periods.length === 0 ? (
-        <p className="text-sm text-zinc-500">
-          Todavía no hay datos. Importá el resumen de la tarjeta.
-        </p>
+        emptyHint
       ) : filterPeriod === "all" ? (
         <MonthDetail
           month={grand}
@@ -455,28 +463,36 @@ export function MesAMesView() {
       ) : (
         <p className="text-sm text-zinc-500">Sin datos para este mes.</p>
       )}
-    </div>
+    </PageStack>
   );
 }
 
 function ChartsPanel({ chart }: { chart: ChartData | null }) {
   if (!chart || chart.periods.length === 0) {
     return (
-      <p className="text-sm text-zinc-500">Sin datos para graficar.</p>
+      <EmptyState
+        icon={<LineChart className="h-7 w-7" />}
+        title="Sin datos para graficar"
+        description="Cuando haya movimientos importados, vas a ver la evolución acá."
+      />
     );
   }
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
-        <h3 className="mb-1 text-sm font-semibold">Gasto total por mes</h3>
+    <div className="space-y-4">
+      <Surface>
+        <h3 className="mb-1 text-sm font-semibold tracking-tight">
+          Gasto total por mes
+        </h3>
         <p className="mb-3 text-xs text-zinc-500">
           Evolución en pesos (incluye USD convertidos al TC compra de fin de
           mes).
         </p>
         <TotalSpendChart totals={chart.totals} />
-      </section>
-      <section className="rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
-        <h3 className="mb-1 text-sm font-semibold">Por categoría</h3>
+      </Surface>
+      <Surface>
+        <h3 className="mb-1 text-sm font-semibold tracking-tight">
+          Por categoría
+        </h3>
         <p className="mb-3 text-xs text-zinc-500">
           Tocá una categoría para mostrarla u ocultarla. Pasá el mouse sobre el
           gráfico para ver montos.
@@ -485,7 +501,7 @@ function ChartsPanel({ chart }: { chart: ChartData | null }) {
           periods={chart.periods}
           byCategory={chart.byCategory}
         />
-      </section>
+      </Surface>
     </div>
   );
 }
@@ -529,53 +545,55 @@ function MonthDetail({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-2xl border",
+        "overflow-hidden rounded-2xl border backdrop-blur",
         isGrand
-          ? "border-2 border-emerald-500/80 shadow-sm shadow-emerald-500/10 dark:border-emerald-400/70"
-          : "border-zinc-200 dark:border-zinc-800",
+          ? "border-emerald-400/70 bg-white/80 shadow-lg shadow-emerald-600/10 dark:border-emerald-500/50 dark:bg-zinc-950/70 dark:shadow-emerald-900/20"
+          : "border-zinc-200/90 bg-white/80 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/60",
       )}
     >
       <div
         className={cn(
-          "flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3",
+          "flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-5",
           isGrand
-            ? "border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/50 dark:bg-emerald-950/40"
-            : "border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900",
+            ? "border-emerald-200/70 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-transparent dark:border-emerald-900/50 dark:from-emerald-950/50 dark:via-teal-950/20 dark:to-transparent"
+            : "border-zinc-100/90 bg-zinc-50/80 dark:border-zinc-800 dark:bg-zinc-900/60",
         )}
       >
         <div className="min-w-0">
           <h3
             className={cn(
-              "text-lg font-semibold capitalize",
+              "text-lg font-bold tracking-tight capitalize",
               isGrand && "text-emerald-900 dark:text-emerald-100",
             )}
           >
             {title ?? formatPeriodLabel(month.period)}
           </h3>
-          <p className="text-xs text-zinc-500">
+          <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
             {subtitle ??
               `${month.totalCount} movimientos · tocá una categoría para ver y recategorizar`}
           </p>
           {formatUsdRateLabel(month.usdRate) && (
-            <p className="text-[10px] text-zinc-400">
+            <p className="mt-1 text-[10px] text-zinc-400">
               {formatUsdRateLabel(month.usdRate)}
             </p>
           )}
         </div>
         <div className="flex items-center gap-3">
-          <div className="text-right text-sm">
+          <div className="rounded-xl border border-zinc-200/80 bg-white/80 px-3 py-2 text-right text-sm shadow-sm dark:border-zinc-700 dark:bg-zinc-900/80">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
               Total pesos
             </p>
             <div
               className={cn(
-                "font-semibold tabular-nums",
-                isGrand && "text-xl text-emerald-800 dark:text-emerald-200",
+                "font-bold tabular-nums tracking-tight",
+                isGrand
+                  ? "text-xl text-emerald-800 dark:text-emerald-200"
+                  : "text-base",
               )}
             >
               {formatArs(monthTotalArs(month))}
             </div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
               Total dólares
             </p>
             <div className="tabular-nums text-zinc-600 dark:text-zinc-300">
@@ -589,7 +607,7 @@ function MonthDetail({
                 onClick={onPrev}
                 disabled={!canPrev}
                 aria-label="Mes anterior"
-                className="rounded-lg border border-zinc-200 p-2 text-zinc-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                className="rounded-xl border border-zinc-200 bg-white p-2 text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -598,7 +616,7 @@ function MonthDetail({
                 onClick={onNext}
                 disabled={!canNext}
                 aria-label="Mes siguiente"
-                className="rounded-lg border border-zinc-200 p-2 text-zinc-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                className="rounded-xl border border-zinc-200 bg-white p-2 text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -625,7 +643,7 @@ function MonthDetail({
               <button
                 type="button"
                 onClick={() => onToggle(c.slug)}
-                className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left transition hover:bg-zinc-50 sm:grid sm:grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_4.5rem_3.5rem] sm:gap-2 dark:hover:bg-zinc-900/50"
+                className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left transition hover:bg-emerald-50/50 sm:grid sm:grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_4.5rem_3.5rem] sm:gap-2 dark:hover:bg-emerald-950/20"
               >
                 <span className="flex min-w-0 flex-1 items-center gap-3 sm:flex-none">
                   <ChevronDown
@@ -666,7 +684,7 @@ function MonthDetail({
               </button>
 
               {open && (
-                <div className="border-t border-zinc-100 bg-zinc-50/60 px-2 py-2 dark:border-zinc-800 dark:bg-zinc-950/40 sm:px-4">
+                <div className="border-t border-zinc-100 bg-zinc-50/80 px-2 py-2 dark:border-zinc-800 dark:bg-zinc-950/50 sm:px-4">
                   {txsLoading && list.length === 0 ? (
                     <p className="px-2 py-2 text-xs text-zinc-500">
                       Cargando gastos…
@@ -676,7 +694,7 @@ function MonthDetail({
                       No hay gastos listados en esta categoría.
                     </p>
                   ) : (
-                    <ul className="space-y-1">
+                    <ul className="space-y-1.5">
                       {list.map((t) => {
                         const hasArs =
                           t.amountArs != null &&
@@ -689,7 +707,7 @@ function MonthDetail({
                         return (
                         <li
                           key={t.id}
-                          className="flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm dark:bg-zinc-900"
+                          className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-100/80 bg-white px-3 py-2 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
                         >
                           <span className="w-20 shrink-0 text-xs tabular-nums text-zinc-500">
                             {formatDateAr(t.date)}
@@ -729,7 +747,7 @@ function MonthDetail({
                               onChangeCategory(t.id, e.target.value)
                             }
                             onClick={(e) => e.stopPropagation()}
-                            className="max-w-[10rem] rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                            className="lc-input max-w-[10rem] !px-2 !py-1 text-xs"
                           >
                             <option value="">Sin categoría</option>
                             {categories.map((cat) => (

@@ -12,9 +12,9 @@ export default async function AppLayout({
   const user = await requireUser();
 
   return (
-    <div className="flex min-h-full flex-1 flex-col">
+    <div className="app-shell">
       <AppNav isAdmin={isAdminEmail(user.email)} />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-24 md:pb-8">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-24 md:px-6 md:pb-10">
         {children}
       </main>
     </div>
