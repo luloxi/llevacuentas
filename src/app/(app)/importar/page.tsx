@@ -15,7 +15,7 @@ export default async function ImportarPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Importar</h1>
         <p className="text-sm text-zinc-500">
-          Cargá el Excel de últimos movimientos de tu tarjeta BBVA.
+          Cargá el Excel de “Últimos movimientos” de BBVA (.xls o .xlsx).
         </p>
       </div>
       <ImportForm />

@@ -22,10 +22,38 @@ export function ImportForm() {
     fd.set("kind", "bbva");
 
     try {
-      const res = await fetch("/api/import/bbva", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al importar");
-      setResult(data);
+      const res = await fetch("/api/import/bbva", {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      const text = await res.text();
+      let data: {
+        error?: string;
+        total?: number;
+        inserted?: number;
+        skipped?: number;
+      } | null = null;
+      try {
+        data = text ? (JSON.parse(text) as typeof data) : null;
+      } catch {
+        throw new Error(
+          res.status === 413
+            ? "El archivo es demasiado grande."
+            : text.slice(0, 160) || `Error ${res.status}`,
+        );
+      }
+      if (!res.ok) throw new Error(data?.error || "Error al importar");
+      if ((data?.total ?? 0) === 0) {
+        throw new Error(
+          "No se leyeron movimientos. ¿Es el Excel de “Últimos movimientos” de BBVA (.xls o .xlsx)?",
+        );
+      }
+      setResult({
+        total: data?.total ?? 0,
+        inserted: data?.inserted ?? 0,
+        skipped: data?.skipped ?? 0,
+      });
       form.reset();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
@@ -47,14 +75,15 @@ export function ImportForm() {
           <div>
             <h2 className="text-lg font-semibold">Subí el Excel de tu tarjeta</h2>
             <p className="mt-1 max-w-md text-sm text-zinc-600 dark:text-zinc-400">
-              Exportá “Últimos movimientos” desde la app o home banking BBVA
-              (.xlsx). Los categorizamos al importar.
+              Exportá “Últimos movimientos” desde BBVA (app o home banking).
+              Acepta <strong>.xls</strong> y <strong>.xlsx</strong>. Los
+              categorizamos al importar.
             </p>
           </div>
           <input
             name="file"
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             required
             className="block w-full max-w-sm text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-emerald-700"
           />

@@ -45,16 +45,24 @@ function parseDate(raw: unknown): string | null {
   return null;
 }
 
+function validInstallment(a: number, b: number): string | null {
+  // Real cuotas: 1/3, 2/6… not tax codes like 5463/5465
+  if (a >= 1 && b >= 1 && a <= b && b <= 60) return `${a}/${b}`;
+  return null;
+}
+
 function extractInstallment(description: string, cuotaCol: unknown): string | null {
   const fromCol = cuotaCol != null ? String(cuotaCol).trim() : "";
-  if (fromCol && fromCol !== "-" && /\d+\s*\/\s*\d+/.test(fromCol)) {
+  // BBVA uses "/" alone when there is no installment
+  if (fromCol && fromCol !== "-" && fromCol !== "/") {
     const m = fromCol.match(/(\d+)\s*\/\s*(\d+)/);
-    if (m) return `${Number(m[1])}/${Number(m[2])}`;
+    if (m) {
+      const hit = validInstallment(Number(m[1]), Number(m[2]));
+      if (hit) return hit;
+    }
   }
   const m = description.match(/cuota\s*0*(\d+)\s*\/\s*0*(\d+)/i);
-  if (m) return `${Number(m[1])}/${Number(m[2])}`;
-  const m2 = description.match(/\(?\s*0*(\d+)\s*\/\s*0*(\d+)\s*\)?/);
-  if (m2 && Number(m2[2]) > 1) return `${Number(m2[1])}/${Number(m2[2])}`;
+  if (m) return validInstallment(Number(m[1]), Number(m[2]));
   return null;
 }
 
@@ -79,13 +87,64 @@ function makeFingerprint(m: Omit<BbvaMovement, "fingerprint">): string {
   return createHash("sha256").update(base).digest("hex").slice(0, 32);
 }
 
+function normalizeHeaderCell(c: unknown): string {
+  return String(c ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isHeaderRow(row: (string | number | Date | null)[]): boolean {
+  const joined = row.map((c) => normalizeHeaderCell(c)).join("|");
+  if (!joined.includes("fecha")) return false;
+  // BBVA actual export: Fecha | Establecimiento | Importe en $ | Importe en U$S
+  // Older / other banks: Movimiento / Descripción
+  return (
+    joined.includes("establecimiento") ||
+    joined.includes("movimiento") ||
+    joined.includes("descrip") ||
+    joined.includes("comercio") ||
+    joined.includes("detalle")
+  );
+}
+
+function isUsdHeader(h: string): boolean {
+  return (
+    h.includes("u$s") ||
+    h.includes("usd") ||
+    h.includes("us$") ||
+    h.includes("dolar") ||
+    h.includes("dólar")
+  );
+}
+
+function isArsHeader(h: string): boolean {
+  if (isUsdHeader(h)) return false;
+  return (
+    h.includes("importe") ||
+    h.includes("monto") ||
+    h.includes("peso") ||
+    h.includes("$")
+  );
+}
+
+function parseColumnAmount(raw: unknown): number | null {
+  const parsed = parseBbvaAmount(raw);
+  return parsed ? parsed.value : null;
+}
+
 /**
- * Parse BBVA "Últimos movimientos.xlsx" buffer/arraybuffer.
+ * Parse BBVA "Últimos movimientos" (.xls / .xlsx) buffer.
+ * Supports the home-banking export:
+ *   Nro. Tarjeta | Fecha | Establecimiento | Cuota | Importe en $ | Importe en U$S
  */
 export function parseBbvaWorkbook(data: ArrayBuffer | Buffer): BbvaMovement[] {
   const wb = XLSX.read(data, { type: "buffer", cellDates: true });
   const sheetName =
-    wb.SheetNames.find((n) => n.toLowerCase().includes("movement")) ??
+    wb.SheetNames.find((n) => /mov/i.test(n)) ??
+    wb.SheetNames.find((n) => /periodo|period/i.test(n)) ??
     wb.SheetNames[0];
   if (!sheetName) return [];
 
@@ -94,39 +153,59 @@ export function parseBbvaWorkbook(data: ArrayBuffer | Buffer): BbvaMovement[] {
     { header: 1, defval: null, raw: true },
   );
 
-  // Find header row
+  // Find header row (title row may sit above it)
   let headerIdx = -1;
-  for (let i = 0; i < Math.min(rows.length, 10); i++) {
-    const row = rows[i] ?? [];
-    const joined = row.map((c) => String(c ?? "").toLowerCase()).join("|");
-    if (
-      joined.includes("fecha") &&
-      (joined.includes("movimiento") || joined.includes("descrip"))
-    ) {
+  for (let i = 0; i < Math.min(rows.length, 25); i++) {
+    if (isHeaderRow(rows[i] ?? [])) {
       headerIdx = i;
       break;
     }
   }
-  if (headerIdx < 0) headerIdx = 1; // BBVA default: title row 0, header row 1
+  if (headerIdx < 0) {
+    // Last resort: first row that has "fecha"
+    for (let i = 0; i < Math.min(rows.length, 25); i++) {
+      const joined = (rows[i] ?? []).map((c) => normalizeHeaderCell(c)).join("|");
+      if (joined.includes("fecha")) {
+        headerIdx = i;
+        break;
+      }
+    }
+  }
+  if (headerIdx < 0) headerIdx = 0;
 
-  const header = (rows[headerIdx] ?? []).map((c) =>
-    String(c ?? "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/\p{M}/gu, ""),
-  );
+  const header = (rows[headerIdx] ?? []).map(normalizeHeaderCell);
 
   const colDate = header.findIndex((h) => h.includes("fecha"));
   const colMov = header.findIndex(
-    (h) => h.includes("movimiento") || h.includes("descrip"),
+    (h) =>
+      h.includes("establecimiento") ||
+      h.includes("movimiento") ||
+      h.includes("descrip") ||
+      h.includes("comercio") ||
+      h.includes("detalle"),
   );
   const colCuota = header.findIndex((h) => h.includes("cuota"));
-  const colMonto = header.findIndex((h) => h.includes("monto") || h.includes("importe"));
+  const colUsd = header.findIndex(
+    (h) => (h.includes("importe") || h.includes("monto")) && isUsdHeader(h),
+  );
+  let colArs = header.findIndex(
+    (h) => (h.includes("importe") || h.includes("monto") || h.includes("$")) && isArsHeader(h),
+  );
+  // If only one "importe" and it's not USD, use it as ARS
+  if (colArs < 0) {
+    colArs = header.findIndex(
+      (h, i) =>
+        i !== colUsd && (h.includes("importe") || h.includes("monto") || h.includes("peso")),
+    );
+  }
 
-  const dateIdx = colDate >= 0 ? colDate : 0;
-  const movIdx = colMov >= 0 ? colMov : 1;
-  const cuotaIdx = colCuota >= 0 ? colCuota : 2;
-  const montoIdx = colMonto >= 0 ? colMonto : 3;
+  // Layout fallback for classic BBVA export (no reliable header match):
+  // 0 card, 1 date, 2 merchant, 3 cuota, 4 ARS, 5 USD
+  const dateIdx = colDate >= 0 ? colDate : 1;
+  const movIdx = colMov >= 0 ? colMov : 2;
+  const cuotaIdx = colCuota >= 0 ? colCuota : 3;
+  const arsIdx = colArs >= 0 ? colArs : 4;
+  const usdIdx = colUsd >= 0 ? colUsd : 5;
 
   const out: BbvaMovement[] = [];
 
@@ -136,17 +215,19 @@ export function parseBbvaWorkbook(data: ArrayBuffer | Buffer): BbvaMovement[] {
 
     const descriptionRaw = String(row[movIdx] ?? "").trim();
     if (!descriptionRaw) continue;
+    // Skip totals / footer rows
+    if (/^total\b/i.test(descriptionRaw)) continue;
+    if (/monto total/i.test(descriptionRaw)) continue;
 
     const date = parseDate(row[dateIdx]);
     if (!date) continue;
 
-    const amount = parseBbvaAmount(row[montoIdx]);
-    if (!amount) continue;
+    const amountArs = parseColumnAmount(row[arsIdx]);
+    const amountUsd = parseColumnAmount(row[usdIdx]);
+    if (amountArs == null && amountUsd == null) continue;
 
     const descriptionNormalized = normalizeDescription(descriptionRaw);
     const installment = extractInstallment(descriptionRaw, row[cuotaIdx]);
-    const amountArs = amount.currency === "ARS" ? amount.value : null;
-    const amountUsd = amount.currency === "USD" ? amount.value : null;
     const negative = (amountArs ?? amountUsd ?? 0) < 0;
     const payment = isPaymentDescription(descriptionNormalized) || negative;
 
