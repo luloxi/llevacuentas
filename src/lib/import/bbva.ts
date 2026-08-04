@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { parseBbvaWorkbook, parseTransparenciaConsumos } from "@/lib/bbva/parse";
 import { matchCategory, categoryNameToSlug } from "@/lib/categorize/rules";
+import { matchCategoryWithLearning } from "@/lib/categorize/learn";
 import { getDb, schema } from "@/lib/db";
 import { getCategoryMap } from "@/lib/household";
 
@@ -27,10 +28,20 @@ export async function importBbvaFile(opts: {
 
   let inserted = 0;
   let skipped = 0;
+  let learnedHits = 0;
 
   for (const m of movements) {
-    const catMatch = matchCategory(m.descriptionNormalized);
-    const category = bySlug.get(catMatch.slug) ?? bySlug.get("uncategorized");
+    const catMatch = await matchCategoryWithLearning(
+      opts.householdId,
+      m.descriptionNormalized,
+    );
+    if (catMatch.learned) learnedHits++;
+    const category =
+      (catMatch.categoryId
+        ? { id: catMatch.categoryId }
+        : null) ??
+      bySlug.get(catMatch.slug) ??
+      bySlug.get("uncategorized");
 
     const ownership =
       m.isPayment || catMatch.kind !== "expense"
@@ -66,6 +77,7 @@ export async function importBbvaFile(opts: {
     total: movements.length,
     inserted,
     skipped,
+    learnedHits,
   };
 }
 
@@ -131,9 +143,14 @@ export async function listTransactions(
     period?: string;
     categoryId?: string;
     q?: string;
+    /** Only rows with no category or Uncategorized */
+    uncategorizedOnly?: boolean;
   },
 ) {
   const db = getDb();
+  const { byId, bySlug } = await getCategoryMap();
+  const uncatId = bySlug.get("uncategorized")?.id ?? null;
+
   const rows = await db
     .select()
     .from(schema.transactions)
@@ -143,6 +160,11 @@ export async function listTransactions(
   return rows.filter((r) => {
     if (opts?.period && !r.date.startsWith(opts.period)) return false;
     if (opts?.categoryId && r.categoryId !== opts.categoryId) return false;
+    if (opts?.uncategorizedOnly) {
+      const slug = r.categoryId ? byId.get(r.categoryId)?.slug : null;
+      const bare = !r.categoryId || r.categoryId === uncatId || slug === "uncategorized";
+      if (!bare) return false;
+    }
     if (opts?.q) {
       const q = opts.q.toUpperCase();
       if (!r.descriptionNormalized.toUpperCase().includes(q)) return false;

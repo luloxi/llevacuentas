@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { requireApiUser } from "@/lib/api-auth";
 import { getCategoryMap, requireHousehold } from "@/lib/household";
 import { listTransactions, updateTransaction } from "@/lib/import/bbva";
@@ -15,9 +15,17 @@ export async function GET(req: Request) {
     const period = searchParams.get("period") ?? undefined;
     const categoryId = searchParams.get("categoryId") ?? undefined;
     const q = searchParams.get("q") ?? undefined;
+    const uncategorizedOnly =
+      searchParams.get("uncategorized") === "1" ||
+      searchParams.get("uncategorized") === "true";
 
     const [rows, { cats, byId }] = await Promise.all([
-      listTransactions(ctx.household.id, { period, categoryId, q }),
+      listTransactions(ctx.household.id, {
+        period,
+        categoryId,
+        q,
+        uncategorizedOnly,
+      }),
       getCategoryMap(),
     ]);
 
@@ -127,13 +135,57 @@ export async function PATCH(req: Request) {
     if (!body.id) {
       return NextResponse.json({ error: "Falta id" }, { status: 400 });
     }
+
+    // Load description before update for learning
+    const db = getDb();
+    const [before] = await db
+      .select()
+      .from(schema.transactions)
+      .where(
+        and(
+          eq(schema.transactions.id, body.id),
+          eq(schema.transactions.householdId, ctx.household.id),
+        ),
+      )
+      .limit(1);
+
     const row = await updateTransaction(ctx.household.id, body.id, {
       categoryId: body.categoryId,
       ownership: body.ownership,
       paidByUserId: body.paidByUserId,
       splitPct: body.splitPct,
     });
-    return NextResponse.json({ transaction: row });
+
+    let learned = 0;
+    let similarUpdated = 0;
+    if (
+      body.categoryId &&
+      typeof body.categoryId === "string" &&
+      before?.descriptionNormalized
+    ) {
+      const {
+        learnFromCategorization,
+        applyCategoryToSimilar,
+      } = await import("@/lib/categorize/learn");
+      const { patterns } = await learnFromCategorization({
+        householdId: ctx.household.id,
+        description: before.descriptionNormalized,
+        categoryId: body.categoryId,
+      });
+      learned = patterns.length;
+      similarUpdated = await applyCategoryToSimilar({
+        householdId: ctx.household.id,
+        description: before.descriptionNormalized,
+        categoryId: body.categoryId,
+        excludeTxId: body.id,
+      });
+    }
+
+    return NextResponse.json({
+      transaction: row,
+      learned,
+      similarUpdated,
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Error" },

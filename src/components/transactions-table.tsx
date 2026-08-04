@@ -89,8 +89,10 @@ export function TransactionsTable() {
   const [members, setMembers] = useState<Member[]>([]);
   const [period, setPeriod] = useState("");
   const [q, setQ] = useState("");
+  const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [modal, setModal] = useState<"card" | "ticket" | null>(null);
@@ -101,6 +103,7 @@ export function TransactionsTable() {
     const params = new URLSearchParams();
     if (period) params.set("period", period);
     if (q) params.set("q", q);
+    if (uncategorizedOnly) params.set("uncategorized", "1");
     try {
       const res = await fetch(`/api/transactions?${params}`, {
         credentials: "include",
@@ -123,7 +126,7 @@ export function TransactionsTable() {
     } finally {
       setLoading(false);
     }
-  }, [period, q]);
+  }, [period, q, uncategorizedOnly]);
 
   useEffect(() => {
     void load();
@@ -131,25 +134,38 @@ export function TransactionsTable() {
 
   async function patch(id: string, body: Record<string, unknown>) {
     setError(null);
+    setToast(null);
     setSavingId(id);
     const prev = rows;
-    setRows((list) =>
-      list.map((r) => {
+    const catId =
+      "categoryId" in body ? (body.categoryId as string | null) : undefined;
+    const nextCat =
+      catId === undefined
+        ? undefined
+        : catId == null || catId === ""
+          ? null
+          : (categories.find((c) => c.id === catId) ?? null);
+
+    // Optimistic: update row, and if filtering uncategorized, drop it when categorized
+    setRows((list) => {
+      const mapped = list.map((r) => {
         if (r.id !== id) return r;
         const next: Tx = { ...r };
-        if ("categoryId" in body) {
-          const catId = body.categoryId as string | null;
-          next.category =
-            catId == null || catId === ""
-              ? null
-              : (categories.find((c) => c.id === catId) ?? r.category);
-        }
+        if (nextCat !== undefined) next.category = nextCat;
         if ("paidByUserId" in body) {
           next.paidByUserId = (body.paidByUserId as string | null) ?? null;
         }
         return next;
-      }),
-    );
+      });
+      if (
+        uncategorizedOnly &&
+        nextCat &&
+        nextCat.slug !== "uncategorized"
+      ) {
+        return mapped.filter((r) => r.id !== id);
+      }
+      return mapped;
+    });
 
     try {
       const res = await fetch("/api/transactions", {
@@ -158,12 +174,24 @@ export function TransactionsTable() {
         credentials: "include",
         body: JSON.stringify({ id, ...body }),
       });
+      const data = (await res.json().catch(() => null)) as {
+        error?: string;
+        similarUpdated?: number;
+        learned?: number;
+      } | null;
       if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as {
-          error?: string;
-        } | null;
         setRows(prev);
         setError(data?.error || "No se pudo guardar el cambio");
+        return;
+      }
+      if (data?.similarUpdated && data.similarUpdated > 0) {
+        setToast(
+          `Aprendido. También actualicé ${data.similarUpdated} gasto(s) similar(es).`,
+        );
+        // Refresh so similar rows disappear from uncategorized view
+        if (uncategorizedOnly) void load();
+      } else if (data?.learned && data.learned > 0 && catId) {
+        setToast("Listo. Voy a recordar esta categoría para el mismo comercio.");
       }
     } catch {
       setRows(prev);
@@ -309,6 +337,22 @@ export function TransactionsTable() {
             </option>
           ))}
         </select>
+        <label
+          className={cn(
+            "inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition",
+            uncategorizedOnly
+              ? "border-amber-500 bg-amber-50 text-amber-950 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-100"
+              : "border-zinc-200 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200",
+          )}
+        >
+          <input
+            type="checkbox"
+            checked={uncategorizedOnly}
+            onChange={(e) => setUncategorizedOnly(e.target.checked)}
+            className="h-4 w-4 rounded border-zinc-300 text-amber-600 focus:ring-amber-500"
+          />
+          Solo sin categoría
+        </label>
         <button
           type="button"
           onClick={() => void load()}
@@ -317,6 +361,12 @@ export function TransactionsTable() {
           Actualizar
         </button>
       </div>
+
+      {toast && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+          {toast}
+        </p>
+      )}
 
       {error && (
         <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
