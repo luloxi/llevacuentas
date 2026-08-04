@@ -93,6 +93,7 @@ export function TransactionsTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastTone, setToastTone] = useState<"ok" | "warn">("ok");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [modal, setModal] = useState<"card" | "ticket" | null>(null);
@@ -263,27 +264,55 @@ export function TransactionsTable() {
     [rows],
   );
 
-  async function handleCardImport(file: File) {
-    const fd = new FormData();
-    fd.set("file", file);
-    fd.set("kind", "bbva");
-    const res = await fetch("/api/import/bbva", {
-      method: "POST",
-      body: fd,
-      credentials: "include",
-    });
-    if (!res.ok) throw new Error(await readErrorMessage(res));
-    const data = (await res.json()) as {
+  async function handleCardImportFiles(files: File[]) {
+    type ImportResult = {
       total?: number;
       inserted?: number;
+      alreadyExists?: number;
       skipped?: number;
+      message?: string;
+      warning?: string | null;
+      fullyDuplicate?: boolean;
     };
-    if ((data.total ?? 0) === 0) {
-      throw new Error(
-        "No se leyeron movimientos. ¿Es el Excel de “Últimos movimientos” de BBVA?",
-      );
+
+    let total = 0;
+    let inserted = 0;
+    let already = 0;
+    const fileMsgs: string[] = [];
+
+    for (const file of files) {
+      const fd = new FormData();
+      fd.set("file", file);
+      fd.set("kind", "bbva");
+      const res = await fetch("/api/import/bbva", {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${file.name}: ${await readErrorMessage(res)}`);
+      const data = (await res.json()) as ImportResult;
+      if ((data.total ?? 0) === 0) {
+        throw new Error(
+          `No se leyeron movimientos de “${file.name}”. ¿Es un Excel de Últimos movimientos o un PDF de resumen BBVA?`,
+        );
+      }
+      total += data.total ?? 0;
+      inserted += data.inserted ?? 0;
+      already += data.alreadyExists ?? data.skipped ?? 0;
+      if (data.message) fileMsgs.push(`${file.name}: ${data.message}`);
     }
-    await load();
+
+    const fullyDup = inserted === 0 && already > 0;
+    const msg =
+      files.length > 1
+        ? `${files.length} archivos · ${inserted} nuevos · ${already} coincidencias · ${total} filas leídas`
+        : fileMsgs[0] ||
+          (fullyDup
+            ? `Este resumen ya estaba cargado: ${already} coincidencias. No se importó nada nuevo.`
+            : `${inserted} nuevos · ${already} coincidencias · ${total} filas leídas`);
+    setToastTone(fullyDup || already > 0 ? "warn" : "ok");
+    setToast(msg);
+    if (inserted > 0) await load();
   }
 
   async function handleTicketImport(file: File) {
@@ -363,7 +392,13 @@ export function TransactionsTable() {
       </div>
 
       {toast && (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+        <p
+          className={
+            toastTone === "warn"
+              ? "rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+              : "rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
+          }
+        >
           {toast}
         </p>
       )}
@@ -576,11 +611,12 @@ export function TransactionsTable() {
       <UploadModal
         open={modal === "card"}
         title="Importar resúmen tarjeta"
-        description="Arrastrá el Excel de “Últimos movimientos” de BBVA (.xls o .xlsx)."
-        accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        description="Excel de “Últimos movimientos” (.xls/.xlsx) o PDF de resumen mensual BBVA. Podés subir varios a la vez."
+        accept=".xlsx,.xls,.pdf,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         processingLabel="Procesando resumen…"
+        multiple
         onClose={() => setModal(null)}
-        onFile={handleCardImport}
+        onFiles={handleCardImportFiles}
       />
       <UploadModal
         open={modal === "ticket"}

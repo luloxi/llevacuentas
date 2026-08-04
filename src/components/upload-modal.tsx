@@ -10,17 +10,23 @@ export function UploadModal({
   description,
   accept,
   processingLabel = "Procesando…",
+  multiple = false,
   onClose,
   onFile,
+  onFiles,
 }: {
   open: boolean;
   title: string;
   description: string;
   accept: string;
   processingLabel?: string;
+  /** Allow selecting / dropping several files (uses onFiles if set, else onFile per file) */
+  multiple?: boolean;
   onClose: () => void;
   /** Return void/Promise; throw Error with message on failure */
-  onFile: (file: File) => Promise<void>;
+  onFile?: (file: File) => Promise<void>;
+  /** Batch handler when multiple is true */
+  onFiles?: (files: File[]) => Promise<void>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -46,13 +52,27 @@ export function UploadModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, loading, onClose]);
 
-  const process = useCallback(
-    async (file: File) => {
+  const processMany = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
       setError(null);
-      setFileName(file.name);
+      setFileName(
+        files.length === 1
+          ? files[0].name
+          : `${files.length} archivos`,
+      );
       setLoading(true);
       try {
-        await onFile(file);
+        if (onFiles) {
+          await onFiles(files);
+        } else if (onFile) {
+          for (const f of files) {
+            setFileName(files.length > 1 ? `${f.name}…` : f.name);
+            await onFile(f);
+          }
+        } else {
+          throw new Error("No hay handler de archivos");
+        }
         onClose();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Error al procesar");
@@ -60,7 +80,7 @@ export function UploadModal({
         setLoading(false);
       }
     },
-    [onFile, onClose],
+    [onFile, onFiles, onClose],
   );
 
   if (!open) return null;
@@ -118,8 +138,10 @@ export function UploadModal({
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            const f = e.dataTransfer.files?.[0];
-            if (f) void process(f);
+            const list = e.dataTransfer.files
+              ? Array.from(e.dataTransfer.files)
+              : [];
+            if (list.length) void processMany(multiple ? list : list.slice(0, 1));
           }}
           className={cn(
             "flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-4 py-10 text-center transition",
@@ -157,17 +179,18 @@ export function UploadModal({
             onClick={() => inputRef.current?.click()}
             className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
           >
-            Elegir archivo
+            {multiple ? "Elegir archivos" : "Elegir archivo"}
           </button>
           <input
             ref={inputRef}
             type="file"
             accept={accept}
+            multiple={multiple}
             className="hidden"
             onChange={(e) => {
-              const f = e.target.files?.[0];
+              const list = e.target.files ? Array.from(e.target.files) : [];
               e.target.value = "";
-              if (f) void process(f);
+              if (list.length) void processMany(list);
             }}
           />
         </div>

@@ -14,7 +14,10 @@ export function ImportForm({
   const [result, setResult] = useState<{
     total: number;
     inserted: number;
-    skipped: number;
+    alreadyExists: number;
+    message: string;
+    warning: string | null;
+    fullyDuplicate: boolean;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,45 +27,79 @@ export function ImportForm({
     setError(null);
     setResult(null);
     const form = e.currentTarget;
-    const fd = new FormData(form);
-    fd.set("kind", "bbva");
+    const input = form.elements.namedItem("file") as HTMLInputElement | null;
+    const files = input?.files ? Array.from(input.files) : [];
+    if (files.length === 0) {
+      setError("Elegí al menos un archivo");
+      setLoading(false);
+      return;
+    }
+
+    type ImportResult = {
+      error?: string;
+      total?: number;
+      inserted?: number;
+      alreadyExists?: number;
+      skipped?: number;
+      message?: string;
+      warning?: string | null;
+      fullyDuplicate?: boolean;
+    };
 
     try {
-      const res = await fetch("/api/import/bbva", {
-        method: "POST",
-        body: fd,
-        credentials: "include",
-      });
-      const text = await res.text();
-      type ImportResult = {
-        error?: string;
-        total?: number;
-        inserted?: number;
-        skipped?: number;
-      };
-      let data: ImportResult | null = null;
-      try {
-        data = text ? (JSON.parse(text) as ImportResult) : null;
-      } catch {
-        throw new Error(
-          res.status === 413
-            ? "El archivo es demasiado grande."
-            : text.slice(0, 160) || `Error ${res.status}`,
-        );
+      let total = 0;
+      let inserted = 0;
+      let alreadyExists = 0;
+      const warnings: string[] = [];
+      const messages: string[] = [];
+
+      for (const file of files) {
+        const fd = new FormData();
+        fd.set("file", file);
+        fd.set("kind", "bbva");
+        const res = await fetch("/api/import/bbva", {
+          method: "POST",
+          body: fd,
+          credentials: "include",
+        });
+        const text = await res.text();
+        let data: ImportResult | null = null;
+        try {
+          data = text ? (JSON.parse(text) as ImportResult) : null;
+        } catch {
+          throw new Error(
+            res.status === 413
+              ? "El archivo es demasiado grande."
+              : text.slice(0, 160) || `Error ${res.status}`,
+          );
+        }
+        if (!res.ok) throw new Error(data?.error || `Error al importar ${file.name}`);
+        if ((data?.total ?? 0) === 0) {
+          throw new Error(
+            `No se leyeron movimientos de “${file.name}”. ¿Es un Excel de Últimos movimientos o un PDF de resumen BBVA?`,
+          );
+        }
+        total += data?.total ?? 0;
+        inserted += data?.inserted ?? 0;
+        alreadyExists += data?.alreadyExists ?? data?.skipped ?? 0;
+        if (data?.message) messages.push(`${file.name}: ${data.message}`);
+        if (data?.warning) warnings.push(`${file.name}: ${data.warning}`);
       }
-      if (!res.ok) throw new Error(data?.error || "Error al importar");
-      if ((data?.total ?? 0) === 0) {
-        throw new Error(
-          "No se leyeron movimientos. ¿Es el Excel de “Últimos movimientos” de BBVA (.xls o .xlsx)?",
-        );
-      }
+
+      const fullyDuplicate = inserted === 0 && alreadyExists > 0;
       setResult({
-        total: data?.total ?? 0,
-        inserted: data?.inserted ?? 0,
-        skipped: data?.skipped ?? 0,
+        total,
+        inserted,
+        alreadyExists,
+        message:
+          files.length > 1
+            ? `${files.length} archivos · ${inserted} nuevos · ${alreadyExists} coincidencias · ${total} filas leídas`
+            : (messages[0] ?? `${inserted} nuevos · ${alreadyExists} coincidencias`),
+        warning: warnings[0] ?? null,
+        fullyDuplicate,
       });
       form.reset();
-      onDone?.();
+      if (inserted > 0) onDone?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
     } finally {
@@ -104,15 +141,16 @@ export function ImportForm({
               }
             >
               {compact
-                ? "Excel “Últimos movimientos” (.xls / .xlsx)"
-                : "Exportá “Últimos movimientos” desde BBVA (app o home banking). Acepta .xls y .xlsx. Los categorizamos al importar."}
+                ? "Excel “Últimos movimientos” o PDF de resumen BBVA"
+                : "Excel de “Últimos movimientos” (.xls/.xlsx) o el PDF de resumen mensual que mandaba el banco. Los categorizamos al importar y no duplicamos lo ya cargado."}
             </p>
           </div>
           <input
             name="file"
             type="file"
-            accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".xlsx,.xls,.pdf,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             required
+            multiple
             className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-emerald-700"
           />
           <button
@@ -127,14 +165,35 @@ export function ImportForm({
       </form>
 
       {result && (
-        <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/40">
-          <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
+        <div
+          className={
+            result.fullyDuplicate || result.warning
+              ? "flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/40"
+              : "flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/40"
+          }
+        >
+          {result.fullyDuplicate || result.warning ? (
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          ) : (
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+          )}
           <div className="text-sm">
-            <p className="font-medium">Importación completa</p>
-            <p className="text-zinc-600 dark:text-zinc-400">
-              {result.inserted} nuevos · {result.skipped} ya existían ·{" "}
-              {result.total} filas leídas
+            <p className="font-medium">
+              {result.fullyDuplicate
+                ? "Resumen ya cargado"
+                : result.inserted > 0
+                  ? "Importación completa"
+                  : "Sin cambios"}
             </p>
+            <p className="text-zinc-700 dark:text-zinc-300">
+              {result.message ||
+                `${result.inserted} nuevos · ${result.alreadyExists} coincidencias · ${result.total} filas`}
+            </p>
+            {result.warning && !result.fullyDuplicate && (
+              <p className="mt-1 text-amber-800 dark:text-amber-200">
+                {result.warning}
+              </p>
+            )}
           </div>
         </div>
       )}

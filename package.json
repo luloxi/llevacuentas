@@ -9,7 +9,8 @@
     "lint": "eslint",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "test:parse": "tsx scripts/test-bbva-parse.ts"
+    "test:parse": "tsx scripts/test-bbva-parse.ts",
+    "test:parse-pdf": "tsx scripts/test-bbva-pdf.ts"
   },
   "dependencies": {
     "@neondatabase/auth": "^0.4.2-beta",
@@ -22,6 +23,7 @@
     "nanoid": "^6.0.1",
     "next": "16.2.12",
     "openai": "^7.3.0",
+    "pdf-parse": "^2.4.5",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tailwind-merge": "^3.6.0",
