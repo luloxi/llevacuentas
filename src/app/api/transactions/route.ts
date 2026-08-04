@@ -20,13 +20,27 @@ export async function GET(req: Request) {
     ]);
 
     const data = rows.map((r) => ({
-      ...r,
+      id: r.id,
+      date: r.date,
+      descriptionNormalized: r.descriptionNormalized,
       amountArs: r.amountArs != null ? Number(r.amountArs) : null,
       amountUsd: r.amountUsd != null ? Number(r.amountUsd) : null,
+      installment: r.installment,
+      isPayment: r.isPayment,
+      paidByUserId: r.paidByUserId,
       category: r.categoryId ? byId.get(r.categoryId) ?? null : null,
     }));
 
-    return NextResponse.json({ transactions: data, categories: cats });
+    const members = ctx.members.map((m) => ({
+      userId: m.userId,
+      name: m.displayName || m.name || m.email || m.userId,
+    }));
+
+    return NextResponse.json({
+      transactions: data,
+      categories: cats,
+      members,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error";
     if (msg === "NO_HOUSEHOLD") {

@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatArs, formatUsd, formatDateAr } from "@/lib/utils";
 
 type Category = { id: string; slug: string; name: string };
+type Member = { userId: string; name: string };
 type Tx = {
   id: string;
   date: string;
@@ -12,17 +13,26 @@ type Tx = {
   amountUsd: number | null;
   installment: string | null;
   isPayment: boolean;
-  ownership: "personal" | "shared";
+  paidByUserId: string | null;
   category: Category | null;
 };
+
+function memberLabel(m: Member): string {
+  const n = m.name.trim();
+  if (!n) return "Sin nombre";
+  // Prefer first given name for compact table cells
+  return n.split(/\s+/)[0] ?? n;
+}
 
 export function TransactionsTable() {
   const [rows, setRows] = useState<Tx[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [period, setPeriod] = useState("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -30,34 +40,84 @@ export function TransactionsTable() {
     const params = new URLSearchParams();
     if (period) params.set("period", period);
     if (q) params.set("q", q);
-    const res = await fetch(`/api/transactions?${params}`);
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || "Error");
+    try {
+      const res = await fetch(`/api/transactions?${params}`, {
+        credentials: "include",
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        transactions?: Tx[];
+        categories?: Category[];
+        members?: Member[];
+      };
+      if (!res.ok) {
+        setError(data.error || "Error");
+        return;
+      }
+      setRows(data.transactions ?? []);
+      setCategories(data.categories ?? []);
+      setMembers(data.members ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de red");
+    } finally {
       setLoading(false);
-      return;
     }
-    setRows(data.transactions);
-    setCategories(data.categories);
-    setLoading(false);
   }, [period, q]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
+  /** Persist change in DB without reloading the whole list (keeps scroll/focus). */
   async function patch(id: string, body: Record<string, unknown>) {
-    await fetch("/api/transactions", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, ...body }),
-    });
-    await load();
+    setError(null);
+    setSavingId(id);
+
+    const prev = rows;
+    setRows((list) =>
+      list.map((r) => {
+        if (r.id !== id) return r;
+        const next: Tx = { ...r };
+        if ("categoryId" in body) {
+          const catId = body.categoryId as string | null;
+          next.category =
+            catId == null || catId === ""
+              ? null
+              : (categories.find((c) => c.id === catId) ?? r.category);
+        }
+        if ("paidByUserId" in body) {
+          next.paidByUserId = (body.paidByUserId as string | null) ?? null;
+        }
+        return next;
+      }),
+    );
+
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ id, ...body }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        setRows(prev);
+        setError(data?.error || "No se pudo guardar el cambio");
+      }
+    } catch {
+      setRows(prev);
+      setError("Error de red al guardar");
+    } finally {
+      setSavingId(null);
+    }
   }
 
-  const periods = [
-    ...new Set(rows.map((r) => r.date.slice(0, 7))),
-  ].sort().reverse();
+  const periods = useMemo(
+    () => [...new Set(rows.map((r) => r.date.slice(0, 7)))].sort().reverse(),
+    [rows],
+  );
 
   return (
     <div className="space-y-4">
@@ -82,7 +142,7 @@ export function TransactionsTable() {
         </select>
         <button
           type="button"
-          onClick={() => load()}
+          onClick={() => void load()}
           className="rounded-lg bg-zinc-900 px-3 py-2 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900"
         >
           Actualizar
@@ -104,7 +164,7 @@ export function TransactionsTable() {
               <th className="px-3 py-2">Monto $</th>
               <th className="px-3 py-2">USD</th>
               <th className="px-3 py-2">Categoría</th>
-              <th className="px-3 py-2">Tipo</th>
+              <th className="px-3 py-2">Pagó</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -152,10 +212,13 @@ export function TransactionsTable() {
                   <td className="px-3 py-2">
                     <select
                       value={r.category?.id ?? ""}
+                      disabled={savingId === r.id}
                       onChange={(e) =>
-                        patch(r.id, { categoryId: e.target.value || null })
+                        void patch(r.id, {
+                          categoryId: e.target.value || null,
+                        })
                       }
-                      className="max-w-[160px] rounded border border-zinc-200 bg-white px-1.5 py-1 text-xs text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      className="max-w-[160px] rounded border border-zinc-200 bg-white px-1.5 py-1 text-xs text-zinc-900 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                     >
                       {categories.map((c) => (
                         <option key={c.id} value={c.id}>
@@ -166,16 +229,20 @@ export function TransactionsTable() {
                   </td>
                   <td className="px-3 py-2">
                     <select
-                      value={r.ownership}
+                      value={r.paidByUserId ?? members[0]?.userId ?? ""}
+                      disabled={savingId === r.id || members.length === 0}
                       onChange={(e) =>
-                        patch(r.id, {
-                          ownership: e.target.value as "personal" | "shared",
+                        void patch(r.id, {
+                          paidByUserId: e.target.value || null,
                         })
                       }
-                      className="rounded border border-zinc-200 bg-white px-1.5 py-1 text-xs text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      className="max-w-[120px] rounded border border-zinc-200 bg-white px-1.5 py-1 text-xs text-zinc-900 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                     >
-                      <option value="personal">Personal</option>
-                      <option value="shared">Compartido</option>
+                      {members.map((m) => (
+                        <option key={m.userId} value={m.userId}>
+                          {memberLabel(m)}
+                        </option>
+                      ))}
                     </select>
                   </td>
                 </tr>
