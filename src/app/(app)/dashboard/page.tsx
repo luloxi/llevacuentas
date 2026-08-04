@@ -41,7 +41,6 @@ export default async function DashboardPage() {
 
   const { byId } = await getCategoryMap();
 
-  // Top categories this month
   const byCat = new Map<string, number>();
   for (const t of monthTx) {
     const id = t.categoryId ?? "none";
@@ -53,12 +52,16 @@ export default async function DashboardPage() {
     .slice(0, 4)
     .filter(([, total]) => total > 0);
 
-  const categorySummary = sorted.map(([id, total]) => ({
-    id,
-    name: id === "none" ? "Sin categoría" : (byId.get(id)?.name ?? "Otros"),
-    total,
-    pct: totalArs > 0 ? (total / totalArs) * 100 : 0,
-  }));
+  const categorySummary = sorted.map(([id, total]) => {
+    const cat = id === "none" ? null : byId.get(id);
+    return {
+      id,
+      slug: cat?.slug ?? "uncategorized",
+      name: cat?.name ?? "Sin categoría",
+      total,
+      pct: totalArs > 0 ? (total / totalArs) * 100 : 0,
+    };
+  });
 
   const firstName = (user.name || user.email || "").split(/\s+/)[0] || "vos";
 
@@ -67,7 +70,6 @@ export default async function DashboardPage() {
     name: m.displayName || m.name || m.email || "Sin nombre",
   }));
 
-  // categories for modal — lightweight list
   const cats = [...byId.values()]
     .filter((c) => c.kind === "expense")
     .map((c) => ({ id: c.id, slug: c.slug, name: c.name }));
