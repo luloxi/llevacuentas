@@ -28,14 +28,15 @@ export function ImportForm() {
         credentials: "include",
       });
       const text = await res.text();
-      let data: {
+      type ImportResult = {
         error?: string;
         total?: number;
         inserted?: number;
         skipped?: number;
-      } | null = null;
+      };
+      let data: ImportResult | null = null;
       try {
-        data = text ? (JSON.parse(text) as typeof data) : null;
+        data = text ? (JSON.parse(text) as ImportResult) : null;
       } catch {
         throw new Error(
           res.status === 413
