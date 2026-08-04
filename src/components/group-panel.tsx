@@ -10,7 +10,7 @@ type Member = {
   role: string;
 };
 
-export function ParejaPanel({
+export function GroupPanel({
   inviteCode,
   members,
 }: {
@@ -23,10 +23,11 @@ export function ParejaPanel({
   } | null>(null);
 
   useEffect(() => {
-    fetch("/api/stats/mes-a-mes")
+    fetch("/api/stats/mes-a-mes", { credentials: "include" })
       .then((r) => r.json())
       .then((d) => {
-        if (d.coupleBalance) setBalance(d.coupleBalance);
+        if (d.sharedBalance) setBalance(d.sharedBalance);
+        else if (d.coupleBalance) setBalance(d.coupleBalance);
       })
       .catch(() => {});
   }, []);
@@ -36,14 +37,14 @@ export function ParejaPanel({
     paid: balance?.byUser[m.userId] ?? 0,
   }));
   const sum = totals.reduce((s, t) => s + t.paid, 0);
-  const fair = members.length === 2 ? sum / 2 : sum;
+  const fair = members.length > 0 ? sum / members.length : 0;
 
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-zinc-200 p-5 dark:border-zinc-800">
         <h2 className="font-semibold">Código de invitación</h2>
         <p className="mt-1 text-sm text-zinc-500">
-          Compartilo con tu pareja para que se una (máx. 2).
+          Compartilo con quien quieras que sume gastos a este espacio.
         </p>
         <div className="mt-3 rounded-xl bg-zinc-100 px-4 py-3 text-center font-mono text-2xl tracking-[0.3em] dark:bg-zinc-900">
           {inviteCode}
@@ -64,19 +65,22 @@ export function ParejaPanel({
               </span>
             </li>
           ))}
-          {members.length < 2 && (
-            <li className="text-sm text-zinc-500">Esperando a la pareja…</li>
+          {members.length === 1 && (
+            <li className="text-sm text-zinc-500">
+              Todavía no hay otras personas en este espacio.
+            </li>
           )}
         </ul>
       </div>
 
-      {balance && (
+      {balance && members.length > 1 && (
         <div className="rounded-2xl border border-zinc-200 p-5 dark:border-zinc-800">
           <h2 className="font-semibold">
             Balance compartido · {balance.period}
           </h2>
           <p className="mt-1 text-sm text-zinc-500">
-            Gastos marcados como compartidos (split 50/50).
+            Gastos marcados como compartidos, divididos en partes iguales entre
+            los miembros.
           </p>
           <ul className="mt-4 space-y-2 text-sm">
             {totals.map((t) => {

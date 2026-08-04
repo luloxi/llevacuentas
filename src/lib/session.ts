@@ -36,7 +36,7 @@ export async function resolveSession(): Promise<SessionResult> {
 
   if (!raw?.id) return { status: "anonymous" };
 
-  if (!isEmailAllowed(raw.email)) {
+  if (!(await isEmailAllowed(raw.email))) {
     return { status: "forbidden", email: raw.email ?? null };
   }
 

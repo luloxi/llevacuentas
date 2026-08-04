@@ -71,9 +71,9 @@ export default async function DashboardPage() {
           desc="Tabla tipo Transparencia"
         />
         <QuickLink
-          href="/pareja"
+          href="/grupo"
           icon={<Users className="h-5 w-5" />}
-          title="Pareja"
+          title="Grupo"
           desc="Invitación y balance compartido"
         />
       </div>

@@ -17,7 +17,7 @@ export async function requireApiUser(): Promise<
       | { id?: string; email?: string | null; name?: string | null; image?: string | null }
       | undefined;
     if (raw?.id) {
-      if (!isEmailAllowed(raw.email)) {
+      if (!(await isEmailAllowed(raw.email))) {
         return {
           error: NextResponse.json(
             { error: "Email no autorizado", code: "forbidden" },

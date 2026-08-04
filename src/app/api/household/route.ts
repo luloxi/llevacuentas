@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     }
     const ctx = await createHousehold(
       sessionUser.id,
-      body.name || "Nuestro hogar",
+      body.name || "Mi espacio",
     );
     return NextResponse.json({ household: ctx });
   } catch (e) {

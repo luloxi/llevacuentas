@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "LlevaCuentas",
   description:
-    "Llevá tus gastos de tarjeta BBVA, tickets de súper y gastos de pareja.",
+    "Llevá tus gastos de tarjeta BBVA, tickets de súper y gastos compartidos.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

@@ -23,9 +23,16 @@ export async function ensureSchema() {
       )
     `,
     sql`
+      CREATE TABLE IF NOT EXISTS allowed_emails (
+        email text PRIMARY KEY,
+        created_at timestamp DEFAULT now() NOT NULL,
+        created_by text
+      )
+    `,
+    sql`
       CREATE TABLE IF NOT EXISTS households (
         id text PRIMARY KEY,
-        name text NOT NULL DEFAULT 'Nuestro hogar',
+        name text NOT NULL DEFAULT 'Mi espacio',
         invite_code text NOT NULL UNIQUE,
         created_at timestamp DEFAULT now() NOT NULL
       )

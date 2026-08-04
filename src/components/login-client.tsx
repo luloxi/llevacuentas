@@ -28,11 +28,9 @@ function GoogleMark() {
 export function LoginClient({
   authReady,
   error,
-  allowedHint,
 }: {
   authReady: boolean;
   error?: string;
-  allowedHint?: string[];
 }) {
   const [loading, setLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -82,7 +80,6 @@ export function LoginClient({
       }
 
       if (data?.url) {
-        // Full navigation to Neon Auth → Google
         window.location.assign(data.url);
         return;
       }
@@ -108,8 +105,8 @@ export function LoginClient({
     <div className="space-y-4">
       {error === "forbidden" && (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-          Tu cuenta de Google no está en la lista de acceso. Pedile al dueño que
-          agregue tu email a <code>ALLOWED_EMAILS</code>.
+          Tu cuenta de Google todavía no tiene acceso. Pedile al administrador
+          que te habilite.
         </p>
       )}
       {error === "domain" && (
@@ -172,12 +169,6 @@ export function LoginClient({
             <li>Redeploy en Vercel</li>
           </ol>
         </div>
-      )}
-
-      {allowedHint && allowedHint.length > 0 && (
-        <p className="text-xs text-zinc-500">
-          Acceso limitado a: {allowedHint.join(", ")}
-        </p>
       )}
     </div>
   );

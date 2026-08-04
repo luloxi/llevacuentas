@@ -10,6 +10,7 @@ import {
   Upload,
   Users,
   LogOut,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth/client";
@@ -20,10 +21,10 @@ const links = [
   { href: "/mes-a-mes", label: "Mes a mes", icon: PieChart },
   { href: "/supermercado", label: "Súper", icon: ShoppingCart },
   { href: "/importar", label: "Importar", icon: Upload },
-  { href: "/pareja", label: "Pareja", icon: Users },
+  { href: "/grupo", label: "Grupo", icon: Users },
 ];
 
-export function AppNav() {
+export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -36,6 +37,10 @@ export function AppNav() {
     router.push("/login");
     router.refresh();
   }
+
+  const allLinks = isAdmin
+    ? [...links, { href: "/admin", label: "Admin", icon: Shield }]
+    : links;
 
   return (
     <>
@@ -51,7 +56,7 @@ export function AppNav() {
             <span>LlevaCuentas</span>
           </Link>
           <nav className="flex items-center gap-1">
-            {links.map(({ href, label, icon: Icon }) => {
+            {allLinks.map(({ href, label, icon: Icon }) => {
               const active = pathname.startsWith(href);
               return (
                 <Link
@@ -82,8 +87,13 @@ export function AppNav() {
       </header>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 backdrop-blur md:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
-        <div className="mx-auto grid max-w-lg grid-cols-6 gap-0.5 px-1 py-1">
-          {links.map(({ href, label, icon: Icon }) => {
+        <div
+          className={cn(
+            "mx-auto grid max-w-lg gap-0.5 px-1 py-1",
+            allLinks.length > 6 ? "grid-cols-7" : "grid-cols-6",
+          )}
+        >
+          {allLinks.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
               <Link

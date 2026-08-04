@@ -78,9 +78,9 @@ export async function GET(req: Request) {
       };
     });
 
-    // Couple balance for latest / selected period
+    // Shared balance for latest / selected period
     const balPeriod = period ?? periods[0];
-    let coupleBalance = null;
+    let sharedBalance = null;
     if (balPeriod) {
       const shared = rows.filter(
         (r) =>
@@ -94,14 +94,20 @@ export async function GET(req: Request) {
         const uid = r.paidByUserId ?? "unknown";
         byUser.set(uid, (byUser.get(uid) ?? 0) + Math.abs(Number(r.amountArs)));
       }
-      coupleBalance = {
+      sharedBalance = {
         period: balPeriod,
         byUser: Object.fromEntries(byUser),
         members: ctx.members,
       };
     }
 
-    return NextResponse.json({ periods, months: result, coupleBalance });
+    return NextResponse.json({
+      periods,
+      months: result,
+      sharedBalance,
+      // backward-compatible alias
+      coupleBalance: sharedBalance,
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Error" },

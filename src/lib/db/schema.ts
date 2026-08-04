@@ -20,11 +20,18 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
 });
 
+/** Emails autorizados a usar la app (además del admin fijo). */
+export const allowedEmails = pgTable("allowed_emails", {
+  email: text("email").primaryKey(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  createdBy: text("created_by"),
+});
+
 export const households = pgTable("households", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
-  name: text("name").notNull().default("Nuestro hogar"),
+  name: text("name").notNull().default("Mi espacio"),
   inviteCode: text("invite_code").notNull().unique(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
 });

@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { isAuthConfigured } from "@/lib/auth/server";
-import { getAllowedEmails } from "@/lib/auth/allowlist";
 import { LoginClient } from "@/components/login-client";
 
 export default async function LoginPage({
@@ -14,7 +13,6 @@ export default async function LoginPage({
 
   const params = await searchParams;
   const authReady = isAuthConfigured();
-  const allowed = getAllowedEmails();
 
   return (
     <main className="flex min-h-full flex-1 flex-col items-center justify-center px-4 py-16">
@@ -25,15 +23,11 @@ export default async function LoginPage({
           </div>
           <h1 className="text-3xl font-bold tracking-tight">LlevaCuentas</h1>
           <p className="mt-2 text-sm text-zinc-500">
-            Gastos de tarjeta BBVA, tickets de súper y balance de pareja.
+            Gastos de tarjeta BBVA, tickets de súper y balance compartido.
           </p>
         </div>
 
-        <LoginClient
-          authReady={authReady}
-          error={params.error}
-          allowedHint={allowed.length <= 3 ? allowed : undefined}
-        />
+        <LoginClient authReady={authReady} error={params.error} />
       </div>
     </main>
   );

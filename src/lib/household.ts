@@ -6,6 +6,9 @@ import { CATEGORY_SEEDS } from "@/lib/categorize/rules";
 
 const inviteCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
 
+/** Max members per shared space (1 solo or several people). */
+export const MAX_HOUSEHOLD_MEMBERS = 12;
+
 export async function ensureCategoriesSeeded() {
   await ensureSchema();
   const db = getDb();
@@ -86,7 +89,7 @@ export async function getUserHousehold(
   return { household, membership, members };
 }
 
-export async function createHousehold(userId: string, name = "Nuestro hogar") {
+export async function createHousehold(userId: string, name = "Mi espacio") {
   await ensureCategoriesSeeded();
   const db = getDb();
 
@@ -114,7 +117,7 @@ export async function joinHousehold(userId: string, code: string) {
   const existing = await getUserHousehold(userId);
   if (existing) {
     throw new Error(
-      "Ya pertenecés a un hogar. Por ahora solo un hogar por usuario.",
+      "Ya pertenecés a un espacio. Por ahora solo uno por usuario.",
     );
   }
 
@@ -130,8 +133,10 @@ export async function joinHousehold(userId: string, code: string) {
     .from(schema.householdMembers)
     .where(eq(schema.householdMembers.householdId, household.id));
 
-  if ((count[0]?.c ?? 0) >= 2) {
-    throw new Error("Este hogar ya tiene 2 personas (límite de pareja).");
+  if ((count[0]?.c ?? 0) >= MAX_HOUSEHOLD_MEMBERS) {
+    throw new Error(
+      `Este espacio ya tiene el máximo de ${MAX_HOUSEHOLD_MEMBERS} personas.`,
+    );
   }
 
   await db.insert(schema.householdMembers).values({
