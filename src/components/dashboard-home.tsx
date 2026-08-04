@@ -1,10 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
-  Camera,
   List,
   PieChart,
   Users,
@@ -14,12 +11,9 @@ import {
 } from "lucide-react";
 import { formatArs, cn } from "@/lib/utils";
 import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
-import { AddExpenseModal } from "@/components/add-expense-modal";
 import { CategoryIcon } from "@/lib/category-icons";
 import { colorForCategory } from "@/lib/category-colors";
 
-type Category = { id: string; slug: string; name: string };
-type Member = { userId: string; name: string };
 type CategorySummary = {
   id: string;
   slug: string;
@@ -37,8 +31,6 @@ export function DashboardHome({
   prevTotalArs,
   monthTxCount,
   categorySummary,
-  initialCategories,
-  initialMembers,
 }: {
   firstName: string;
   householdName: string;
@@ -48,36 +40,9 @@ export function DashboardHome({
   prevTotalArs: number;
   monthTxCount: number;
   categorySummary: CategorySummary[];
-  initialCategories: Category[];
-  initialMembers: Member[];
+  initialCategories?: unknown;
+  initialMembers?: unknown;
 }) {
-  const router = useRouter();
-  const [addOpen, setAddOpen] = useState(false);
-  const [categories, setCategories] = useState(initialCategories);
-  const [members, setMembers] = useState(initialMembers);
-  const [toast, setToast] = useState<string | null>(null);
-
-  const loadMeta = useCallback(async () => {
-    try {
-      const res = await fetch("/api/transactions", { credentials: "include" });
-      if (!res.ok) return;
-      const data = (await res.json()) as {
-        categories?: Category[];
-        members?: Member[];
-      };
-      if (data.categories) setCategories(data.categories);
-      if (data.members) setMembers(data.members);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), 3500);
-    return () => window.clearTimeout(t);
-  }, [toast]);
-
   const delta =
     prevTotalArs > 0 ? ((totalArs - prevTotalArs) / prevTotalArs) * 100 : null;
   const DeltaIcon =
@@ -156,20 +121,6 @@ export function DashboardHome({
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setAddOpen(true)}
-        className="group relative mx-auto flex w-full max-w-xs flex-col items-center gap-2 rounded-3xl bg-gradient-to-b from-violet-500 to-violet-700 px-6 py-5 text-white shadow-lg shadow-violet-600/30 transition active:scale-[0.98] hover:shadow-xl hover:shadow-violet-600/40"
-      >
-        <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm transition group-hover:scale-105">
-          <Camera className="h-7 w-7" strokeWidth={2} />
-        </span>
-        <span className="text-base font-semibold tracking-tight">
-          Escanear ticket
-        </span>
-        <span className="text-xs text-violet-100/90">Foto → se completa solo</span>
-      </button>
-
       <div className="grid grid-cols-3 gap-2.5">
         <NavPill href="/consumos" icon={<List className="h-5 w-5" />} label="Gastos" />
         <NavPill href="/analisis" icon={<PieChart className="h-5 w-5" />} label="Análisis" />
@@ -217,27 +168,6 @@ export function DashboardHome({
           </ul>
         </div>
       )}
-
-      {toast && (
-        <div
-          role="status"
-          className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg md:bottom-8"
-        >
-          {toast}
-        </div>
-      )}
-
-      <AddExpenseModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onCreated={() => {
-          setToast("Gasto agregado");
-          void loadMeta();
-          router.refresh();
-        }}
-        categories={categories}
-        members={members}
-      />
     </div>
   );
 }
