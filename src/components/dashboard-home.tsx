@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Camera,
   List,
@@ -49,6 +50,7 @@ export function DashboardHome({
   initialCategories: Category[];
   initialMembers: Member[];
 }) {
+  const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
   const [categories, setCategories] = useState(initialCategories);
   const [members, setMembers] = useState(initialMembers);
@@ -202,8 +204,7 @@ export function DashboardHome({
         onCreated={() => {
           setToast("Gasto agregado");
           void loadMeta();
-          // soft refresh so totals update
-          window.location.reload();
+          router.refresh();
         }}
         categories={categories}
         members={members}
