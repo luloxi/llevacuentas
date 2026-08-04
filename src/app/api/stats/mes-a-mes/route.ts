@@ -3,6 +3,10 @@ import { eq } from "drizzle-orm";
 import { requireApiUser } from "@/lib/api-auth";
 import { getCategoryMap, requireHousehold } from "@/lib/household";
 import { getDb, schema } from "@/lib/db";
+import {
+  convertUsdToArs,
+  getMonthEndBuyRates,
+} from "@/lib/fx/month-end-rates";
 
 export async function GET(req: Request) {
   const authResult = await requireApiUser();
@@ -12,20 +16,20 @@ export async function GET(req: Request) {
   try {
     const ctx = await requireHousehold(sessionUser.id);
     const { searchParams } = new URL(req.url);
-    const period = searchParams.get("period"); // optional YYYY-MM
+    const periodParam = searchParams.get("period"); // YYYY-MM | "all" | null (latest)
 
     const db = getDb();
-    const { byId } = await getCategoryMap();
+    const { byId, cats } = await getCategoryMap();
     const rows = await db
       .select()
       .from(schema.transactions)
       .where(eq(schema.transactions.householdId, ctx.household.id));
 
-    // period -> categorySlug -> aggregates
     type Agg = {
       amountArs: number;
       amountUsd: number;
       count: number;
+      categoryId: string | null;
     };
     const byPeriod = new Map<string, Map<string, Agg>>();
     const periodsSet = new Set<string>();
@@ -34,16 +38,20 @@ export async function GET(req: Request) {
       if (r.isPayment) continue;
       const p = r.date.slice(0, 7);
       periodsSet.add(p);
-      if (period && p !== period) continue;
 
       const cat = r.categoryId ? byId.get(r.categoryId) : null;
       const slug = cat?.slug ?? "uncategorized";
-      const name = cat?.name ?? "Uncategorized";
-      const key = `${slug}||${name}`;
+      const name = cat?.name ?? "Sin categoría";
+      const key = `${slug}||${name}||${r.categoryId ?? ""}`;
 
       if (!byPeriod.has(p)) byPeriod.set(p, new Map());
       const map = byPeriod.get(p)!;
-      const cur = map.get(key) ?? { amountArs: 0, amountUsd: 0, count: 0 };
+      const cur = map.get(key) ?? {
+        amountArs: 0,
+        amountUsd: 0,
+        count: 0,
+        categoryId: r.categoryId ?? null,
+      };
       cur.amountArs += r.amountArs != null ? Math.abs(Number(r.amountArs)) : 0;
       cur.amountUsd += r.amountUsd != null ? Math.abs(Number(r.amountUsd)) : 0;
       cur.count += 1;
@@ -51,35 +59,131 @@ export async function GET(req: Request) {
     }
 
     const periods = [...periodsSet].sort().reverse();
-    const selected = period ? [period] : periods.slice(0, 6);
+    const rates = await getMonthEndBuyRates(periods);
 
-    const result = selected.map((p) => {
+    function buildMonth(p: string) {
       const map = byPeriod.get(p) ?? new Map();
+      const fx = rates.get(p);
+      const usdRate = fx?.buy ?? 0;
+
       const categories = [...map.entries()]
         .map(([key, agg]) => {
-          const [slug, name] = key.split("||");
-          return { slug, name, ...agg };
+          const [slug, name, categoryId] = key.split("||");
+          const amountArsFromUsd = convertUsdToArs(agg.amountUsd, usdRate);
+          const amountArsCombined = agg.amountArs + amountArsFromUsd;
+          return {
+            slug,
+            name,
+            categoryId: categoryId || agg.categoryId || null,
+            amountArs: agg.amountArs,
+            amountUsd: agg.amountUsd,
+            amountArsFromUsd,
+            amountArsCombined,
+            count: agg.count,
+          };
         })
-        .sort((a, b) => b.amountArs - a.amountArs);
+        .sort((a, b) => b.amountArsCombined - a.amountArsCombined);
 
       const totalArs = categories.reduce((s, c) => s + c.amountArs, 0);
       const totalUsd = categories.reduce((s, c) => s + c.amountUsd, 0);
+      const totalArsFromUsd = categories.reduce(
+        (s, c) => s + c.amountArsFromUsd,
+        0,
+      );
+      const totalArsCombined = totalArs + totalArsFromUsd;
       const totalCount = categories.reduce((s, c) => s + c.count, 0);
 
       return {
         period: p,
+        /** Native ARS spends only */
         totalArs,
+        /** USD spends */
         totalUsd,
+        /** USD converted to ARS at month-end buy rate */
+        totalArsFromUsd,
+        /** totalArs + totalArsFromUsd — final monthly total in pesos */
+        totalArsCombined,
         totalCount,
+        usdRate: fx
+          ? {
+              buy: fx.buy,
+              asOf: fx.asOf,
+              source: fx.source,
+            }
+          : null,
         categories: categories.map((c) => ({
           ...c,
-          pct: totalArs > 0 ? (c.amountArs / totalArs) * 100 : 0,
+          pct:
+            totalArsCombined > 0
+              ? (c.amountArsCombined / totalArsCombined) * 100
+              : 0,
         })),
+      };
+    }
+
+    let selected: string[];
+    if (periodParam === "all") {
+      selected = periods;
+    } else if (periodParam) {
+      selected = periods.includes(periodParam) ? [periodParam] : [periodParam];
+    } else {
+      selected = periods[0] ? [periods[0]] : [];
+    }
+
+    const result = selected.map(buildMonth);
+
+    // Full chart series across every period with data (oldest → newest for charts)
+    const chartPeriods = [...periods].reverse();
+    const totals = chartPeriods.map((p) => {
+      const m = buildMonth(p);
+      return {
+        period: p,
+        amountArs: m.totalArsCombined,
+        amountArsNative: m.totalArs,
+        amountUsd: m.totalUsd,
+        amountArsFromUsd: m.totalArsFromUsd,
+        count: m.totalCount,
+        usdRate: m.usdRate,
       };
     });
 
-    // Shared balance for latest / selected period
-    const balPeriod = period ?? periods[0];
+    const catSeriesMap = new Map<
+      string,
+      { slug: string; name: string; values: Record<string, number> }
+    >();
+    for (const p of chartPeriods) {
+      const m = buildMonth(p);
+      for (const c of m.categories) {
+        if (!catSeriesMap.has(c.slug)) {
+          catSeriesMap.set(c.slug, {
+            slug: c.slug,
+            name: c.name,
+            values: {},
+          });
+        }
+        const entry = catSeriesMap.get(c.slug)!;
+        // Combined ARS so charts reflect full spend
+        entry.values[p] = (entry.values[p] ?? 0) + c.amountArsCombined;
+        if (c.slug !== "uncategorized" && c.name) entry.name = c.name;
+      }
+    }
+
+    const byCategory = [...catSeriesMap.values()]
+      .map((c) => ({
+        slug: c.slug,
+        name: c.name,
+        series: chartPeriods.map((p) => ({
+          period: p,
+          amountArs: c.values[p] ?? 0,
+        })),
+        totalArs: chartPeriods.reduce((s, p) => s + (c.values[p] ?? 0), 0),
+      }))
+      .sort((a, b) => b.totalArs - a.totalArs);
+
+    const balPeriod =
+      periodParam && periodParam !== "all"
+        ? periodParam
+        : (periods[0] ?? null);
     let sharedBalance = null;
     if (balPeriod) {
       const shared = rows.filter(
@@ -104,8 +208,13 @@ export async function GET(req: Request) {
     return NextResponse.json({
       periods,
       months: result,
+      chart: { periods: chartPeriods, totals, byCategory },
+      categories: cats.map((c) => ({
+        id: c.id,
+        slug: c.slug,
+        name: c.name,
+      })),
       sharedBalance,
-      // backward-compatible alias
       coupleBalance: sharedBalance,
     });
   } catch (e) {

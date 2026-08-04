@@ -16,8 +16,15 @@ export function parseBbvaAmount(raw: unknown): ParsedAmount | null {
   let s = String(raw).trim();
   if (!s || s === "-") return null;
 
-  const isUsd = /^USD\b/i.test(s) || s.toUpperCase().includes("USD");
-  s = s.replace(/^USD\s*/i, "").replace(/^\$\s*/, "").trim();
+  const isUsd =
+    /^USD\b/i.test(s) ||
+    /\bU\$S\b/i.test(s) ||
+    s.toUpperCase().includes("USD");
+  s = s
+    .replace(/^USD\s*/i, "")
+    .replace(/^U\$S\s*/i, "")
+    .replace(/^\$\s*/, "")
+    .trim();
 
   // Remove spaces used as thousand separators sometimes
   s = s.replace(/\s/g, "");
@@ -41,6 +48,99 @@ export function parseBbvaAmount(raw: unknown): ParsedAmount | null {
     currency: isUsd ? "USD" : "ARS",
     value: negative ? -Math.abs(value) : value,
   };
+}
+
+/**
+ * Merchants that almost always charge in USD on AR cards.
+ * BBVA "Últimos movimientos" sometimes parks the USD figure in the $ column
+ * until settlement — those look like tiny ARS spends (e.g. VULTR 24,00).
+ */
+const LIKELY_USD_MERCHANT_RE =
+  /\b(?:OPENAI|ANTHROPIC|CLAUDE\.?AI|CHATGPT|CURSOR|GITHUB|VERCEL|DIGITALOCEAN|VULTR|RAILWAY|HEROKU|NETLIFY|CLOUDFLARE|NAMECHEAP|GODADDY|AWS|AMAZON\s*WEB|GOOGLE\s*\*|GOOGLE\s*ONE|GOOGLE\s*CLOUD|MICROSOFT\s*\*|X\s*CORP|TWITTER|FIGMA|NOTION|LINEAR|SUPABASE|NEON\.TECH|RENDER\.COM|PAPER\.DESIGN|NOUS\s*RESEARCH|MIDJOURNEY|PERPLEXITY|GROK\s*XAI|SPOTIFY|APPLE\.COM|STEAM\s*GAMES|PAYPAL|STRIPE|ADOBE|ZOOM\.US|DROPBOX|SLACK|DISCORD|JETBRAINS|NPM\s*INC|MONGODB|DATADOG|SENTRY|POSTHOG|HETZNER|LINODE|OVH)\b/i;
+
+/** Amount-only key so ARS↔USD reclassification keeps the same fingerprint. */
+export function amountFingerprintKey(
+  amountArs: number | null | undefined,
+  amountUsd: number | null | undefined,
+): string {
+  const a =
+    amountArs != null && Number.isFinite(amountArs) && Math.abs(amountArs) > 0.0001
+      ? Math.abs(amountArs).toFixed(2)
+      : "";
+  const u =
+    amountUsd != null && Number.isFinite(amountUsd) && Math.abs(amountUsd) > 0.0001
+      ? Math.abs(amountUsd).toFixed(2)
+      : "";
+  if (a && !u) return a;
+  if (u && !a) return u;
+  if (a && u) return `${a}|${u}`;
+  return "";
+}
+
+export function isLikelyForeignUsdSpend(
+  description: string,
+  amountArsAbs: number,
+): boolean {
+  if (!Number.isFinite(amountArsAbs) || amountArsAbs <= 0) return false;
+  // Real peso spends are almost never this small on a credit card; SaaS USD is.
+  // Keep a soft cap so we never reclassify a café as USD without merchant cues.
+  if (amountArsAbs >= 500) return false;
+
+  const d = description.toUpperCase();
+  if (/\bUSD\b|\bU\$S\b|\bDOLARES?\b|\bDÓLARES?\b/.test(d)) return true;
+  if (LIKELY_USD_MERCHANT_RE.test(description)) return true;
+
+  // Foreign-looking merchant + modest amount
+  if (
+    amountArsAbs < 150 &&
+    (/\.COM\b/i.test(description) ||
+      /\bINC\.?\b/i.test(description) ||
+      /\bLLC\b/i.test(description) ||
+      /\bLTD\.?\b/i.test(description))
+  ) {
+    // Avoid AR tax lines / local acronyms that mention "DIGITALES"
+    if (/PERC\.|IIBB|IVA\b|RG\s*\d|IMPUESTO|AFIP/.test(d)) return false;
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Fix BBVA quirks: USD parked in the ARS column, zero noise, dual same-value cells.
+ */
+export function normalizeMovementCurrency(input: {
+  descriptionNormalized: string;
+  amountArs: number | null;
+  amountUsd: number | null;
+}): { amountArs: number | null; amountUsd: number | null } {
+  let amountArs = input.amountArs;
+  let amountUsd = input.amountUsd;
+
+  if (amountArs != null && Math.abs(amountArs) < 0.0001) amountArs = null;
+  if (amountUsd != null && Math.abs(amountUsd) < 0.0001) amountUsd = null;
+
+  // Same figure in both columns → keep USD for foreign merchants
+  if (
+    amountArs != null &&
+    amountUsd != null &&
+    Math.abs(Math.abs(amountArs) - Math.abs(amountUsd)) < 0.02
+  ) {
+    if (isLikelyForeignUsdSpend(input.descriptionNormalized, Math.abs(amountArs))) {
+      amountUsd = Math.abs(amountArs);
+      amountArs = null;
+    }
+  }
+
+  // Only ARS, but clearly a foreign USD charge sitting in $ column
+  if (amountArs != null && amountUsd == null) {
+    if (isLikelyForeignUsdSpend(input.descriptionNormalized, Math.abs(amountArs))) {
+      amountUsd = Math.abs(amountArs);
+      amountArs = null;
+    }
+  }
+
+  return { amountArs, amountUsd };
 }
 
 export function amountsClose(

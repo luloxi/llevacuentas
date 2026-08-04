@@ -10,6 +10,33 @@ import { matchCategoryWithLearning } from "@/lib/categorize/learn";
 import { getDb, schema } from "@/lib/db";
 import { getCategoryMap } from "@/lib/household";
 
+/** Stable key for “same expense” even if fingerprint algorithm changed. */
+function logicalExpenseKey(m: {
+  date: string;
+  descriptionNormalized: string;
+  amountArs: number | null;
+  amountUsd: number | null;
+  installment: string | null;
+  isPayment?: boolean;
+}): string {
+  const ars =
+    m.amountArs != null && Number.isFinite(m.amountArs)
+      ? Math.abs(m.amountArs).toFixed(2)
+      : "";
+  const usd =
+    m.amountUsd != null && Number.isFinite(m.amountUsd)
+      ? Math.abs(m.amountUsd).toFixed(2)
+      : "";
+  return [
+    m.date,
+    m.descriptionNormalized.trim().toUpperCase(),
+    ars,
+    usd,
+    m.installment ?? "",
+    m.isPayment ? "1" : "0",
+  ].join("|");
+}
+
 export type ImportBbvaResult = {
   statementId: string | null;
   total: number;
@@ -162,7 +189,7 @@ export async function importBbvaFile(opts: {
   const db = getDb();
   const fingerprints = uniqueMovements.map((m) => m.fingerprint);
 
-  // Which of these fingerprints already exist for this household?
+  // 1) Exact fingerprint match (fast path)
   const existingRows =
     fingerprints.length > 0
       ? await db
@@ -177,7 +204,54 @@ export async function importBbvaFile(opts: {
       : [];
 
   const existingFp = new Set(existingRows.map((r) => r.fp));
-  const toInsert = uniqueMovements.filter((m) => !existingFp.has(m.fingerprint));
+
+  // 2) Logical match: same date + merchant + amounts + cuota
+  //    (covers re-imports after fingerprint algorithm changes)
+  const dates = [...new Set(uniqueMovements.map((m) => m.date))];
+  const existingLogical =
+    dates.length > 0
+      ? await db
+          .select({
+            date: schema.transactions.date,
+            descriptionNormalized: schema.transactions.descriptionNormalized,
+            amountArs: schema.transactions.amountArs,
+            amountUsd: schema.transactions.amountUsd,
+            installment: schema.transactions.installment,
+            isPayment: schema.transactions.isPayment,
+          })
+          .from(schema.transactions)
+          .where(
+            and(
+              eq(schema.transactions.householdId, opts.householdId),
+              inArray(schema.transactions.date, dates),
+            ),
+          )
+      : [];
+
+  const existingLogicalKeys = new Set(
+    existingLogical.map((r) =>
+      logicalExpenseKey({
+        date: r.date,
+        descriptionNormalized: r.descriptionNormalized,
+        amountArs: r.amountArs != null ? Number(r.amountArs) : null,
+        amountUsd: r.amountUsd != null ? Number(r.amountUsd) : null,
+        installment: r.installment,
+        isPayment: r.isPayment,
+      }),
+    ),
+  );
+
+  // Track logical keys we insert in this batch (same file, different fp)
+  const insertedLogical = new Set<string>();
+
+  const toInsert = uniqueMovements.filter((m) => {
+    if (existingFp.has(m.fingerprint)) return false;
+    const key = logicalExpenseKey(m);
+    if (existingLogicalKeys.has(key)) return false;
+    if (insertedLogical.has(key)) return false;
+    insertedLogical.add(key);
+    return true;
+  });
   const alreadyExists = uniqueMovements.length - toInsert.length;
 
   if (toInsert.length === 0) {

@@ -1,6 +1,10 @@
 import { createHash } from "crypto";
 import { PDFParse } from "pdf-parse";
-import { fingerprintParts } from "@/lib/money";
+import {
+  amountFingerprintKey,
+  fingerprintParts,
+  normalizeMovementCurrency,
+} from "@/lib/money";
 import type { BbvaMovement } from "@/lib/bbva/parse";
 
 const MONTHS: Record<string, number> = {
@@ -205,26 +209,35 @@ function assignAmounts(
   const last = moneys[moneys.length - 1];
   const prev = moneys.length >= 2 ? moneys[moneys.length - 2] : null;
 
+  let amountArs: number | null = null;
+  let amountUsd: number | null = null;
+
   // Transfer / dual currency: ... 17.299,60 -14,18
   if (prev && last.value < 0 && prev.value > 0 && Math.abs(last.value) < 1000) {
-    return { amountArs: prev.value, amountUsd: last.value };
+    amountArs = prev.value;
+    amountUsd = last.value;
+  } else if (isUsdOnlyLine(desc, moneys)) {
+    amountArs = null;
+    amountUsd = Math.abs(last.value);
+  } else {
+    // Tax lines with base + charge: take last as the booked amount
+    // Payments: last (possibly negative)
+    amountArs = last.value;
+    amountUsd = null;
   }
 
-  if (isUsdOnlyLine(desc, moneys)) {
-    return { amountArs: null, amountUsd: Math.abs(last.value) };
-  }
-
-  // Tax lines with base + charge: take last as the booked amount
-  // Payments: last (possibly negative)
-  return { amountArs: last.value, amountUsd: null };
+  return normalizeMovementCurrency({
+    descriptionNormalized: desc,
+    amountArs,
+    amountUsd,
+  });
 }
 
 function makeFingerprint(m: Omit<BbvaMovement, "fingerprint">, cupon: string | null): string {
   const base = fingerprintParts([
     m.date,
     m.descriptionNormalized,
-    m.amountArs?.toFixed(2) ?? "",
-    m.amountUsd?.toFixed(2) ?? "",
+    amountFingerprintKey(m.amountArs, m.amountUsd),
     m.installment ?? "",
     // cupón distinguishes same-day same-merchant same-amount (common with Ubers)
     cupon ?? "",

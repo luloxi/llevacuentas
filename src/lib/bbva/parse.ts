@@ -1,6 +1,11 @@
 import * as XLSX from "xlsx";
 import { createHash } from "crypto";
-import { fingerprintParts, parseBbvaAmount } from "@/lib/money";
+import {
+  amountFingerprintKey,
+  fingerprintParts,
+  normalizeMovementCurrency,
+  parseBbvaAmount,
+} from "@/lib/money";
 
 export type BbvaMovement = {
   date: string; // YYYY-MM-DD
@@ -80,8 +85,8 @@ function makeFingerprint(m: Omit<BbvaMovement, "fingerprint">): string {
   const base = fingerprintParts([
     m.date,
     m.descriptionNormalized,
-    m.amountArs?.toFixed(2) ?? "",
-    m.amountUsd?.toFixed(2) ?? "",
+    // Amount without currency so ARS↔USD fixes keep the same fingerprint
+    amountFingerprintKey(m.amountArs, m.amountUsd),
     m.installment ?? "",
   ]);
   return createHash("sha256").update(base).digest("hex").slice(0, 32);
@@ -133,6 +138,33 @@ function isArsHeader(h: string): boolean {
 function parseColumnAmount(raw: unknown): number | null {
   const parsed = parseBbvaAmount(raw);
   return parsed ? parsed.value : null;
+}
+
+/** Parse ARS/USD columns; honor USD markers inside either cell. */
+function parseArsUsdColumns(
+  arsRaw: unknown,
+  usdRaw: unknown,
+): { amountArs: number | null; amountUsd: number | null } {
+  const arsParsed = parseBbvaAmount(arsRaw);
+  const usdParsed = parseBbvaAmount(usdRaw);
+
+  let amountArs: number | null = null;
+  let amountUsd: number | null = null;
+
+  if (usdParsed) {
+    // Value in the U$S column is always USD, even if Excel typed it as a bare number
+    amountUsd = usdParsed.value;
+  }
+  if (arsParsed) {
+    if (arsParsed.currency === "USD") {
+      // Cell in $ column but labeled "USD …"
+      amountUsd = amountUsd ?? arsParsed.value;
+    } else {
+      amountArs = arsParsed.value;
+    }
+  }
+
+  return { amountArs, amountUsd };
 }
 
 /**
@@ -222,12 +254,17 @@ export function parseBbvaWorkbook(data: ArrayBuffer | Buffer): BbvaMovement[] {
     const date = parseDate(row[dateIdx]);
     if (!date) continue;
 
-    const amountArs = parseColumnAmount(row[arsIdx]);
-    const amountUsd = parseColumnAmount(row[usdIdx]);
-    if (amountArs == null && amountUsd == null) continue;
-
     const descriptionNormalized = normalizeDescription(descriptionRaw);
     const installment = extractInstallment(descriptionRaw, row[cuotaIdx]);
+
+    let { amountArs, amountUsd } = parseArsUsdColumns(row[arsIdx], row[usdIdx]);
+    ({ amountArs, amountUsd } = normalizeMovementCurrency({
+      descriptionNormalized,
+      amountArs,
+      amountUsd,
+    }));
+    if (amountArs == null && amountUsd == null) continue;
+
     const negative = (amountArs ?? amountUsd ?? 0) < 0;
     const payment = isPaymentDescription(descriptionNormalized) || negative;
 

@@ -76,6 +76,10 @@ export async function POST(req: Request) {
     const ctx = await requireHousehold(sessionUser.id);
     const form = await req.formData();
     const file = form.get("file");
+    const dryRun =
+      form.get("dryRun") === "1" ||
+      form.get("dryRun") === "true" ||
+      form.get("preview") === "1";
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Falta la imagen" }, { status: 400 });
     }
@@ -92,6 +96,31 @@ export async function POST(req: Request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const contentType = file.type || "image/jpeg";
+    const dataUrl = `data:${contentType};base64,${buffer.toString("base64")}`;
+
+    // OCR (preview uses data URL only — no Blob upload)
+    let ocr;
+    let status: "parsed" | "failed" = "parsed";
+    try {
+      if (isOcrConfigured()) {
+        ocr = await parseReceiptImage(dataUrl);
+      } else {
+        ocr = mockReceiptOcr();
+      }
+    } catch (err) {
+      status = "failed";
+      ocr = mockReceiptOcr();
+      console.error("OCR failed", err);
+    }
+
+    // Preview only: fill the “Agregar gasto” form without saving
+    if (dryRun) {
+      return NextResponse.json({
+        dryRun: true,
+        status,
+        ocr,
+      });
+    }
 
     let imageUrl: string;
     if (process.env.BLOB_READ_WRITE_TOKEN) {
@@ -103,24 +132,7 @@ export async function POST(req: Request) {
       imageUrl = blob.url;
     } else {
       // Fallback: store as data URL in DB (ok for demos / small images)
-      imageUrl = `data:${contentType};base64,${buffer.toString("base64")}`;
-    }
-
-    // OCR
-    let ocr;
-    let status: "parsed" | "failed" = "parsed";
-    try {
-      if (isOcrConfigured()) {
-        ocr = await parseReceiptImage(
-          imageUrl.startsWith("data:") ? imageUrl : imageUrl,
-        );
-      } else {
-        ocr = mockReceiptOcr();
-      }
-    } catch (err) {
-      status = "failed";
-      ocr = mockReceiptOcr();
-      console.error("OCR failed", err);
+      imageUrl = dataUrl;
     }
 
     const db = getDb();

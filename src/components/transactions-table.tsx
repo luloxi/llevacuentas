@@ -1,16 +1,9 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Camera,
-  ChevronDown,
-  ChevronRight,
-  FileSpreadsheet,
-} from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { formatArs, formatUsd, formatDateAr } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { UploadModal } from "@/components/upload-modal";
-import { compressImageForUpload } from "@/lib/image-compress";
 
 type Category = { id: string; slug: string; name: string };
 type Member = { userId: string; name: string };
@@ -83,7 +76,12 @@ async function readErrorMessage(res: Response): Promise<string> {
   return `Error ${res.status}`;
 }
 
-export function TransactionsTable() {
+export function TransactionsTable({
+  compactToolbar = false,
+}: {
+  /** When true, only filters (import/add live in ConsumosWorkspace). */
+  compactToolbar?: boolean;
+} = {}) {
   const [rows, setRows] = useState<Tx[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -93,10 +91,8 @@ export function TransactionsTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [toastTone, setToastTone] = useState<"ok" | "warn">("ok");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [modal, setModal] = useState<"card" | "ticket" | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -264,90 +260,9 @@ export function TransactionsTable() {
     [rows],
   );
 
-  async function handleCardImportFiles(files: File[]) {
-    type ImportResult = {
-      total?: number;
-      inserted?: number;
-      alreadyExists?: number;
-      skipped?: number;
-      message?: string;
-      warning?: string | null;
-      fullyDuplicate?: boolean;
-    };
-
-    let total = 0;
-    let inserted = 0;
-    let already = 0;
-    const fileMsgs: string[] = [];
-
-    for (const file of files) {
-      const fd = new FormData();
-      fd.set("file", file);
-      fd.set("kind", "bbva");
-      const res = await fetch("/api/import/bbva", {
-        method: "POST",
-        body: fd,
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`${file.name}: ${await readErrorMessage(res)}`);
-      const data = (await res.json()) as ImportResult;
-      if ((data.total ?? 0) === 0) {
-        throw new Error(
-          `No se leyeron movimientos de “${file.name}”. ¿Es un Excel de Últimos movimientos o un PDF de resumen BBVA?`,
-        );
-      }
-      total += data.total ?? 0;
-      inserted += data.inserted ?? 0;
-      already += data.alreadyExists ?? data.skipped ?? 0;
-      if (data.message) fileMsgs.push(`${file.name}: ${data.message}`);
-    }
-
-    const fullyDup = inserted === 0 && already > 0;
-    const msg =
-      files.length > 1
-        ? `${files.length} archivos · ${inserted} nuevos · ${already} coincidencias · ${total} filas leídas`
-        : fileMsgs[0] ||
-          (fullyDup
-            ? `Este resumen ya estaba cargado: ${already} coincidencias. No se importó nada nuevo.`
-            : `${inserted} nuevos · ${already} coincidencias · ${total} filas leídas`);
-    setToastTone(fullyDup || already > 0 ? "warn" : "ok");
-    setToast(msg);
-    if (inserted > 0) await load();
-  }
-
-  async function handleTicketImport(file: File) {
-    const compressed = await compressImageForUpload(file);
-    const fd = new FormData();
-    fd.set("file", compressed);
-    const res = await fetch("/api/receipts", {
-      method: "POST",
-      body: fd,
-      credentials: "include",
-    });
-    if (!res.ok) throw new Error(await readErrorMessage(res));
-    await load();
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setModal("card")}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-600 bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          Importar resúmen tarjeta
-        </button>
-        <button
-          type="button"
-          onClick={() => setModal("ticket")}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-violet-600 bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-700"
-        >
-          <Camera className="h-4 w-4" />
-          Ticket de supermercado
-        </button>
-
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -392,13 +307,7 @@ export function TransactionsTable() {
       </div>
 
       {toast && (
-        <p
-          className={
-            toastTone === "warn"
-              ? "rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
-              : "rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
-          }
-        >
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
           {toast}
         </p>
       )}
@@ -432,7 +341,9 @@ export function TransactionsTable() {
             ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-3 py-8 text-center text-zinc-500">
-                  No hay consumos. Importá el resumen de la tarjeta.
+                  {compactToolbar
+                    ? "No hay consumos. Usá Agregar o importá el resumen de la tarjeta."
+                    : "No hay consumos."}
                 </td>
               </tr>
             ) : (
@@ -607,26 +518,6 @@ export function TransactionsTable() {
         </table>
       </div>
       <p className="text-xs text-zinc-500">{rows.length} movimientos</p>
-
-      <UploadModal
-        open={modal === "card"}
-        title="Importar resúmen tarjeta"
-        description="Excel de “Últimos movimientos” (.xls/.xlsx) o PDF de resumen mensual BBVA. Podés subir varios a la vez."
-        accept=".xlsx,.xls,.pdf,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        processingLabel="Procesando resumen…"
-        multiple
-        onClose={() => setModal(null)}
-        onFiles={handleCardImportFiles}
-      />
-      <UploadModal
-        open={modal === "ticket"}
-        title="Ticket de supermercado"
-        description="Arrastrá o elegí la foto del ticket. Se comprime y se asocia al gasto."
-        accept="image/*"
-        processingLabel="Leyendo ticket…"
-        onClose={() => setModal(null)}
-        onFile={handleTicketImport}
-      />
     </div>
   );
 }
