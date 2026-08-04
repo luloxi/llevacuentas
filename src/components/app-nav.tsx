@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth/client";
+import { BrandLogo } from "@/components/brand-logo";
 
 const links = [
   { href: "/dashboard", label: "Inicio", icon: Home },
@@ -48,11 +49,9 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
           <Link
             href="/dashboard"
-            className="flex items-center gap-2 font-semibold tracking-tight"
+            className="flex items-center gap-2.5 font-semibold tracking-tight"
           >
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-sm text-white">
-              LC
-            </span>
+            <BrandLogo size={32} />
             <span>LlevaCuentas</span>
           </Link>
           <nav className="flex items-center gap-1">

@@ -16,8 +16,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "LlevaCuentas",
   description:
-    "Llevá tus gastos de tarjeta BBVA, tickets de súper y gastos compartidos.",
+    "Importá gastos de tarjeta, fotografiá tickets y compartí el balance con tu grupo.",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+  },
   appleWebApp: {
     capable: true,
     title: "LlevaCuentas",

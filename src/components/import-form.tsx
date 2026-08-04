@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle } from "lucide-react";
 
 export function ImportForm() {
-  const [kind, setKind] = useState<"bbva" | "transparencia">("bbva");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
     total: number;
@@ -20,7 +19,7 @@ export function ImportForm() {
     setResult(null);
     const form = e.currentTarget;
     const fd = new FormData(form);
-    fd.set("kind", kind);
+    fd.set("kind", "bbva");
 
     try {
       const res = await fetch("/api/import/bbva", { method: "POST", body: fd });
@@ -37,31 +36,6 @@ export function ImportForm() {
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-2 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800">
-        <button
-          type="button"
-          onClick={() => setKind("bbva")}
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
-            kind === "bbva"
-              ? "bg-white shadow dark:bg-zinc-900"
-              : "text-zinc-500"
-          }`}
-        >
-          BBVA — Últimos movimientos
-        </button>
-        <button
-          type="button"
-          onClick={() => setKind("transparencia")}
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
-            kind === "transparencia"
-              ? "bg-white shadow dark:bg-zinc-900"
-              : "text-zinc-500"
-          }`}
-        >
-          Transparencia (histórico)
-        </button>
-      </div>
-
       <form
         onSubmit={onSubmit}
         className="rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/40 p-8 dark:border-emerald-800 dark:bg-emerald-950/20"
@@ -71,15 +45,10 @@ export function ImportForm() {
             <FileSpreadsheet className="h-7 w-7" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold">
-              {kind === "bbva"
-                ? "Subí el Excel de BBVA"
-                : "Subí Transparencia (hoja Consumos)"}
-            </h2>
+            <h2 className="text-lg font-semibold">Subí el Excel de tu tarjeta</h2>
             <p className="mt-1 max-w-md text-sm text-zinc-600 dark:text-zinc-400">
-              {kind === "bbva"
-                ? 'Exportá “Últimos movimientos” desde la app o home banking BBVA (.xlsx).'
-                : "Migrá el histórico de tu planilla Transparencia_Actualizada_*.xlsx"}
+              Exportá “Últimos movimientos” desde la app o home banking BBVA
+              (.xlsx). Los categorizamos al importar.
             </p>
           </div>
           <input

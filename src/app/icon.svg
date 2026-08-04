@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="g" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#34D399"/>
+      <stop offset="0.55" stop-color="#059669"/>
+      <stop offset="1" stop-color="#047857"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#g)"/>
+  <rect x="16" y="14" width="28" height="20" rx="4" transform="rotate(-12 30 24)" fill="#ECFDF5" fill-opacity="0.35"/>
+  <rect x="18" y="22" width="28" height="20" rx="4" fill="#ECFDF5"/>
+  <rect x="22" y="27" width="12" height="2.5" rx="1" fill="#059669" fill-opacity="0.55"/>
+  <rect x="22" y="32" width="18" height="2.5" rx="1" fill="#059669" fill-opacity="0.35"/>
+  <circle cx="42" cy="44" r="10" fill="#A7F3D0"/>
+  <circle cx="42" cy="44" r="7.5" fill="#6EE7B7"/>
+  <path d="M40.2 40.5c.5-.9 1.5-1.4 2.7-1.4 1.6 0 2.7.8 2.7 2 0 1-.5 1.5-1.7 1.9l-1.5.5c-.7.2-1 .5-1 .9 0 .5.5.8 1.2.8.7 0 1.2-.3 1.5-.8l1.5.8c-.5 1.1-1.6 1.8-3.1 1.8-1.8 0-3-1-3-2.3 0-1.1.6-1.8 1.8-2.2l1.5-.5c.6-.2.9-.4.9-.8 0-.4-.4-.7-1-.7-.6 0-1 .3-1.2.7l-1.5-.7z" fill="#047857"/>
+</svg>

@@ -15,7 +15,7 @@ export default async function ImportarPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Importar</h1>
         <p className="text-sm text-zinc-500">
-          Cargá el resumen de tarjeta BBVA o migrá tu planilla Transparencia.
+          Cargá el Excel de últimos movimientos de tu tarjeta BBVA.
         </p>
       </div>
       <ImportForm />

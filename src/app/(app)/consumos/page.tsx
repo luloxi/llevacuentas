@@ -15,7 +15,7 @@ export default async function ConsumosPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Consumos</h1>
         <p className="text-sm text-zinc-500">
-          Desglose al estilo Transparencia: fecha, descripción, montos y categoría.
+          Fecha, descripción, montos, categoría y si es personal o compartido.
         </p>
       </div>
       <TransactionsTable />

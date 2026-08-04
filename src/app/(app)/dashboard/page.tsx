@@ -68,7 +68,7 @@ export default async function DashboardPage() {
           href="/consumos"
           icon={<List className="h-5 w-5" />}
           title="Consumos"
-          desc="Tabla tipo Transparencia"
+          desc="Todos los movimientos categorizados"
         />
         <QuickLink
           href="/grupo"
@@ -82,8 +82,8 @@ export default async function DashboardPage() {
         <div className="rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/50 p-6 text-sm dark:border-emerald-800 dark:bg-emerald-950/20">
           <p className="font-medium">Primer paso</p>
           <p className="mt-1 text-zinc-600 dark:text-zinc-400">
-            Importá el resumen de tu tarjeta BBVA o la planilla Transparencia
-            para ver el desglose mes a mes.
+            Importá el Excel de últimos movimientos de tu tarjeta para ver el
+            desglose mes a mes.
           </p>
           <Link
             href="/importar"

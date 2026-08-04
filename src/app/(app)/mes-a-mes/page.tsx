@@ -15,7 +15,7 @@ export default async function MesAMesPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Mes a mes</h1>
         <p className="text-sm text-zinc-500">
-          Totales por categoría: monto, cantidad y % del total — como en Transparencia.
+          Totales por categoría: monto, cantidad y porcentaje del mes.
         </p>
       </div>
       <MesAMesView />
