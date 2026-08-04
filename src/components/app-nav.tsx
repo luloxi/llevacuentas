@@ -6,8 +6,6 @@ import {
   Home,
   List,
   PieChart,
-  ShoppingCart,
-  Upload,
   Users,
   LogOut,
   Shield,
@@ -20,8 +18,6 @@ const links = [
   { href: "/dashboard", label: "Inicio", icon: Home },
   { href: "/consumos", label: "Consumos", icon: List },
   { href: "/mes-a-mes", label: "Mes a mes", icon: PieChart },
-  { href: "/supermercado", label: "Súper", icon: ShoppingCart },
-  { href: "/importar", label: "Importar", icon: Upload },
   { href: "/grupo", label: "Grupo", icon: Users },
 ];
 
@@ -89,7 +85,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
         <div
           className={cn(
             "mx-auto grid max-w-lg gap-0.5 px-1 py-1",
-            allLinks.length > 6 ? "grid-cols-7" : "grid-cols-6",
+            allLinks.length >= 5 ? "grid-cols-5" : "grid-cols-4",
           )}
         >
           {allLinks.map(({ href, label, icon: Icon }) => {

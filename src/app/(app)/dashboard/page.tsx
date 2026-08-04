@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { formatArs } from "@/lib/utils";
 import { getDb, schema } from "@/lib/db";
 import { eq } from "drizzle-orm";
-import { Upload, ShoppingCart, List, Users } from "lucide-react";
+import { List, Users, PieChart } from "lucide-react";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -53,22 +53,16 @@ export default async function DashboardPage() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <QuickLink
-          href="/importar"
-          icon={<Upload className="h-5 w-5" />}
-          title="Importar BBVA"
-          desc="Subí el Excel de últimos movimientos"
-        />
-        <QuickLink
-          href="/supermercado"
-          icon={<ShoppingCart className="h-5 w-5" />}
-          title="Ticket de súper"
-          desc="Foto del ticket y desglose de ítems"
-        />
-        <QuickLink
           href="/consumos"
           icon={<List className="h-5 w-5" />}
           title="Consumos"
-          desc="Todos los movimientos categorizados"
+          desc="Importar banco, tickets y categorizar"
+        />
+        <QuickLink
+          href="/mes-a-mes"
+          icon={<PieChart className="h-5 w-5" />}
+          title="Mes a mes"
+          desc="Totales por categoría"
         />
         <QuickLink
           href="/grupo"
@@ -82,14 +76,14 @@ export default async function DashboardPage() {
         <div className="rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/50 p-6 text-sm dark:border-emerald-800 dark:bg-emerald-950/20">
           <p className="font-medium">Primer paso</p>
           <p className="mt-1 text-zinc-600 dark:text-zinc-400">
-            Importá el Excel de últimos movimientos de tu tarjeta para ver el
-            desglose mes a mes.
+            En Consumos importá el Excel de últimos movimientos de tu tarjeta
+            para ver el desglose mes a mes.
           </p>
           <Link
-            href="/importar"
+            href="/consumos"
             className="mt-3 inline-block rounded-lg bg-emerald-600 px-4 py-2 text-white"
           >
-            Ir a importar
+            Ir a consumos
           </Link>
         </div>
       )}

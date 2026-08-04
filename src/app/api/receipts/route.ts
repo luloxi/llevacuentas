@@ -335,3 +335,113 @@ export async function PATCH(req: Request) {
     );
   }
 }
+
+/**
+ * Delete one receipt or all household receipts.
+ * Also removes transactions created from receipt OCR (source = "receipt").
+ */
+export async function DELETE(req: Request) {
+  const authResult = await requireApiUser();
+  if ("error" in authResult) return authResult.error;
+  const { user: sessionUser } = authResult;
+
+  try {
+    const ctx = await requireHousehold(sessionUser.id);
+    const body = (await req.json().catch(() => ({}))) as {
+      id?: string;
+      all?: boolean;
+    };
+    const db = getDb();
+
+    if (body.all) {
+      const all = await db
+        .select({
+          id: schema.receipts.id,
+          transactionId: schema.receipts.transactionId,
+        })
+        .from(schema.receipts)
+        .where(eq(schema.receipts.householdId, ctx.household.id));
+
+      for (const r of all) {
+        await db
+          .delete(schema.receiptItems)
+          .where(eq(schema.receiptItems.receiptId, r.id));
+        if (r.transactionId) {
+          await db
+            .delete(schema.transactions)
+            .where(
+              and(
+                eq(schema.transactions.id, r.transactionId),
+                eq(schema.transactions.householdId, ctx.household.id),
+                eq(schema.transactions.source, "receipt"),
+              ),
+            );
+        }
+      }
+      await db
+        .delete(schema.receipts)
+        .where(eq(schema.receipts.householdId, ctx.household.id));
+
+      // orphan receipt-source txs without receipt link
+      await db
+        .delete(schema.transactions)
+        .where(
+          and(
+            eq(schema.transactions.householdId, ctx.household.id),
+            eq(schema.transactions.source, "receipt"),
+          ),
+        );
+
+      return NextResponse.json({ ok: true, deleted: all.length });
+    }
+
+    if (!body.id) {
+      return NextResponse.json(
+        { error: "Indicá id o all: true" },
+        { status: 400 },
+      );
+    }
+
+    const [receipt] = await db
+      .select()
+      .from(schema.receipts)
+      .where(
+        and(
+          eq(schema.receipts.id, body.id),
+          eq(schema.receipts.householdId, ctx.household.id),
+        ),
+      )
+      .limit(1);
+
+    if (!receipt) {
+      return NextResponse.json({ error: "Ticket no encontrado" }, { status: 404 });
+    }
+
+    await db
+      .delete(schema.receiptItems)
+      .where(eq(schema.receiptItems.receiptId, receipt.id));
+
+    if (receipt.transactionId) {
+      await db
+        .delete(schema.transactions)
+        .where(
+          and(
+            eq(schema.transactions.id, receipt.transactionId),
+            eq(schema.transactions.householdId, ctx.household.id),
+            eq(schema.transactions.source, "receipt"),
+          ),
+        );
+    }
+
+    await db
+      .delete(schema.receipts)
+      .where(eq(schema.receipts.id, receipt.id));
+
+    return NextResponse.json({ ok: true, deleted: 1 });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Error" },
+      { status: 500 },
+    );
+  }
+}

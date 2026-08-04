@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle } from "lucide-react";
 
-export function ImportForm() {
+export function ImportForm({
+  compact = false,
+  onDone,
+}: {
+  compact?: boolean;
+  onDone?: () => void;
+} = {}) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
     total: number;
@@ -56,6 +62,7 @@ export function ImportForm() {
         skipped: data?.skipped ?? 0,
       });
       form.reset();
+      onDone?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
     } finally {
@@ -64,21 +71,41 @@ export function ImportForm() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={compact ? "space-y-3" : "space-y-6"}>
       <form
         onSubmit={onSubmit}
-        className="rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/40 p-8 dark:border-emerald-800 dark:bg-emerald-950/20"
+        className={
+          compact
+            ? "rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/40 p-4 dark:border-emerald-800 dark:bg-emerald-950/20"
+            : "rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/40 p-8 dark:border-emerald-800 dark:bg-emerald-950/20"
+        }
       >
-        <div className="flex flex-col items-center gap-4 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-white">
-            <FileSpreadsheet className="h-7 w-7" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold">Subí el Excel de tu tarjeta</h2>
-            <p className="mt-1 max-w-md text-sm text-zinc-600 dark:text-zinc-400">
-              Exportá “Últimos movimientos” desde BBVA (app o home banking).
-              Acepta <strong>.xls</strong> y <strong>.xlsx</strong>. Los
-              categorizamos al importar.
+        <div
+          className={
+            compact
+              ? "flex flex-col gap-3"
+              : "flex flex-col items-center gap-4 text-center"
+          }
+        >
+          {!compact && (
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-white">
+              <FileSpreadsheet className="h-7 w-7" />
+            </div>
+          )}
+          <div className={compact ? "text-left" : ""}>
+            <h2 className={compact ? "text-sm font-semibold" : "text-lg font-semibold"}>
+              {compact ? "Importar banco (BBVA)" : "Subí el Excel de tu tarjeta"}
+            </h2>
+            <p
+              className={
+                compact
+                  ? "mt-0.5 text-xs text-zinc-500"
+                  : "mt-1 max-w-md text-sm text-zinc-600 dark:text-zinc-400"
+              }
+            >
+              {compact
+                ? "Excel “Últimos movimientos” (.xls / .xlsx)"
+                : "Exportá “Últimos movimientos” desde BBVA (app o home banking). Acepta .xls y .xlsx. Los categorizamos al importar."}
             </p>
           </div>
           <input
@@ -86,15 +113,15 @@ export function ImportForm() {
             type="file"
             accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             required
-            className="block w-full max-w-sm text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-emerald-700"
+            className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-emerald-700"
           />
           <button
             type="submit"
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 sm:w-auto"
           >
             <Upload className="h-4 w-4" />
-            {loading ? "Importando…" : "Importar y categorizar"}
+            {loading ? "Importando…" : "Importar"}
           </button>
         </div>
       </form>

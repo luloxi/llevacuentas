@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/session";
 import { getUserHousehold } from "@/lib/household";
 import { hasDatabase } from "@/lib/db";
 import { redirect } from "next/navigation";
-import { TransactionsTable } from "@/components/transactions-table";
+import { ConsumosWorkspace } from "@/components/consumos-workspace";
 
 export default async function ConsumosPage() {
   const user = await requireUser();
@@ -15,10 +15,10 @@ export default async function ConsumosPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Consumos</h1>
         <p className="text-sm text-zinc-500">
-          Fecha, descripción, montos, categoría y si es personal o compartido.
+          Importá el banco, cargá tickets y categorizá movimientos.
         </p>
       </div>
-      <TransactionsTable />
+      <ConsumosWorkspace />
     </div>
   );
 }
