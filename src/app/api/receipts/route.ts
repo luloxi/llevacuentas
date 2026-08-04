@@ -225,10 +225,23 @@ export async function POST(req: Request) {
     let createdTransaction = false;
 
     if (transactionId) {
+      const superCat = bySlug.get("supermercado");
       await db
         .update(schema.receipts)
         .set({ transactionId, status: "matched" })
         .where(eq(schema.receipts.id, receipt.id));
+      // Mark bank row as supermarket ticket (highlighted category)
+      if (superCat) {
+        await db
+          .update(schema.transactions)
+          .set({ categoryId: superCat.id, updatedAt: new Date() })
+          .where(
+            and(
+              eq(schema.transactions.id, transactionId),
+              eq(schema.transactions.householdId, ctx.household.id),
+            ),
+          );
+      }
     } else if (
       match.candidates.length === 0 &&
       ocr.total != null &&
@@ -314,6 +327,56 @@ export async function PATCH(req: Request) {
     const ctx = await requireHousehold(sessionUser.id);
     const body = await req.json();
     const db = getDb();
+
+    // Update a line item (name / product subcategory)
+    if (body.itemId) {
+      const [item] = await db
+        .select({
+          id: schema.receiptItems.id,
+          receiptId: schema.receiptItems.receiptId,
+        })
+        .from(schema.receiptItems)
+        .where(eq(schema.receiptItems.id, body.itemId))
+        .limit(1);
+      if (!item) {
+        return NextResponse.json({ error: "Ítem no encontrado" }, { status: 404 });
+      }
+      const [receipt] = await db
+        .select({ id: schema.receipts.id })
+        .from(schema.receipts)
+        .where(
+          and(
+            eq(schema.receipts.id, item.receiptId),
+            eq(schema.receipts.householdId, ctx.household.id),
+          ),
+        )
+        .limit(1);
+      if (!receipt) {
+        return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
+      }
+
+      const patch: {
+        name?: string;
+        productCategory?: string | null;
+      } = {};
+      if (typeof body.name === "string" && body.name.trim()) {
+        patch.name = body.name.trim();
+      }
+      if ("productCategory" in body) {
+        patch.productCategory =
+          body.productCategory == null || body.productCategory === ""
+            ? null
+            : String(body.productCategory).trim();
+      }
+
+      const [updated] = await db
+        .update(schema.receiptItems)
+        .set(patch)
+        .where(eq(schema.receiptItems.id, body.itemId))
+        .returning();
+      return NextResponse.json({ item: updated });
+    }
+
     const [row] = await db
       .update(schema.receipts)
       .set({

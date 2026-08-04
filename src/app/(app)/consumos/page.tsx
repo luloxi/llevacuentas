@@ -10,15 +10,5 @@ export default async function ConsumosPage() {
   const ctx = await getUserHousehold(user.id);
   if (!ctx) redirect("/onboarding");
 
-  return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Consumos</h1>
-        <p className="text-sm text-zinc-500">
-          Importá el banco, cargá tickets y categorizá movimientos.
-        </p>
-      </div>
-      <ConsumosWorkspace />
-    </div>
-  );
+  return <ConsumosWorkspace />;
 }
