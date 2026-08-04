@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   FileSpreadsheet,
   List,
@@ -41,6 +42,8 @@ async function readErrorMessage(res: Response): Promise<string> {
 }
 
 export function ConsumosWorkspace() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("gastos");
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -63,13 +66,21 @@ export function ConsumosWorkspace() {
       setCategories(data.categories ?? []);
       setMembers(data.members ?? []);
     } catch {
-      // ignore — modal can still open with empty selects
+      // ignore
     }
   }, []);
 
   useEffect(() => {
     void loadMeta();
   }, [loadMeta]);
+
+  useEffect(() => {
+    if (searchParams.get("scan") === "1") {
+      setTab("gastos");
+      setAddOpen(true);
+      router.replace("/consumos", { scroll: false });
+    }
+  }, [searchParams, router]);
 
   useEffect(() => {
     if (!toast) return;
