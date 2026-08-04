@@ -3,6 +3,13 @@
 :root {
   --background: #f6f7f4;
   --foreground: #14201a;
+  --surface: #ffffff;
+  --surface-muted: #f4f4f5;
+  --border: #e4e4e7;
+  --input-bg: #ffffff;
+  --input-fg: #14201a;
+  --option-bg: #ffffff;
+  --option-fg: #14201a;
 }
 
 @theme inline {
@@ -16,6 +23,13 @@
   :root {
     --background: #0b1210;
     --foreground: #e8efe9;
+    --surface: #09090b;
+    --surface-muted: #18181b;
+    --border: #3f3f46;
+    --input-bg: #18181b;
+    --input-fg: #e8efe9;
+    --option-bg: #18181b;
+    --option-fg: #e8efe9;
   }
 }
 
@@ -23,4 +37,42 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/*
+ * Native <select> / <option> contrast
+ * OS dropdowns often ignore page dark text and paint white-on-white.
+ * Force solid surfaces and readable text app-wide.
+ */
+select {
+  color: var(--input-fg);
+  background-color: var(--input-bg);
+  border-color: var(--border);
+  color-scheme: light dark;
+}
+
+select option,
+select optgroup {
+  color: var(--option-fg);
+  background-color: var(--option-bg);
+}
+
+/* Closed control + open list: never inherit transparent/white-on-white */
+select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Inputs that often share the same contrast trap */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
+textarea {
+  color: var(--input-fg);
+  background-color: var(--input-bg);
+  border-color: var(--border);
+  color-scheme: light dark;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: color-mix(in srgb, var(--input-fg) 45%, transparent);
 }

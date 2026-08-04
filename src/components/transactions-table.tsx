@@ -66,12 +66,12 @@ export function TransactionsTable() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar comercio…"
-          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
         />
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
-          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
         >
           <option value="">Todos los períodos</option>
           {periods.map((p) => (
@@ -155,7 +155,7 @@ export function TransactionsTable() {
                       onChange={(e) =>
                         patch(r.id, { categoryId: e.target.value || null })
                       }
-                      className="max-w-[160px] rounded border border-zinc-200 bg-transparent px-1 py-1 text-xs dark:border-zinc-700"
+                      className="max-w-[160px] rounded border border-zinc-200 bg-white px-1.5 py-1 text-xs text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                     >
                       {categories.map((c) => (
                         <option key={c.id} value={c.id}>
@@ -172,7 +172,7 @@ export function TransactionsTable() {
                           ownership: e.target.value as "personal" | "shared",
                         })
                       }
-                      className="rounded border border-zinc-200 bg-transparent px-1 py-1 text-xs dark:border-zinc-700"
+                      className="rounded border border-zinc-200 bg-white px-1.5 py-1 text-xs text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                     >
                       <option value="personal">Personal</option>
                       <option value="shared">Compartido</option>

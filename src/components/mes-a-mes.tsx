@@ -57,7 +57,7 @@ export function MesAMesView() {
       <select
         value={period}
         onChange={(e) => setPeriod(e.target.value)}
-        className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+        className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
       >
         <option value="">Últimos meses</option>
         {periods.map((p) => (
