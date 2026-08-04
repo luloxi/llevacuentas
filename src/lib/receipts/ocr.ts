@@ -38,24 +38,47 @@ Reglas:
 - Si no podés leer un campo, usá null.
 - Incluí tantos ítems como puedas leer del ticket.`;
 
+/** True when any vision provider key is configured. */
+export function isOcrConfigured(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY || process.env.XAI_API_KEY);
+}
+
+function createVisionClient(): {
+  client: OpenAI;
+  model: string;
+} {
+  // Prefer OpenAI (user credits). Fallback to xAI if only that is set.
+  if (process.env.OPENAI_API_KEY) {
+    return {
+      client: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
+      model: process.env.OPENAI_VISION_MODEL ?? "gpt-4o-mini",
+    };
+  }
+
+  if (process.env.XAI_API_KEY) {
+    return {
+      client: new OpenAI({
+        apiKey: process.env.XAI_API_KEY,
+        baseURL: "https://api.x.ai/v1",
+      }),
+      model: process.env.XAI_VISION_MODEL ?? "grok-2-vision-1212",
+    };
+  }
+
+  throw new Error(
+    "Falta OPENAI_API_KEY (o XAI_API_KEY). Configurala en Vercel → Settings → Environment Variables.",
+  );
+}
+
 export async function parseReceiptImage(
   imageUrlOrDataUrl: string,
 ): Promise<ReceiptOcrResult> {
-  const apiKey = process.env.XAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("XAI_API_KEY no configurada");
-  }
-
-  const client = new OpenAI({
-    apiKey,
-    baseURL: "https://api.x.ai/v1",
-  });
-
-  const model = process.env.XAI_VISION_MODEL ?? "grok-2-vision-1212";
+  const { client, model } = createVisionClient();
 
   const response = await client.chat.completions.create({
     model,
     temperature: 0,
+    response_format: { type: "json_object" },
     messages: [
       { role: "system", content: SYSTEM },
       {

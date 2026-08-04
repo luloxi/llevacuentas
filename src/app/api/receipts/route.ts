@@ -5,7 +5,11 @@ import { createHash } from "crypto";
 import { requireApiUser } from "@/lib/api-auth";
 import { getCategoryMap, requireHousehold } from "@/lib/household";
 import { getDb, schema } from "@/lib/db";
-import { mockReceiptOcr, parseReceiptImage } from "@/lib/receipts/ocr";
+import {
+  isOcrConfigured,
+  mockReceiptOcr,
+  parseReceiptImage,
+} from "@/lib/receipts/ocr";
 import { matchReceiptToTransactions } from "@/lib/receipts/match";
 
 export async function GET() {
@@ -82,8 +86,10 @@ export async function POST(req: Request) {
     let ocr;
     let status: "parsed" | "failed" = "parsed";
     try {
-      if (process.env.XAI_API_KEY) {
-        ocr = await parseReceiptImage(imageUrl.startsWith("data:") ? imageUrl : imageUrl);
+      if (isOcrConfigured()) {
+        ocr = await parseReceiptImage(
+          imageUrl.startsWith("data:") ? imageUrl : imageUrl,
+        );
       } else {
         ocr = mockReceiptOcr();
       }
