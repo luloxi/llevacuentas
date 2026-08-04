@@ -53,17 +53,41 @@ export async function GET() {
   }
 }
 
+/** Vercel request body limit is ~4.5MB; reject earlier with JSON. */
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+
 export async function POST(req: Request) {
   const authResult = await requireApiUser();
   if ("error" in authResult) return authResult.error;
   const { user: sessionUser } = authResult;
 
   try {
+    const contentLength = Number(req.headers.get("content-length") || 0);
+    if (contentLength > MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        {
+          error:
+            "La foto es demasiado grande. Sacá otra o usá una resolución menor.",
+        },
+        { status: 413 },
+      );
+    }
+
     const ctx = await requireHousehold(sessionUser.id);
     const form = await req.formData();
     const file = form.get("file");
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Falta la imagen" }, { status: 400 });
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        {
+          error:
+            "La foto es demasiado grande. Sacá otra o usá una resolución menor.",
+        },
+        { status: 413 },
+      );
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());

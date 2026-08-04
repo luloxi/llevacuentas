@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Camera, Loader2 } from "lucide-react";
 import { formatArs, formatDateAr } from "@/lib/utils";
+import { compressImageForUpload } from "@/lib/image-compress";
 
 type UploadResult = {
   ocr: {
@@ -26,6 +27,27 @@ type UploadResult = {
   imageUrl?: string;
 };
 
+async function readErrorMessage(res: Response): Promise<string> {
+  const text = await res.text();
+  if (!text) {
+    if (res.status === 413) {
+      return "La foto es demasiado grande. Probá con una imagen más chica.";
+    }
+    return `Error ${res.status}`;
+  }
+  try {
+    const data = JSON.parse(text) as { error?: string };
+    if (data.error) return data.error;
+  } catch {
+    // Platform plain-text body, e.g. "Request Entity Too Large"
+    if (res.status === 413 || /entity too large|payload too large/i.test(text)) {
+      return "La foto es demasiado grande para subirla. La comprimimos y reintentá, o sacá otra más cerca.";
+    }
+    if (text.length < 200) return text;
+  }
+  return `Error ${res.status}`;
+}
+
 export function ReceiptUpload({ onDone }: { onDone?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
@@ -33,20 +55,33 @@ export function ReceiptUpload({ onDone }: { onDone?: () => void }) {
   const [preview, setPreview] = useState<string | null>(null);
 
   async function onChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPreview(URL.createObjectURL(file));
+    const raw = e.target.files?.[0];
+    // allow re-selecting same file later
+    e.target.value = "";
+    if (!raw) return;
+
     setLoading(true);
     setError(null);
     setResult(null);
 
-    const fd = new FormData();
-    fd.set("file", file);
-
     try {
-      const res = await fetch("/api/receipts", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al procesar el ticket");
+      const file = await compressImageForUpload(raw);
+      setPreview(URL.createObjectURL(file));
+
+      const fd = new FormData();
+      fd.set("file", file);
+
+      const res = await fetch("/api/receipts", {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res));
+      }
+
+      const data = (await res.json()) as UploadResult;
       setResult(data);
       onDone?.();
     } catch (err) {
@@ -69,7 +104,8 @@ export function ReceiptUpload({ onDone }: { onDone?: () => void }) {
         <div>
           <p className="font-semibold">Foto del ticket de supermercado</p>
           <p className="mt-1 text-sm text-zinc-500">
-            Se asocia al gasto del resumen BBVA del mismo día, o se crea si no existe
+            Se asocia al gasto del resumen BBVA del mismo día, o se crea si no
+            existe. La foto se comprime sola al subir.
           </p>
         </div>
         <input
@@ -77,7 +113,7 @@ export function ReceiptUpload({ onDone }: { onDone?: () => void }) {
           accept="image/*"
           capture="environment"
           className="hidden"
-          onChange={onChange}
+          onChange={(ev) => void onChange(ev)}
           disabled={loading}
         />
         <span className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white">
@@ -95,7 +131,9 @@ export function ReceiptUpload({ onDone }: { onDone?: () => void }) {
       )}
 
       {error && (
-        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>
+        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">
+          {error}
+        </p>
       )}
 
       {result && (
