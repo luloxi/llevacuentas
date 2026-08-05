@@ -5,7 +5,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Landmark,
   LineChart,
   LayoutList,
 } from "lucide-react";
@@ -13,13 +12,11 @@ import { cn, formatArs, formatUsd, currentPeriodAr } from "@/lib/utils";
 import { formatPeriodLabel } from "@/lib/period-label";
 import { colorForCategory } from "@/lib/category-colors";
 import { CategoryLinesChart, TotalSpendChart } from "@/components/spend-charts";
-import { DeudaView } from "@/components/deuda-view";
 import { MesAMesTxRow } from "@/components/mes-a-mes-tx-row";
 import {
   EmptyState,
   LoadingBlock,
   PageStack,
-  SegmentedControl,
   Surface,
   Toast,
 } from "@/components/ui";
@@ -86,8 +83,6 @@ type Tx = {
   isPayment?: boolean;
   category: CategoryOpt | null;
 };
-
-type MainTab = "resumen" | "charts" | "deuda";
 
 function aggregateMonths(months: MonthBlock[]): MonthBlock {
   const bySlug = new Map<
@@ -157,8 +152,12 @@ function aggregateMonths(months: MonthBlock[]): MonthBlock {
   };
 }
 
-export function MesAMesView() {
-  const [mainTab, setMainTab] = useState<MainTab>("resumen");
+/** Resumen / gráficos — embebe en Gastos via mode. */
+export function MesAMesView({
+  mode = "resumen",
+}: {
+  mode?: "resumen" | "charts";
+}) {
   const [filterPeriod, setFilterPeriod] = useState<string>(currentPeriodAr);
   const [periods, setPeriods] = useState<string[]>([]);
   const [months, setMonths] = useState<MonthBlock[]>([]);
@@ -217,8 +216,8 @@ export function MesAMesView() {
   }, [toast]);
 
   useEffect(() => {
-    if (mainTab !== "resumen" || !periodReady) {
-      if (mainTab !== "resumen") setTxs([]);
+    if (mode !== "resumen" || !periodReady) {
+      if (mode !== "resumen") setTxs([]);
       return;
     }
     let cancelled = false;
@@ -253,7 +252,7 @@ export function MesAMesView() {
     return () => {
       cancelled = true;
     };
-  }, [mainTab, filterPeriod, periodReady]);
+  }, [mode, filterPeriod, periodReady]);
 
   const grand = useMemo(() => aggregateMonths(months), [months]);
 
@@ -358,11 +357,11 @@ export function MesAMesView() {
     }
   }
 
-  if (loading && months.length === 0 && !chart && mainTab !== "deuda") {
+  if (loading && months.length === 0 && !chart) {
     return <LoadingBlock label="Calculando análisis…" />;
   }
 
-  if (error && months.length === 0 && mainTab !== "deuda") {
+  if (error && months.length === 0) {
     return (
       <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
         {error}
@@ -374,37 +373,21 @@ export function MesAMesView() {
     <EmptyState
       icon={<LayoutList className="h-7 w-7" />}
       title="Todavía no hay datos"
-      description="Importá el resumen de la tarjeta en Consumos para ver el análisis mes a mes."
+      description="Importá el resumen de la tarjeta o cargá gastos para ver el análisis."
     />
   );
 
-  return (
-    <PageStack>
-      <div className="flex flex-wrap items-center gap-2">
-        <SegmentedControl
-          value={mainTab}
-          onChange={setMainTab}
-          options={[
-            {
-              id: "resumen",
-              label: "Resumen",
-              icon: <LayoutList className="h-3.5 w-3.5" />,
-            },
-            {
-              id: "charts",
-              label: "Gráficos",
-              icon: <LineChart className="h-3.5 w-3.5" />,
-            },
-            {
-              id: "deuda",
-              label: "Deuda",
-              icon: <Landmark className="h-3.5 w-3.5" />,
-            },
-          ]}
-        />
+  if (mode === "charts") {
+    return (
+      <div className="space-y-4">
+        {periods.length === 0 ? emptyHint : <ChartsPanel chart={chart} />}
       </div>
+    );
+  }
 
-      {mainTab === "resumen" && periods.length > 0 && (
+  return (
+    <div className="space-y-3">
+      {periods.length > 0 && (
         <div className="flex w-full items-center gap-2">
           <select
             value={filterPeriod}
@@ -444,21 +427,13 @@ export function MesAMesView() {
       )}
 
       {toast && <Toast>{toast}</Toast>}
-      {error && months.length > 0 && mainTab === "resumen" && (
+      {error && months.length > 0 && (
         <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40">
           {error}
         </p>
       )}
 
-      {mainTab === "deuda" ? (
-        <DeudaView />
-      ) : mainTab === "charts" ? (
-        periods.length === 0 ? (
-          emptyHint
-        ) : (
-          <ChartsPanel chart={chart} />
-        )
-      ) : periods.length === 0 ? (
+      {periods.length === 0 ? (
         emptyHint
       ) : filterPeriod === "all" ? (
         <MonthDetail
@@ -489,7 +464,7 @@ export function MesAMesView() {
           "Todos los meses".
         </p>
       )}
-    </PageStack>
+    </div>
   );
 }
 
@@ -499,7 +474,7 @@ function ChartsPanel({ chart }: { chart: ChartData | null }) {
       <EmptyState
         icon={<LineChart className="h-7 w-7" />}
         title="Sin datos para graficar"
-        description="Cuando haya movimientos importados, vas a ver la evolución acá."
+        description="Cuando haya movimientos, vas a ver la evolución acá."
       />
     );
   }
@@ -591,23 +566,10 @@ function MonthDetail({
           : "border-zinc-200/90 bg-white/80 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/60",
       )}
     >
-      {/* Compact totals — no redundant month title */}
       <div className="space-y-1.5 border-b border-zinc-100 px-3 py-3 dark:border-zinc-800 sm:px-4">
-        <TotalRow
-          label="Pesos"
-          value={formatArs(month.totalArs)}
-          tone="default"
-        />
-        <TotalRow
-          label="Dólares"
-          value={formatUsd(month.totalUsd)}
-          tone="sky"
-        />
-        <TotalRow
-          label="Neto"
-          value={formatArs(combined)}
-          tone="strong"
-        />
+        <TotalRow label="Pesos" value={formatArs(month.totalArs)} />
+        <TotalRow label="Dólares" value={formatUsd(month.totalUsd)} tone="sky" />
+        <TotalRow label="Neto" value={formatArs(combined)} tone="strong" />
         <p className="px-1 text-[10px] leading-snug text-zinc-400">
           Neto = pesos + dólares convertidos al TC del mes
         </p>
@@ -638,9 +600,7 @@ function MonthDetail({
                     style={{ backgroundColor: colorForCategory(c.slug) }}
                   />
                   <span className="min-w-0 truncate font-medium">{c.name}</span>
-                  <span className="shrink-0 text-xs text-zinc-500">
-                    {c.count}×
-                  </span>
+                  <span className="shrink-0 text-xs text-zinc-500">{c.count}×</span>
                 </span>
                 <span className="ml-auto text-right">
                   <span className="block text-sm font-semibold tabular-nums">
@@ -667,9 +627,7 @@ function MonthDetail({
               {open && (
                 <div className="border-t border-zinc-100 bg-zinc-50/80 px-2 py-2 dark:border-zinc-800 dark:bg-zinc-950/50 sm:px-4">
                   {txsLoading && list.length === 0 ? (
-                    <p className="px-2 py-2 text-xs text-zinc-500">
-                      Cargando gastos…
-                    </p>
+                    <p className="px-2 py-2 text-xs text-zinc-500">Cargando gastos…</p>
                   ) : list.length === 0 ? (
                     <p className="px-2 py-2 text-xs text-zinc-500">
                       No hay gastos listados en esta categoría.
@@ -694,7 +652,6 @@ function MonthDetail({
         })}
       </div>
 
-      {/* Footer: count + exchange rate */}
       <div className="border-t border-zinc-100 px-4 py-3 text-center dark:border-zinc-800">
         <p className="text-xs text-zinc-500">
           {month.totalCount} movimiento{month.totalCount === 1 ? "" : "s"}
