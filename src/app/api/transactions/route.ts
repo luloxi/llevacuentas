@@ -3,7 +3,11 @@ import { createHash } from "crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { requireApiUser } from "@/lib/api-auth";
 import { getCategoryMap, requireHousehold } from "@/lib/household";
-import { listTransactions, updateTransaction } from "@/lib/transactions";
+import {
+  isVisibleToUser,
+  listTransactions,
+  updateTransaction,
+} from "@/lib/transactions";
 import { getDb, schema } from "@/lib/db";
 
 export async function GET(req: Request) {
@@ -19,6 +23,9 @@ export async function GET(req: Request) {
     const uncategorizedOnly =
       searchParams.get("uncategorized") === "1" ||
       searchParams.get("uncategorized") === "true";
+    const sharedOnly =
+      searchParams.get("shared") === "1" ||
+      searchParams.get("shared") === "true";
 
     const [rows, { cats, byId }] = await Promise.all([
       listTransactions(ctx.household.id, {
@@ -26,6 +33,8 @@ export async function GET(req: Request) {
         categoryId,
         q,
         uncategorizedOnly,
+        viewerUserId: sessionUser.id,
+        sharedOnly,
       }),
       getCategoryMap(),
     ]);
@@ -107,6 +116,9 @@ export async function GET(req: Request) {
         category: r.categoryId ? (byId.get(r.categoryId) ?? null) : null,
         hasTicket: Boolean(receipt) || r.source === "receipt",
         receipt,
+        /** Can the current user change ownership / details */
+        canEdit:
+          r.ownership === "shared" || r.paidByUserId === sessionUser.id,
       };
     });
 
@@ -119,6 +131,7 @@ export async function GET(req: Request) {
       transactions: data,
       categories: cats,
       members,
+      viewerUserId: sessionUser.id,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error";
@@ -210,18 +223,16 @@ export async function POST(req: Request) {
       categoryId = bySlug.get("uncategorized")?.id ?? null;
     }
 
+    // Owner is always the current user for privacy; paidBy can note who paid in cash
     const paidBy =
       body.paidByUserId &&
       ctx.members.some((m) => m.userId === body.paidByUserId)
         ? body.paidByUserId
         : sessionUser.id;
 
+    // Default private (personal). Only explicit shared opens to the group.
     const ownership =
-      body.ownership === "shared" || body.ownership === "personal"
-        ? body.ownership
-        : items.length > 0
-          ? "shared"
-          : "personal";
+      body.ownership === "shared" ? "shared" : "personal";
 
     const fp = createHash("sha256")
       .update(
@@ -322,10 +333,35 @@ export async function PATCH(req: Request) {
       )
       .limit(1);
 
+    if (!before) {
+      return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+    }
+
+    // Privacy: cannot edit someone else's personal expense
+    if (!isVisibleToUser(before, sessionUser.id)) {
+      return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+    }
+    if (
+      before.ownership === "personal" &&
+      before.paidByUserId !== sessionUser.id
+    ) {
+      return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+    }
+
+    // When marking personal, lock paidBy to current user so it stays private to them
+    let nextOwnership = body.ownership as "personal" | "shared" | undefined;
+    let nextPaidBy = body.paidByUserId as string | null | undefined;
+    if (nextOwnership === "personal" && nextPaidBy == null) {
+      nextPaidBy = sessionUser.id;
+    }
+    if (nextOwnership === "personal") {
+      nextPaidBy = sessionUser.id;
+    }
+
     const row = await updateTransaction(ctx.household.id, body.id, {
       categoryId: body.categoryId,
-      ownership: body.ownership,
-      paidByUserId: body.paidByUserId,
+      ownership: nextOwnership,
+      paidByUserId: nextPaidBy !== undefined ? nextPaidBy : body.paidByUserId,
       splitPct: body.splitPct,
     });
 
