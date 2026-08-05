@@ -28,7 +28,6 @@ import {
   Minus,
   Plus,
   UserPlus,
-  Users,
   X,
 } from "lucide-react";
 
@@ -299,9 +298,6 @@ export function CompartidoView() {
 
       <div className="min-h-[40vh] space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--muted-fg)]">
-            <Users className="h-4 w-4" strokeWidth={1.75} />
-          </span>
           <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">
             {householdName || "Hogar"}
           </h1>
@@ -340,10 +336,7 @@ export function CompartidoView() {
             </div>
 
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 text-center">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--brand-fg)]">
-                Hogar · {period === "all" ? "Todos" : formatPeriodLabel(period)}
-              </p>
-              <p className="mt-1 text-4xl font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+              <p className="text-4xl font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
                 {formatArs(total)}
               </p>
               {period !== "all" && (
@@ -377,12 +370,6 @@ export function CompartidoView() {
                     )}
                   </div>
                 </div>
-              )}
-              {expenseCount > 0 && (
-                <p className="mt-2 text-xs text-[var(--muted-fg)]">
-                  {expenseCount} gasto{expenseCount === 1 ? "" : "s"} compartido
-                  {expenseCount === 1 ? "" : "s"}
-                </p>
               )}
             </div>
 
@@ -655,6 +642,12 @@ export function CompartidoView() {
                     );
                   })}
                 </ul>
+              )}
+              {expenseCount > 0 && (
+                <p className="border-t border-[var(--border)] px-4 py-3 text-center text-xs text-[var(--muted-fg)]">
+                  {expenseCount} gasto{expenseCount === 1 ? "" : "s"} compartido
+                  {expenseCount === 1 ? "" : "s"}
+                </p>
               )}
             </div>
 
