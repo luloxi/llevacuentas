@@ -134,6 +134,12 @@ export default async function DashboardPage() {
     }
   }
 
+  const blueRate =
+    liveRatesResult.rates.find((r) => r.id === "blue")?.value ?? null;
+  const savingsNetArs =
+    savingsArs +
+    (blueRate != null && blueRate > 0 ? savingsUsd * blueRate : 0);
+
   const debtRows = txs.filter((t) => isPrivateToUser(t, user.id));
   const debtPeriods = [
     ...new Set(debtRows.map((r) => periodFromDateString(r.date))),
@@ -239,6 +245,7 @@ export default async function DashboardPage() {
       savingsArs={savingsArs}
       savingsUsd={savingsUsd}
       savingsUsdc={savingsUsdc}
+      savingsNetArs={savingsNetArs}
     />
   );
 }
