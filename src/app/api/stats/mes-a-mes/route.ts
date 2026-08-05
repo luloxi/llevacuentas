@@ -8,6 +8,7 @@ import {
   getMonthEndBuyRates,
 } from "@/lib/fx/month-end-rates";
 import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
+import { isVisibleToUser } from "@/lib/transactions";
 
 export async function GET(req: Request) {
   const authResult = await requireApiUser();
@@ -21,10 +22,13 @@ export async function GET(req: Request) {
 
     const db = getDb();
     const { byId, cats } = await getCategoryMap();
-    const rows = await db
+    const allRows = await db
       .select()
       .from(schema.transactions)
       .where(eq(schema.transactions.householdId, ctx.household.id));
+
+    // Privacy: own personal + household shared
+    const rows = allRows.filter((r) => isVisibleToUser(r, sessionUser.id));
 
     type Agg = {
       amountArs: number;
@@ -97,13 +101,9 @@ export async function GET(req: Request) {
 
       return {
         period: p,
-        /** Native ARS spends only */
         totalArs,
-        /** USD spends */
         totalUsd,
-        /** USD converted to ARS at month-end buy rate */
         totalArsFromUsd,
-        /** totalArs + totalArsFromUsd — final monthly total in pesos */
         totalArsCombined,
         totalCount,
         usdRate: fx
@@ -134,7 +134,6 @@ export async function GET(req: Request) {
 
     const result = selected.map(buildMonth);
 
-    // Full chart series across every period with data (oldest → newest for charts)
     const chartPeriods = [...periods].reverse();
     const totals = chartPeriods.map((p) => {
       const m = buildMonth(p);
@@ -164,7 +163,6 @@ export async function GET(req: Request) {
           });
         }
         const entry = catSeriesMap.get(c.slug)!;
-        // Combined ARS so charts reflect full spend
         entry.values[p] = (entry.values[p] ?? 0) + c.amountArsCombined;
         if (c.slug !== "uncategorized" && c.name) entry.name = c.name;
       }
@@ -188,7 +186,7 @@ export async function GET(req: Request) {
         : (periods[0] ?? null);
     let sharedBalance = null;
     if (balPeriod) {
-      const shared = rows.filter(
+      const shared = allRows.filter(
         (r) =>
           !r.isPayment &&
           r.ownership === "shared" &&
