@@ -16,9 +16,12 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   ChevronDown,
+  ChevronRight,
   Copy,
+  Link2,
   Minus,
-  Users,
+  UserPlus,
+  X,
 } from "lucide-react";
 
 type Member = {
@@ -36,6 +39,15 @@ type Cat = {
   pct: number;
 };
 
+type ReceiptItem = {
+  id: string;
+  name: string;
+  quantity: number | null;
+  unitPrice: number | null;
+  lineTotal: number | null;
+  productCategory: string | null;
+};
+
 type Expense = {
   id: string;
   date: string;
@@ -46,6 +58,8 @@ type Expense = {
   categorySlug: string;
   categoryName: string;
   paidByName: string;
+  hasTicket: boolean;
+  receiptItems: ReceiptItem[];
 };
 
 function firstName(name: string) {
@@ -67,8 +81,10 @@ export function CompartidoView() {
   const [expenseCount, setExpenseCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [copied, setCopied] = useState<"code" | "link" | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [ticketOpen, setTicketOpen] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -108,21 +124,37 @@ export function CompartidoView() {
     };
   }, [period]);
 
-  async function copyInvite() {
+  const inviteLink =
+    typeof window !== "undefined" && inviteCode
+      ? `${window.location.origin}/onboarding?invite=${encodeURIComponent(inviteCode)}`
+      : inviteCode
+        ? `/onboarding?invite=${encodeURIComponent(inviteCode)}`
+        : "";
+
+  async function copyText(text: string, kind: "code" | "link") {
     try {
-      await navigator.clipboard.writeText(inviteCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(text);
+      setCopied(kind);
+      window.setTimeout(() => setCopied(null), 1600);
     } catch {
       /* ignore */
     }
   }
 
-  function toggle(slug: string) {
+  function toggleCat(slug: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(slug)) next.delete(slug);
       else next.add(slug);
+      return next;
+    });
+  }
+
+  function toggleTicket(id: string) {
+    setTicketOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
@@ -161,20 +193,22 @@ export function CompartidoView() {
 
   return (
     <PageStack>
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
-              <Users className="h-4 w-4" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight">
-                {householdName || "Hogar"}
-              </h1>
-              <p className="text-xs text-zinc-500">Gastos compartidos</p>
-            </div>
-          </div>
+      {/* Header: name + invite button */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <h1 className="truncate text-lg font-bold tracking-tight">
+            {householdName || "Hogar"}
+          </h1>
+          {inviteCode && (
+            <button
+              type="button"
+              onClick={() => setInviteOpen(true)}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800 transition hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-200 dark:hover:bg-violet-950"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              Invitar
+            </button>
+          )}
         </div>
         <select
           value={period}
@@ -193,7 +227,7 @@ export function CompartidoView() {
         </select>
       </div>
 
-      {/* Big counter + meter vs prev month */}
+      {/* Counter + meter */}
       <div className="rounded-2xl border border-zinc-200/90 bg-white/80 p-5 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-950/60">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-700/80 dark:text-violet-400/80">
           {period === "all" ? "Todos los meses" : formatPeriodLabel(period)}
@@ -242,7 +276,161 @@ export function CompartidoView() {
         )}
       </div>
 
-      {/* Who paid — % of total only, no debt */}
+      {/* 1) Categories first */}
+      <div className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/60">
+        <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+            Por categoría
+          </p>
+        </div>
+        {categories.length === 0 ? (
+          <p className="p-6 text-center text-sm text-zinc-500">
+            No hay gastos marcados como <strong>Hogar</strong> en este período.
+            En Gastos cambiá el tipo a “Hogar”.
+          </p>
+        ) : (
+          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {categories.map((c) => {
+              const open = expanded.has(c.slug);
+              const list = expenses.filter((e) => e.categorySlug === c.slug);
+              const color = colorForCategory(c.slug);
+              return (
+                <li key={c.slug}>
+                  <button
+                    type="button"
+                    onClick={() => toggleCat(c.slug)}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-violet-50/40 dark:hover:bg-violet-950/20"
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 shrink-0 text-zinc-400 transition",
+                        open && "rotate-180",
+                      )}
+                    />
+                    <span
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                      style={{ backgroundColor: `${color}18`, color }}
+                    >
+                      <CategoryIcon slug={c.slug} size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {c.name}
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        {c.count}× · {c.pct.toFixed(0)}%
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums">
+                      {formatArs(c.total)}
+                    </span>
+                  </button>
+                  {open && (
+                    <ul className="space-y-1.5 bg-zinc-50/80 px-3 py-2 dark:bg-zinc-950/50">
+                      {list.map((e) => {
+                        const ticketShown = ticketOpen.has(e.id);
+                        const hasItems = e.receiptItems?.length > 0;
+                        return (
+                          <li
+                            key={e.id}
+                            className={cn(
+                              "rounded-xl border bg-white dark:bg-zinc-900",
+                              e.hasTicket
+                                ? "border-violet-200 dark:border-violet-900"
+                                : "border-zinc-100 dark:border-zinc-800",
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-2 px-3 py-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium leading-snug">
+                                  {e.description}
+                                  {e.hasTicket && (
+                                    <span className="ml-1.5 rounded-full bg-violet-600 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white">
+                                      Ticket
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="mt-0.5 text-xs text-zinc-500">
+                                  {formatDateAr(e.date)} ·{" "}
+                                  {firstName(e.paidByName)}
+                                </p>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                {e.amountArs != null && e.amountArs > 0 && (
+                                  <p className="text-sm font-semibold tabular-nums">
+                                    {formatArs(e.amountArs)}
+                                  </p>
+                                )}
+                                {e.amountUsd != null && e.amountUsd > 0 && (
+                                  <p className="text-xs tabular-nums text-sky-700 dark:text-sky-300">
+                                    {formatUsd(e.amountUsd)}
+                                  </p>
+                                )}
+                                {e.amountArs == null && e.amountUsd == null && (
+                                  <p className="text-sm tabular-nums">
+                                    {formatArs(e.amountCombined)}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            {hasItems && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleTicket(e.id)}
+                                  className="flex w-full items-center justify-center gap-1 border-t border-violet-100 py-1.5 text-xs font-medium text-violet-700 dark:border-violet-900 dark:text-violet-300"
+                                >
+                                  {ticketShown ? (
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ChevronRight className="h-3.5 w-3.5" />
+                                  )}
+                                  {ticketShown
+                                    ? "Ocultar ítems"
+                                    : `Ver ${e.receiptItems.length} ítems`}
+                                </button>
+                                {ticketShown && (
+                                  <ul className="space-y-1.5 border-t border-violet-100 bg-violet-50/40 px-3 py-2 dark:border-violet-900 dark:bg-violet-950/20">
+                                    {e.receiptItems.map((it) => (
+                                      <li
+                                        key={it.id}
+                                        className="flex items-start justify-between gap-2 text-sm"
+                                      >
+                                        <div className="min-w-0">
+                                          <p className="leading-snug text-zinc-800 dark:text-zinc-100">
+                                            {it.name}
+                                          </p>
+                                          {it.productCategory && (
+                                            <p className="text-[11px] text-zinc-500">
+                                              {it.productCategory}
+                                            </p>
+                                          )}
+                                        </div>
+                                        <span className="shrink-0 tabular-nums text-zinc-600 dark:text-zinc-300">
+                                          {it.quantity && it.quantity !== 1
+                                            ? `${it.quantity}× `
+                                            : ""}
+                                          {formatArs(it.lineTotal)}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* 2) Who paid — below categories */}
       {members.some((m) => m.paidArs > 0) && (
         <div className="rounded-2xl border border-zinc-200/90 bg-white/80 p-4 dark:border-zinc-800 dark:bg-zinc-950/60">
           <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
@@ -277,115 +465,77 @@ export function CompartidoView() {
         </div>
       )}
 
-      {/* Categories expandable */}
-      <div className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/60">
-        <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-            Por categoría
-          </p>
-        </div>
-        {categories.length === 0 ? (
-          <p className="p-6 text-center text-sm text-zinc-500">
-            No hay gastos marcados como <strong>Hogar</strong> en este período.
-            En Gastos cambiá el tipo a “Hogar”.
-          </p>
-        ) : (
-          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {categories.map((c) => {
-              const open = expanded.has(c.slug);
-              const list = expenses.filter((e) => e.categorySlug === c.slug);
-              const color = colorForCategory(c.slug);
-              return (
-                <li key={c.slug}>
-                  <button
-                    type="button"
-                    onClick={() => toggle(c.slug)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-violet-50/40 dark:hover:bg-violet-950/20"
-                  >
-                    <ChevronDown
-                      className={cn(
-                        "h-4 w-4 shrink-0 text-zinc-400 transition",
-                        open && "rotate-180",
-                      )}
-                    />
-                    <span
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-                      style={{ backgroundColor: `${color}18`, color }}
-                    >
-                      <CategoryIcon slug={c.slug} size={16} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">
-                        {c.name}
-                      </span>
-                      <span className="text-xs text-zinc-500">
-                        {c.count}× · {c.pct.toFixed(0)}%
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums">
-                      {formatArs(c.total)}
-                    </span>
-                  </button>
-                  {open && (
-                    <ul className="space-y-1.5 bg-zinc-50/80 px-3 py-2 dark:bg-zinc-950/50">
-                      {list.map((e) => (
-                        <li
-                          key={e.id}
-                          className="flex items-start justify-between gap-2 rounded-xl border border-zinc-100 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium leading-snug">
-                              {e.description}
-                            </p>
-                            <p className="mt-0.5 text-xs text-zinc-500">
-                              {formatDateAr(e.date)} · {firstName(e.paidByName)}
-                            </p>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            {e.amountArs != null && e.amountArs > 0 && (
-                              <p className="text-sm font-semibold tabular-nums">
-                                {formatArs(e.amountArs)}
-                              </p>
-                            )}
-                            {e.amountUsd != null && e.amountUsd > 0 && (
-                              <p className="text-xs tabular-nums text-sky-700 dark:text-sky-300">
-                                {formatUsd(e.amountUsd)}
-                              </p>
-                            )}
-                            {e.amountArs == null && e.amountUsd == null && (
-                              <p className="text-sm tabular-nums">
-                                {formatArs(e.amountCombined)}
-                              </p>
-                            )}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
-      {/* Invite */}
-      {inviteCode && (
-        <div className="rounded-2xl border border-dashed border-zinc-200 px-4 py-3 dark:border-zinc-800">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-            Código de invitación
-          </p>
+      {/* Invite modal */}
+      {inviteOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+        >
           <button
             type="button"
-            onClick={() => void copyInvite()}
-            className="mt-1 inline-flex items-center gap-2 font-mono text-base font-bold tracking-widest"
-          >
-            {inviteCode}
-            <Copy className="h-3.5 w-3.5 text-zinc-400" />
-          </button>
-          <p className="text-xs text-zinc-500">
-            {copied ? "¡Copiado!" : "Tocá para copiar"}
-          </p>
+            className="absolute inset-0 bg-zinc-950/55 backdrop-blur-[2px]"
+            aria-label="Cerrar"
+            onClick={() => setInviteOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600 dark:text-violet-400">
+                  Invitar
+                </p>
+                <h2 className="mt-0.5 text-lg font-bold tracking-tight">
+                  Sumá alguien al hogar
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInviteOpen(false)}
+                className="rounded-full p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
+                <p className="text-xs font-medium text-zinc-500">Código</p>
+                <p className="mt-1 font-mono text-xl font-bold tracking-widest">
+                  {inviteCode}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void copyText(inviteCode, "code")}
+                  className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-violet-700 dark:text-violet-300"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {copied === "code" ? "¡Copiado!" : "Copiar código"}
+                </button>
+              </div>
+
+              {inviteLink && (
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
+                  <p className="text-xs font-medium text-zinc-500">Link</p>
+                  <p className="mt-1 break-all text-xs text-zinc-600 dark:text-zinc-300">
+                    {inviteLink}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void copyText(inviteLink, "link")}
+                    className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-violet-700 dark:text-violet-300"
+                  >
+                    <Link2 className="h-3.5 w-3.5" />
+                    {copied === "link" ? "¡Copiado!" : "Copiar link"}
+                  </button>
+                </div>
+              )}
+
+              <p className="text-xs leading-relaxed text-zinc-500">
+                Quien se una con el código o el link entra a este hogar y puede
+                ver los gastos compartidos.
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </PageStack>
