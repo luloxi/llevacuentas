@@ -118,6 +118,7 @@ export function CompartidoView() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [ticketOpen, setTicketOpen] = useState<Set<string>>(new Set());
   const [reloadKey, setReloadKey] = useState(0);
+  const [servicesOpen, setServicesOpen] = useState(false);
 
   useEffect(() => {
     setViewTab(tabFromParam(searchParams.get("tab")));
@@ -386,13 +387,23 @@ export function CompartidoView() {
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-              <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
-                <div className="min-w-0">
-                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-fg)]">
-                    <Home className="h-3.5 w-3.5" />
-                    Servicios de la casa
-                  </p>
-                  <p className="mt-0.5 text-xs text-[var(--muted-fg)]">
+              <button
+                type="button"
+                onClick={() => setServicesOpen((v) => !v)}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-[var(--surface-muted)]"
+              >
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-[var(--muted-fg)] transition",
+                    servicesOpen && "rotate-180",
+                  )}
+                />
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--muted-fg)]">
+                  <Home className="h-4 w-4" strokeWidth={1.75} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Servicios de la casa</p>
+                  <p className="text-xs text-[var(--muted-fg)]">
                     {formatPeriodLabel(checklistPeriod)}
                     {period === "all" ? " · mes actual" : ""}
                     {" · "}
@@ -407,73 +418,92 @@ export function CompartidoView() {
                     </span>
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={openAddExpense}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openAddExpense();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      openAddExpense();
+                    }
+                  }}
                   className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--brand-fg)] transition hover:bg-[var(--brand-soft)]"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Cargar
-                </button>
-              </div>
-              <ul className="divide-y divide-[var(--border)]">
-                {fixedServiceStatus.map((svc) => {
-                  const color = colorForCategory(svc.slug);
-                  return (
-                    <li
-                      key={svc.slug}
-                      className="flex items-center gap-3 px-4 py-3"
-                    >
-                      <span
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-                        style={{ backgroundColor: `${color}18`, color }}
-                      >
-                        <CategoryIcon slug={svc.slug} size={16} />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">{svc.name}</p>
-                        {svc.paid ? (
-                          <p className="text-xs text-[var(--muted-fg)]">
-                            {svc.payers.length > 0
-                              ? `Pagó ${svc.payers.join(", ")}`
-                              : "Registrado"}
-                            {svc.count > 1 ? ` · ${svc.count} cargos` : ""}
-                          </p>
-                        ) : (
-                          <p className="text-xs text-amber-700 dark:text-amber-400">
-                            Sin cargar este mes
-                          </p>
-                        )}
-                      </div>
-                      <div className="shrink-0 text-right">
-                        {svc.paid ? (
-                          <>
-                            <p className="text-sm font-semibold tabular-nums">
-                              {formatArs(svc.totalArs)}
-                            </p>
-                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--brand-fg)]">
-                              <Check className="h-3 w-3" />
-                              Pagado
-                            </span>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={openAddExpense}
-                            className="rounded-full border border-dashed border-[var(--border)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted-fg)] transition hover:border-[var(--brand)]/40 hover:text-[var(--brand-fg)]"
+                </span>
+              </button>
+
+              {servicesOpen && (
+                <>
+                  <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+                    {fixedServiceStatus.map((svc) => {
+                      const color = colorForCategory(svc.slug);
+                      return (
+                        <li
+                          key={svc.slug}
+                          className="flex items-center gap-3 px-4 py-3"
+                        >
+                          <span
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                            style={{ backgroundColor: `${color}18`, color }}
                           >
-                            Cargar
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-              <p className="border-t border-[var(--border)] px-4 py-2.5 text-[11px] leading-relaxed text-[var(--muted-fg)]">
-                Marcá cada servicio como <strong>Hogar</strong> al cargarlo.
-                Si alguien pagó una parte, cargá un gasto por persona.
-              </p>
+                            <CategoryIcon slug={svc.slug} size={16} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium">{svc.name}</p>
+                            {svc.paid ? (
+                              <p className="text-xs text-[var(--muted-fg)]">
+                                {svc.payers.length > 0
+                                  ? `Pagó ${svc.payers.join(", ")}`
+                                  : "Registrado"}
+                                {svc.count > 1
+                                  ? ` · ${svc.count} cargos`
+                                  : ""}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-amber-700 dark:text-amber-400">
+                                Sin cargar este mes
+                              </p>
+                            )}
+                          </div>
+                          <div className="shrink-0 text-right">
+                            {svc.paid ? (
+                              <>
+                                <p className="text-sm font-semibold tabular-nums">
+                                  {formatArs(svc.totalArs)}
+                                </p>
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--brand-fg)]">
+                                  <Check className="h-3 w-3" />
+                                  Pagado
+                                </span>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={openAddExpense}
+                                className="rounded-full border border-dashed border-[var(--border)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted-fg)] transition hover:border-[var(--brand)]/40 hover:text-[var(--brand-fg)]"
+                              >
+                                Cargar
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <p className="border-t border-[var(--border)] px-4 py-2.5 text-[11px] leading-relaxed text-[var(--muted-fg)]">
+                    Marcá cada servicio como <strong>Hogar</strong> al
+                    cargarlo. Si alguien pagó una parte, cargá un gasto por
+                    persona.
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
