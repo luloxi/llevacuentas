@@ -11,7 +11,7 @@ import {
   Moon,
   Sun,
 } from "lucide-react";
-import { formatArs, cn } from "@/lib/utils";
+import { formatArs, formatUsd, cn } from "@/lib/utils";
 import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
 import { CategoryIcon } from "@/lib/category-icons";
 import { colorForCategory } from "@/lib/category-colors";
@@ -297,6 +297,9 @@ export function DashboardHome({
   categorySummary,
   householdServices = [],
   liveRates = [],
+  savingsArs = 0,
+  savingsUsd = 0,
+  savingsUsdc = 0,
 }: {
   firstName: string;
   period: string;
@@ -311,6 +314,9 @@ export function DashboardHome({
   categorySummary: CategorySummary[];
   householdServices?: HouseholdService[];
   liveRates?: LiveRate[];
+  savingsArs?: number;
+  savingsUsd?: number;
+  savingsUsdc?: number;
   householdName?: string;
   initialCategories?: unknown;
   initialMembers?: unknown;
@@ -357,6 +363,8 @@ export function DashboardHome({
   }, [router, triggerCelebrate]);
 
   const visibleServices = householdServices.filter((s) => !skipped.has(s.slug));
+  const hasSavings =
+    savingsArs > 0 || savingsUsd > 0 || savingsUsdc > 0;
 
   return (
     <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-3">
@@ -450,6 +458,45 @@ export function DashboardHome({
           </ul>
         </Link>
       )}
+
+      <Link
+        href="/ahorros"
+        className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
+        aria-label="Ahorros"
+      >
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
+            Ahorros
+          </p>
+          <TapHint />
+        </div>
+        {hasSavings ? (
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div>
+              <p className="text-[10px] text-[var(--muted-fg)]">Pesos</p>
+              <p className="text-sm font-semibold tabular-nums">
+                {formatArs(savingsArs)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-[var(--muted-fg)]">Dólares</p>
+              <p className="text-sm font-semibold tabular-nums">
+                {formatUsd(savingsUsd)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-[var(--muted-fg)]">USDC</p>
+              <p className="text-sm font-semibold tabular-nums text-[var(--brand-fg)]">
+                {formatUsd(savingsUsdc)}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--muted-fg)]">
+            Agregá wallets y bancos
+          </p>
+        )}
+      </Link>
 
       {showHogar && (
         <Link
