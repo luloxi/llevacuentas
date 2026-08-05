@@ -363,7 +363,38 @@ export function DashboardHome({
         </Link>
       )}
 
-      {/* 3. Deuda */}
+      {/* 3. Hogar */}
+      <Link
+        href="/compartido"
+        className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
+        aria-label={`Hogar ${formatArs(sharedTotalArs)}`}
+      >
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--muted-fg)]">
+            <Users className="h-4 w-4" strokeWidth={1.75} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
+                  Hogar
+                </p>
+                <p className="text-lg font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+                  {formatArs(sharedTotalArs)}
+                </p>
+              </div>
+              <TapHint />
+            </div>
+            <VsPrevMeter
+              total={sharedTotalArs}
+              prevTotal={sharedPrevTotalArs}
+              prevPeriod={prevPeriod}
+            />
+          </div>
+        </div>
+      </Link>
+
+      {/* 4. Deuda */}
       <Link
         href="/deuda"
         className="group flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
@@ -399,37 +430,6 @@ export function DashboardHome({
           </p>
         </div>
         <TapHint />
-      </Link>
-
-      {/* 4. Hogar */}
-      <Link
-        href="/compartido"
-        className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
-        aria-label={`Hogar ${formatArs(sharedTotalArs)}`}
-      >
-        <div className="flex items-start gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--muted-fg)]">
-            <Users className="h-4 w-4" strokeWidth={1.75} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
-                  Hogar
-                </p>
-                <p className="text-lg font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
-                  {formatArs(sharedTotalArs)}
-                </p>
-              </div>
-              <TapHint />
-            </div>
-            <VsPrevMeter
-              total={sharedTotalArs}
-              prevTotal={sharedPrevTotalArs}
-              prevPeriod={prevPeriod}
-            />
-          </div>
-        </div>
       </Link>
     </div>
   );
