@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn, formatArs, formatUsd, formatDateAr } from "@/lib/utils";
 import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
 import {
@@ -8,6 +8,7 @@ import {
   SegmentedControl,
   Surface,
 } from "@/components/ui";
+import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 
 type MonthRow = {
   period: string;
@@ -48,6 +49,9 @@ type Summary = {
   monthsPaidInFull?: number;
   settled?: boolean;
 };
+
+const DEBT_TABS = ["evolucion", "pagos"] as const;
+type DebtTab = (typeof DEBT_TABS)[number];
 
 const W = 720;
 const H = 220;
@@ -318,7 +322,10 @@ export function DeudaView() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"evolucion" | "pagos">("evolucion");
+  const [tab, setTab] = useState<DebtTab>("evolucion");
+
+  const onTab = useCallback((v: DebtTab) => setTab(v), []);
+  const swipe = useSwipeTabs({ tabs: DEBT_TABS, value: tab, onChange: onTab });
 
   useEffect(() => {
     let cancelled = false;
@@ -361,11 +368,11 @@ export function DeudaView() {
   const paymentRows = onlyPayments.length ? onlyPayments : payments;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" {...swipe}>
       <div className="flex justify-end">
         <SegmentedControl
           value={tab}
-          onChange={setTab}
+          onChange={onTab}
           options={[
             { id: "evolucion", label: "Evolución" },
             { id: "pagos", label: "Pagos" },
@@ -389,10 +396,7 @@ export function DeudaView() {
             value={formatArs(summary.totalPaidArs)}
             tone="brand"
           />
-          <MiniStat
-            label="Pico"
-            value={formatArs(summary.peakBalanceArs)}
-          />
+          <MiniStat label="Pico" value={formatArs(summary.peakBalanceArs)} />
         </div>
       )}
 
@@ -410,7 +414,6 @@ export function DeudaView() {
             <DebtChart months={chartMonths} />
           </Surface>
 
-          {/* Mobile: stacked cards — no horizontal scroll */}
           <ul className="space-y-2 md:hidden">
             {months.map((m) => (
               <MonthCard key={m.period} m={m} />
@@ -422,7 +425,6 @@ export function DeudaView() {
             )}
           </ul>
 
-          {/* Desktop table */}
           <div className="lc-table-wrap hidden md:block">
             <table>
               <thead>
