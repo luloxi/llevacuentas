@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
   List,
-  PieChart,
+  Landmark,
   Users,
   LogOut,
   Shield,
@@ -18,7 +18,7 @@ import { BrandLogo } from "@/components/brand-logo";
 const links = [
   { href: "/dashboard", label: "Inicio", icon: Home },
   { href: "/consumos", label: "Gastos", icon: List },
-  { href: "/analisis", label: "Análisis", icon: PieChart },
+  { href: "/deuda", label: "Deuda", icon: Landmark },
   { href: "/compartido", label: "Hogar", icon: Users },
 ];
 
