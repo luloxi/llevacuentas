@@ -19,6 +19,11 @@ import {
   CreditCard,
   Percent,
   Package,
+  Home,
+  Zap,
+  Droplets,
+  Flame,
+  Router,
 } from "lucide-react";
 
 /** Icon per category slug — inventory-style markers for fast visual scan. */
@@ -41,6 +46,11 @@ const ICONS: Record<string, LucideIcon> = {
   uncategorized: HelpCircle,
   pagos: CreditCard,
   "intereses-cargos": Percent,
+  alquiler: Home,
+  luz: Zap,
+  agua: Droplets,
+  gas: Flame,
+  internet: Router,
 };
 
 export function iconForCategory(slug: string | null | undefined): LucideIcon {
