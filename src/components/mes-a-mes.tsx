@@ -9,11 +9,12 @@ import {
   LineChart,
   LayoutList,
 } from "lucide-react";
-import { cn, formatArs, formatUsd, formatDateAr } from "@/lib/utils";
+import { cn, formatArs, formatUsd, currentPeriodAr } from "@/lib/utils";
 import { formatPeriodLabel } from "@/lib/period-label";
 import { colorForCategory } from "@/lib/category-colors";
 import { CategoryLinesChart, TotalSpendChart } from "@/components/spend-charts";
 import { DeudaView } from "@/components/deuda-view";
+import { MesAMesTxRow } from "@/components/mes-a-mes-tx-row";
 import {
   EmptyState,
   LoadingBlock,
@@ -63,13 +64,6 @@ function formatUsdRateLabel(rate: UsdRate | undefined): string | null {
   const [y, mo, d] = rate.asOf.split("-");
   const dateLabel = d && mo && y ? `${d}/${mo}/${y}` : rate.asOf;
   return `TC compra ${dateLabel}: ${formatArs(rate.buy)}`;
-}
-
-function currentPeriod(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
 }
 
 type ChartData = {
@@ -165,8 +159,7 @@ function aggregateMonths(months: MonthBlock[]): MonthBlock {
 
 export function MesAMesView() {
   const [mainTab, setMainTab] = useState<MainTab>("resumen");
-  /** "all" or YYYY-MM — default is current calendar month */
-  const [filterPeriod, setFilterPeriod] = useState<string>(currentPeriod);
+  const [filterPeriod, setFilterPeriod] = useState<string>(currentPeriodAr);
   const [periods, setPeriods] = useState<string[]>([]);
   const [months, setMonths] = useState<MonthBlock[]>([]);
   const [chart, setChart] = useState<ChartData | null>(null);
@@ -198,10 +191,9 @@ export function MesAMesView() {
       setChart(data.chart ?? null);
       setCategories(data.categories ?? []);
 
-      // Prefer current month; else most recent period with data
       setFilterPeriod((prev) => {
         if (prev !== "all" && loadedPeriods.includes(prev)) return prev;
-        const now = currentPeriod();
+        const now = currentPeriodAr();
         if (loadedPeriods.includes(now)) return now;
         if (loadedPeriods.length > 0) return loadedPeriods[0]!;
         return now;
@@ -415,12 +407,12 @@ export function MesAMesView() {
             onChange={(e) => setFilterPeriod(e.target.value)}
             className="lc-input"
           >
+            <option value="all">Todos los meses</option>
             {periods.map((p) => (
               <option key={p} value={p}>
                 {formatPeriodLabel(p)}
               </option>
             ))}
-            <option value="all">Todos los meses</option>
           </select>
         )}
       </div>
@@ -644,13 +636,6 @@ function MonthDetail({
       </div>
 
       <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-        <div className="hidden grid-cols-[1fr_auto_auto_auto_auto] items-center gap-2 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 sm:grid sm:grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_4.5rem_3.5rem]">
-          <span className="pl-9">Categoría</span>
-          <span className="text-right">Total $</span>
-          <span className="text-right">Pesos</span>
-          <span className="text-right">USD</span>
-          <span className="text-right">%</span>
-        </div>
         {month.categories.map((c) => {
           const open = expanded.has(c.slug);
           const list = txsByCat.get(c.slug) ?? [];
@@ -661,9 +646,9 @@ function MonthDetail({
               <button
                 type="button"
                 onClick={() => onToggle(c.slug)}
-                className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left transition hover:bg-emerald-50/50 sm:grid sm:grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_4.5rem_3.5rem] sm:gap-2 dark:hover:bg-emerald-950/20"
+                className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left transition hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20"
               >
-                <span className="flex min-w-0 flex-1 items-center gap-3 sm:flex-none">
+                <span className="flex min-w-0 flex-1 items-center gap-3">
                   <ChevronDown
                     className={cn(
                       "h-4 w-4 shrink-0 text-zinc-400 transition",
@@ -675,27 +660,18 @@ function MonthDetail({
                     style={{ backgroundColor: colorForCategory(c.slug) }}
                   />
                   <span className="min-w-0 truncate font-medium">{c.name}</span>
-                  <span className="shrink-0 text-xs text-zinc-500 sm:hidden">
+                  <span className="shrink-0 text-xs text-zinc-500">
                     {c.count}×
                   </span>
                 </span>
-                <span className="ml-auto text-right text-sm tabular-nums font-semibold sm:ml-0 sm:w-auto">
+                <span className="ml-auto text-right text-sm tabular-nums font-semibold">
                   {combined > 0 ? formatArs(combined) : "—"}
                 </span>
-                <span className="hidden text-right text-sm tabular-nums text-zinc-600 sm:block">
-                  {c.amountArs > 0 ? formatArs(c.amountArs) : "—"}
-                </span>
-                <span className="hidden text-right text-sm tabular-nums text-zinc-600 sm:block">
-                  {c.amountUsd > 0 ? formatUsd(c.amountUsd) : "—"}
-                </span>
-                <span className="w-full pl-9 text-xs tabular-nums text-zinc-500 sm:hidden">
+                <span className="w-full pl-9 text-xs tabular-nums text-zinc-500">
                   {c.amountArs > 0 ? formatArs(c.amountArs) : "— $"}
                   {" · "}
                   {c.amountUsd > 0 ? formatUsd(c.amountUsd) : "— USD"}
                   {" · "}
-                  {c.pct.toFixed(1)}%
-                </span>
-                <span className="hidden text-right text-xs tabular-nums text-zinc-500 sm:block">
                   {c.pct.toFixed(1)}%
                 </span>
               </button>
@@ -712,70 +688,15 @@ function MonthDetail({
                     </p>
                   ) : (
                     <ul className="space-y-1.5">
-                      {list.map((t) => {
-                        const hasArs =
-                          t.amountArs != null &&
-                          Number.isFinite(t.amountArs) &&
-                          Math.abs(t.amountArs) > 0;
-                        const hasUsd =
-                          t.amountUsd != null &&
-                          Number.isFinite(t.amountUsd) &&
-                          Math.abs(t.amountUsd) > 0;
-                        return (
-                        <li
+                      {list.map((t) => (
+                        <MesAMesTxRow
                           key={t.id}
-                          className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-100/80 bg-white px-3 py-2 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-                        >
-                          <span className="w-20 shrink-0 text-xs tabular-nums text-zinc-500">
-                            {formatDateAr(t.date)}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate font-medium">
-                            {t.descriptionNormalized}
-                          </span>
-                          <span className="flex shrink-0 flex-col items-end gap-0.5">
-                            {hasArs && (
-                              <span className="inline-flex items-center gap-1.5 tabular-nums">
-                                <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                                  ARS
-                                </span>
-                                <span className="font-medium text-zinc-800 dark:text-zinc-100">
-                                  {formatArs(Math.abs(t.amountArs!))}
-                                </span>
-                              </span>
-                            )}
-                            {hasUsd && (
-                              <span className="inline-flex items-center gap-1.5 tabular-nums">
-                                <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-950 dark:text-sky-200">
-                                  USD
-                                </span>
-                                <span className="font-medium text-sky-900 dark:text-sky-100">
-                                  {formatUsd(Math.abs(t.amountUsd!))}
-                                </span>
-                              </span>
-                            )}
-                            {!hasArs && !hasUsd && (
-                              <span className="text-zinc-400">—</span>
-                            )}
-                          </span>
-                          <select
-                            value={t.category?.id ?? ""}
-                            disabled={savingId === t.id}
-                            onChange={(e) =>
-                              onChangeCategory(t.id, e.target.value)
-                            }
-                            onClick={(e) => e.stopPropagation()}
-                            className="lc-input max-w-[10rem] !px-2 !py-1 text-xs"
-                          >
-                            <option value="">Sin categoría</option>
-                            {categories.map((cat) => (
-                              <option key={cat.id} value={cat.id}>
-                                {cat.name}
-                              </option>
-                            ))}
-                          </select>
-                        </li>
-                        );
-                      })}
+                          t={t}
+                          categories={categories}
+                          savingId={savingId}
+                          onChangeCategory={onChangeCategory}
+                        />
+                      ))}
                     </ul>
                   )}
                 </div>
