@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { compressImageForUpload } from "@/lib/image-compress";
+import type { AddExpensePreset } from "@/components/add-expense-provider";
 
 type Category = { id: string; slug: string; name: string };
 type Member = { userId: string; name: string };
@@ -87,12 +88,16 @@ export function AddExpenseModal({
   onCreated,
   categories,
   members,
+  viewerUserId = null,
+  preset = null,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
   categories: Category[];
   members: Member[];
+  viewerUserId?: string | null;
+  preset?: AddExpensePreset | null;
 }) {
   const scanRef = useRef<HTMLInputElement>(null);
   const cardRef = useRef<HTMLInputElement>(null);
@@ -117,19 +122,33 @@ export function AddExpenseModal({
 
   useEffect(() => {
     if (open && !wasOpen.current) {
-      setMode("choose");
+      const p = preset;
+      setMode(p?.mode === "manual" ? "manual" : "choose");
       setFromScan(false);
       setDate(todayISO());
-      setDescription("");
+      setDescription(p?.description ?? "");
       setAmountArs("");
       setAmountUsd("");
+
+      const bySlug = p?.categorySlug
+        ? categories.find((c) => c.slug === p.categorySlug)
+        : null;
       setCategoryId(
-        categories.find((c) => c.slug === "uncategorized")?.id ??
+        bySlug?.id ??
+          categories.find((c) => c.slug === "uncategorized")?.id ??
           categories[0]?.id ??
           "",
       );
-      setPaidByUserId(members[0]?.userId ?? "");
-      setOwnership("personal");
+
+      const preferredPayer =
+        p?.paidByUserId && members.some((m) => m.userId === p.paidByUserId)
+          ? p.paidByUserId
+          : viewerUserId && members.some((m) => m.userId === viewerUserId)
+            ? viewerUserId
+            : (members[0]?.userId ?? "");
+      setPaidByUserId(preferredPayer);
+
+      setOwnership(p?.ownership === "shared" ? "shared" : "personal");
       setComplex(false);
       setItems([newItem()]);
       setScanning(false);
@@ -140,18 +159,40 @@ export function AddExpenseModal({
       setImportNote(null);
     }
     wasOpen.current = open;
-  }, [open, categories, members]);
+  }, [open, categories, members, preset, viewerUserId]);
 
+  // When meta loads after open with a preset, fill missing fields.
   useEffect(() => {
     if (!open) return;
-    if (!categoryId && categories[0]) {
+    if (preset?.categorySlug && categories.length > 0) {
+      const cat = categories.find((c) => c.slug === preset.categorySlug);
+      if (cat && categoryId !== cat.id) setCategoryId(cat.id);
+    } else if (!categoryId && categories[0]) {
       setCategoryId(
         categories.find((c) => c.slug === "uncategorized")?.id ??
           categories[0].id,
       );
     }
-    if (!paidByUserId && members[0]) setPaidByUserId(members[0].userId);
-  }, [open, categories, members, categoryId, paidByUserId]);
+
+    if (!paidByUserId && members.length > 0) {
+      const preferred =
+        preset?.paidByUserId &&
+        members.some((m) => m.userId === preset.paidByUserId)
+          ? preset.paidByUserId
+          : viewerUserId && members.some((m) => m.userId === viewerUserId)
+            ? viewerUserId
+            : members[0]!.userId;
+      setPaidByUserId(preferred);
+    }
+  }, [
+    open,
+    categories,
+    members,
+    categoryId,
+    paidByUserId,
+    preset,
+    viewerUserId,
+  ]);
 
   useEffect(() => {
     if (!open) return;
