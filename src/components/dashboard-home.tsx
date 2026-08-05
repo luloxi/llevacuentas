@@ -413,8 +413,8 @@ export function DashboardHome({
                     className={cn(
                       "flex h-7 w-7 items-center justify-center rounded-lg",
                       svc.paid
-                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-400"
-                        : "bg-zinc-100 text-zinc-400 dark:bg-zinc-800/80 dark:text-zinc-500",
+                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/55 dark:text-emerald-300"
+                        : "bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500",
                     )}
                   >
                     <CategoryIcon slug={svc.slug} size={13} />
