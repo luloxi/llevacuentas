@@ -7,6 +7,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ChevronRight,
+  Eye,
+  EyeOff,
   Minus,
   Moon,
   Sun,
@@ -39,6 +41,7 @@ type LiveRate = {
 };
 
 const SKIPPED_SERVICES_KEY = "lc:hogar-skipped-services";
+const SHOW_DEBT_KEY = "lc:home-show-debt";
 
 function loadSkippedServices(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -50,6 +53,22 @@ function loadSkippedServices(): Set<string> {
   } catch {
     return new Set();
   }
+}
+
+function loadShowDebt(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const raw = window.localStorage.getItem(SHOW_DEBT_KEY);
+    if (raw === null) return true;
+    return raw !== "0" && raw !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function saveShowDebt(show: boolean) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(SHOW_DEBT_KEY, show ? "1" : "0");
 }
 
 function formatRate(n: number) {
@@ -309,9 +328,11 @@ export function DashboardHome({
   const [burst, setBurst] = useState(false);
   const [pop, setPop] = useState(false);
   const [skipped, setSkipped] = useState<Set<string>>(() => new Set());
+  const [showDebt, setShowDebt] = useState(true);
 
   useEffect(() => {
     setSkipped(loadSkippedServices());
+    setShowDebt(loadShowDebt());
   }, []);
 
   useEffect(() => {
@@ -341,6 +362,11 @@ export function DashboardHome({
 
   const visibleServices = householdServices.filter((s) => !skipped.has(s.slug));
 
+  function toggleDebt(next: boolean) {
+    setShowDebt(next);
+    saveShowDebt(next);
+  }
+
   return (
     <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
@@ -354,8 +380,6 @@ export function DashboardHome({
         </div>
         <ThemeToggle />
       </div>
-
-      <RatesStrip rates={liveRates} />
 
       <Link
         href="/consumos?tab=lista"
@@ -477,32 +501,56 @@ export function DashboardHome({
         </div>
       </Link>
 
-      <Link
-        href="/deuda"
-        className="group flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
-        aria-label={
-          debtSettled
-            ? "Deuda saldada"
-            : `Deuda ${formatArs(debtBalanceArs)}`
-        }
-      >
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
-            Deuda
-          </p>
-          <p
-            className={cn(
-              "mt-0.5 text-lg font-semibold tabular-nums tracking-tight",
+      {showDebt ? (
+        <div className="relative">
+          <Link
+            href="/deuda"
+            className="group flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 pr-12 transition active:scale-[0.99]"
+            aria-label={
               debtSettled
-                ? "text-[var(--brand-fg)]"
-                : "text-red-800 dark:text-red-200",
-            )}
+                ? "Deuda saldada"
+                : `Deuda ${formatArs(debtBalanceArs)}`
+            }
           >
-            {debtSettled ? "Saldada" : formatArs(debtBalanceArs)}
-          </p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
+                Deuda
+              </p>
+              <p
+                className={cn(
+                  "mt-0.5 text-lg font-semibold tabular-nums tracking-tight",
+                  debtSettled
+                    ? "text-[var(--brand-fg)]"
+                    : "text-red-800 dark:text-red-200",
+                )}
+              >
+                {debtSettled ? "Saldada" : formatArs(debtBalanceArs)}
+              </p>
+            </div>
+            <TapHint />
+          </Link>
+          <button
+            type="button"
+            onClick={() => toggleDebt(false)}
+            className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full p-2 text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+            aria-label="Ocultar deuda del inicio"
+            title="Ocultar deuda"
+          >
+            <EyeOff className="h-4 w-4" strokeWidth={1.75} />
+          </button>
         </div>
-        <TapHint />
-      </Link>
+      ) : (
+        <button
+          type="button"
+          onClick={() => toggleDebt(true)}
+          className="inline-flex items-center justify-center gap-1.5 self-center rounded-full px-3 py-1.5 text-[11px] font-medium text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+        >
+          <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />
+          Mostrar deuda
+        </button>
+      )}
+
+      <RatesStrip rates={liveRates} />
     </div>
   );
 }
