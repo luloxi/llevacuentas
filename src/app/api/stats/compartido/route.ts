@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { requireApiUser } from "@/lib/api-auth";
 import { getCategoryMap, requireHousehold } from "@/lib/household";
 import { getDb, schema } from "@/lib/db";
@@ -64,6 +64,15 @@ export async function GET(req: Request) {
     ];
     const rates = await getMonthEndBuyRates([...new Set(rateKeys)]);
 
+    type ReceiptItem = {
+      id: string;
+      name: string;
+      quantity: number | null;
+      unitPrice: number | null;
+      lineTotal: number | null;
+      productCategory: string | null;
+    };
+
     type Expense = {
       id: string;
       date: string;
@@ -76,6 +85,8 @@ export async function GET(req: Request) {
       categorySlug: string;
       paidByUserId: string | null;
       paidByName: string;
+      hasTicket: boolean;
+      receiptItems: ReceiptItem[];
     };
 
     const nameByUser = new Map(
@@ -85,10 +96,7 @@ export async function GET(req: Request) {
       ]),
     );
 
-    function combinedOf(
-      r: (typeof rows)[0],
-      p: string,
-    ): number {
+    function combinedOf(r: (typeof rows)[0], p: string): number {
       const rate = rates.get(p)?.buy ?? 0;
       const ars = r.amountArs != null ? Math.abs(Number(r.amountArs)) : 0;
       const usd = r.amountUsd != null ? Math.abs(Number(r.amountUsd)) : 0;
@@ -146,7 +154,53 @@ export async function GET(req: Request) {
         paidByName: uid
           ? (nameByUser.get(uid) ?? "Desconocido")
           : "Sin asignar",
+        hasTicket: r.source === "receipt",
+        receiptItems: [],
       });
+    }
+
+    // Attach receipt line items when available
+    const txIds = expenses.map((e) => e.id);
+    if (txIds.length > 0) {
+      const receipts = await db
+        .select()
+        .from(schema.receipts)
+        .where(eq(schema.receipts.householdId, ctx.household.id));
+      const linked = receipts.filter(
+        (r) => r.transactionId && txIds.includes(r.transactionId),
+      );
+      const receiptIds = linked.map((r) => r.id);
+      const items =
+        receiptIds.length > 0
+          ? await db
+              .select()
+              .from(schema.receiptItems)
+              .where(inArray(schema.receiptItems.receiptId, receiptIds))
+          : [];
+
+      const itemsByTx = new Map<string, ReceiptItem[]>();
+      for (const rec of linked) {
+        if (!rec.transactionId) continue;
+        const list = items
+          .filter((i) => i.receiptId === rec.id)
+          .map((i) => ({
+            id: i.id,
+            name: i.name,
+            quantity: i.quantity != null ? Number(i.quantity) : null,
+            unitPrice: i.unitPrice != null ? Number(i.unitPrice) : null,
+            lineTotal: i.lineTotal != null ? Number(i.lineTotal) : null,
+            productCategory: i.productCategory,
+          }));
+        itemsByTx.set(rec.transactionId, list);
+      }
+
+      for (const e of expenses) {
+        const list = itemsByTx.get(e.id);
+        if (list && list.length > 0) {
+          e.receiptItems = list;
+          e.hasTicket = true;
+        }
+      }
     }
 
     expenses.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
