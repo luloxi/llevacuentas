@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { requireUser } from "@/lib/session";
 import { getUserHousehold } from "@/lib/household";
 import { hasDatabase } from "@/lib/db";
@@ -29,7 +30,9 @@ export default async function OnboardingPage() {
 
   return (
     <main className="flex min-h-full flex-1 items-center px-4 py-12">
-      <HouseholdSetup />
+      <Suspense fallback={null}>
+        <HouseholdSetup />
+      </Suspense>
     </main>
   );
 }

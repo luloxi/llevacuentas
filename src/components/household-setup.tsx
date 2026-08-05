@@ -1,16 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
-import { Home, UserPlus } from "lucide-react";
+import { Home, User, UserPlus } from "lucide-react";
 
 export function HouseholdSetup() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteFromUrl = (searchParams.get("invite") || "").toUpperCase();
+
   const [name, setName] = useState("Mi espacio");
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(inviteFromUrl);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<"create" | "join" | null>(null);
+  const [loading, setLoading] = useState<
+    "create" | "join" | "solo" | null
+  >(null);
 
   async function create() {
     setLoading("create");
@@ -21,6 +26,32 @@ export function HouseholdSetup() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ action: "create", name }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      if (!res.ok) {
+        setError(data?.error || `Error ${res.status}`);
+        return;
+      }
+      router.refresh();
+      router.push("/dashboard");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de red");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function continueSolo() {
+    setLoading("solo");
+    setError(null);
+    try {
+      const res = await fetch("/api/household", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action: "create", name: "Mi espacio" }),
       });
       const data = (await res.json().catch(() => null)) as {
         error?: string;
@@ -72,10 +103,29 @@ export function HouseholdSetup() {
         </div>
         <h1 className="text-2xl font-bold tracking-tight">Tu espacio</h1>
         <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-          Creá un espacio para vos solo o compartilo con otras personas y
-          lleven los gastos juntos.
+          Empezá solo, creá un espacio o unite a uno compartido. Después podés
+          unirte a un hogar cuando quieras.
         </p>
       </div>
+
+      <button
+        type="button"
+        disabled={loading !== null}
+        onClick={() => void continueSolo()}
+        className="lc-card-elevated flex w-full items-center gap-3 p-5 text-left transition hover:bg-[var(--surface-muted)] disabled:opacity-60"
+      >
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+          <User className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-semibold tracking-tight">Continuar solo</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            {loading === "solo"
+              ? "Preparando…"
+              : "Usá la app sin unirte a un hogar. Podés sumarte después."}
+          </p>
+        </div>
+      </button>
 
       <div className="lc-card-elevated space-y-3 p-5">
         <div className="flex items-center gap-2">

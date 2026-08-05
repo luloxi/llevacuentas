@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 import { getDb, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
@@ -109,15 +109,49 @@ export async function createHousehold(userId: string, name = "Mi espacio") {
   return getUserHousehold(userId);
 }
 
+/** Leave current household if the user is the only member (solo space). */
+export async function leaveSoloHousehold(userId: string) {
+  await ensureSchema();
+  const db = getDb();
+  const existing = await getUserHousehold(userId);
+  if (!existing) return;
+
+  if (existing.members.length > 1) {
+    throw new Error(
+      "No podés dejar este hogar mientras haya otras personas. Pediles que se vayan primero o que te saquen.",
+    );
+  }
+
+  const householdId = existing.household.id;
+
+  await db
+    .delete(schema.householdMembers)
+    .where(
+      and(
+        eq(schema.householdMembers.householdId, householdId),
+        eq(schema.householdMembers.userId, userId),
+      ),
+    );
+
+  // Clean empty solo household (and its data cascades where configured)
+  await db
+    .delete(schema.households)
+    .where(eq(schema.households.id, householdId));
+}
+
 export async function joinHousehold(userId: string, code: string) {
   await ensureCategoriesSeeded();
   const db = getDb();
 
   const existing = await getUserHousehold(userId);
   if (existing) {
-    throw new Error(
-      "Ya pertenecés a un espacio. Por ahora solo uno por usuario.",
-    );
+    if (existing.members.length > 1) {
+      throw new Error(
+        "Ya pertenecés a un hogar compartido. Por ahora solo uno por usuario.",
+      );
+    }
+    // Solo space: leave it and join the invited one
+    await leaveSoloHousehold(userId);
   }
 
   const [household] = await db
