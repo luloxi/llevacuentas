@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { cn, formatArs, formatUsd, formatDateAr } from "@/lib/utils";
 import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
 import {
@@ -8,7 +9,6 @@ import {
   SegmentedControl,
   Surface,
 } from "@/components/ui";
-import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 
 type MonthRow = {
   period: string;
@@ -50,8 +50,11 @@ type Summary = {
   settled?: boolean;
 };
 
-const DEBT_TABS = ["evolucion", "pagos"] as const;
-type DebtTab = (typeof DEBT_TABS)[number];
+type DebtTab = "evolucion" | "pagos";
+
+function tabFromParam(raw: string | null): DebtTab {
+  return raw === "pagos" ? "pagos" : "evolucion";
+}
 
 const W = 720;
 const H = 220;
@@ -316,16 +319,29 @@ function MonthCard({ m }: { m: MonthRow }) {
 }
 
 export function DeudaView() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [months, setMonths] = useState<MonthRow[]>([]);
   const [chartMonths, setChartMonths] = useState<MonthRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<DebtTab>("evolucion");
+  const [tab, setTab] = useState<DebtTab>(() =>
+    tabFromParam(searchParams.get("tab")),
+  );
 
-  const onTab = useCallback((v: DebtTab) => setTab(v), []);
-  const swipe = useSwipeTabs({ tabs: DEBT_TABS, value: tab, onChange: onTab });
+  useEffect(() => {
+    setTab(tabFromParam(searchParams.get("tab")));
+  }, [searchParams]);
+
+  const onTab = useCallback(
+    (v: DebtTab) => {
+      setTab(v);
+      router.replace(`/deuda?tab=${v}`, { scroll: false });
+    },
+    [router],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -368,7 +384,7 @@ export function DeudaView() {
   const paymentRows = onlyPayments.length ? onlyPayments : payments;
 
   return (
-    <div className="space-y-3" {...swipe}>
+    <div className="space-y-3">
       <div className="flex justify-end">
         <SegmentedControl
           value={tab}
