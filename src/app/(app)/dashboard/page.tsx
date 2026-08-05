@@ -5,6 +5,11 @@ import { redirect } from "next/navigation";
 import { getDb, schema } from "@/lib/db";
 import { eq } from "drizzle-orm";
 import { DashboardHome } from "@/components/dashboard-home";
+import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
+import {
+  convertUsdToArs,
+  getMonthEndBuyRates,
+} from "@/lib/fx/month-end-rates";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -25,26 +30,50 @@ export default async function DashboardPage() {
   const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevPeriod = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
 
-  const monthTx = txs.filter((t) => t.date.startsWith(period) && !t.isPayment);
-  const prevMonthTx = txs.filter(
-    (t) => t.date.startsWith(prevPeriod) && !t.isPayment,
+  // Same rules as Análisis / mes-a-mes: real spends only, no payments, no bank accounting
+  const spendTxs = txs.filter(
+    (t) =>
+      !t.isPayment &&
+      !isBankAccountingEntry(t.descriptionNormalized ?? ""),
   );
 
-  const totalArs = monthTx.reduce(
-    (s, t) => s + (t.amountArs != null ? Math.abs(Number(t.amountArs)) : 0),
-    0,
-  );
-  const prevTotalArs = prevMonthTx.reduce(
-    (s, t) => s + (t.amountArs != null ? Math.abs(Number(t.amountArs)) : 0),
-    0,
-  );
+  const monthTx = spendTxs.filter((t) => t.date.startsWith(period));
+  const prevMonthTx = spendTxs.filter((t) => t.date.startsWith(prevPeriod));
+
+  const rates = await getMonthEndBuyRates([period, prevPeriod]);
+  const rateNow = rates.get(period)?.buy ?? 0;
+  const ratePrev = rates.get(prevPeriod)?.buy ?? 0;
+
+  function totalCombined(
+    list: typeof monthTx,
+    buyRate: number,
+  ): { combined: number; ars: number; usd: number } {
+    let ars = 0;
+    let usd = 0;
+    for (const t of list) {
+      if (t.amountArs != null) ars += Math.abs(Number(t.amountArs));
+      if (t.amountUsd != null) usd += Math.abs(Number(t.amountUsd));
+    }
+    return {
+      ars,
+      usd,
+      combined: ars + convertUsdToArs(usd, buyRate),
+    };
+  }
+
+  const thisMonth = totalCombined(monthTx, rateNow);
+  const lastMonth = totalCombined(prevMonthTx, ratePrev);
+  const totalArs = thisMonth.combined;
+  const prevTotalArs = lastMonth.combined;
 
   const { byId } = await getCategoryMap();
 
   const byCat = new Map<string, number>();
   for (const t of monthTx) {
     const id = t.categoryId ?? "none";
-    const amt = t.amountArs != null ? Math.abs(Number(t.amountArs)) : 0;
+    const ars = t.amountArs != null ? Math.abs(Number(t.amountArs)) : 0;
+    const usd = t.amountUsd != null ? Math.abs(Number(t.amountUsd)) : 0;
+    const amt = ars + convertUsdToArs(usd, rateNow);
     byCat.set(id, (byCat.get(id) ?? 0) + amt);
   }
   const sorted = [...byCat.entries()]
