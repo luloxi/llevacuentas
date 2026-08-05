@@ -208,20 +208,39 @@ export function AhorrosView() {
       </div>
 
       {summary && (
-        <div className="grid grid-cols-3 gap-2">
-          <Mini label="Pesos" value={formatArs(summary.totalArs)} />
-          <Mini label="Dólares" value={formatUsd(summary.totalUsd)} />
-          <Mini
-            label="Cripto / USDC"
-            value={formatUsd(summary.totalUsdc)}
-            tone="brand"
-          />
-        </div>
-      )}
-      {summary && summary.blueRate != null && summary.blueRate > 0 && (
-        <p className="text-center text-[11px] text-[var(--muted-fg)]">
-          Neto estimado (blue) {formatArs(summary.netArs)}
-        </p>
+        <Surface className="!p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
+            Neto en pesos
+          </p>
+          <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+            {formatArs(Math.round(summary.netArs))}
+          </p>
+          {summary.blueRate != null && summary.blueRate > 0 && (
+            <p className="mt-0.5 text-[10px] text-[var(--muted-fg)]">
+              Incluye USD al blue (${Math.round(summary.blueRate).toLocaleString("es-AR")})
+            </p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--border)] pt-3 text-[11px] text-[var(--muted-fg)]">
+            <span>
+              Pesos{" "}
+              <span className="tabular-nums font-medium text-[var(--foreground)]/85">
+                {formatArs(summary.totalArs)}
+              </span>
+            </span>
+            <span>
+              USD{" "}
+              <span className="tabular-nums font-medium text-[var(--foreground)]/85">
+                {formatUsd(summary.totalUsd)}
+              </span>
+            </span>
+            <span>
+              USDC{" "}
+              <span className="tabular-nums font-medium text-[var(--brand-fg)]">
+                {formatUsd(summary.totalUsdc)}
+              </span>
+            </span>
+          </div>
+        </Surface>
       )}
 
       {error && (
@@ -393,32 +412,6 @@ export function AhorrosView() {
         )}
       </section>
     </PageStack>
-  );
-}
-
-function Mini({
-  label,
-  value,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  tone?: "neutral" | "brand";
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-xl border px-2.5 py-2 text-center",
-        tone === "brand"
-          ? "border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/50 dark:bg-emerald-950/30"
-          : "border-[var(--border)] bg-[var(--surface)]",
-      )}
-    >
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-fg)]">
-        {label}
-      </p>
-      <p className="mt-0.5 text-sm font-bold tabular-nums">{value}</p>
-    </div>
   );
 }
 
