@@ -59,16 +59,11 @@ body {
   color: var(--foreground);
 }
 
-/* Focus: accessible without being noisy */
 :where(a, button, input, select, textarea, [role="button"]):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
-/*
- * Native <select> / <option> contrast
- * OS dropdowns often ignore page dark text and paint white-on-white.
- */
 select {
   color: var(--input-fg);
   background-color: var(--input-bg);
@@ -100,7 +95,6 @@ textarea::placeholder {
   color: color-mix(in srgb, var(--input-fg) 45%, transparent);
 }
 
-/* ——— Ambient app backdrop ——— */
 .app-shell {
   position: relative;
   isolation: isolate;
@@ -133,7 +127,6 @@ textarea::placeholder {
   }
 }
 
-/* ——— Motion ——— */
 @keyframes lc-fade-up {
   from {
     opacity: 0;
@@ -175,6 +168,104 @@ textarea::placeholder {
   }
 }
 
+/* Home: spend celebration */
+@keyframes lc-burst-out {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--bx, 40px), var(--by, -40px)) scale(0.2);
+  }
+}
+
+@keyframes lc-burst-ring {
+  0% {
+    opacity: 0.7;
+    width: 12px;
+    height: 12px;
+    border-width: 3px;
+  }
+  100% {
+    opacity: 0;
+    width: 140px;
+    height: 140px;
+    border-width: 1px;
+  }
+}
+
+@keyframes lc-burst-flash {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.4);
+  }
+  40% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}
+
+@keyframes lc-amount-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.12);
+  }
+  70% {
+    transform: scale(0.97);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes lc-bar-glow {
+  0% {
+    filter: brightness(1);
+    box-shadow: 0 0 0 transparent;
+  }
+  40% {
+    filter: brightness(1.25);
+    box-shadow: 0 0 16px rgb(16 185 129 / 0.65);
+  }
+  100% {
+    filter: brightness(1);
+    box-shadow: 0 0 0 transparent;
+  }
+}
+
+.lc-burst-particle {
+  animation: lc-burst-out 0.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.lc-burst-ring {
+  border-radius: 9999px;
+  border-style: solid;
+  border-color: rgb(16 185 129 / 0.55);
+  animation: lc-burst-ring 0.7s ease-out forwards;
+}
+
+.lc-burst-flash {
+  width: 48px;
+  height: 48px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgb(52 211 153 / 0.55), transparent 70%);
+  animation: lc-burst-flash 0.55s ease-out forwards;
+}
+
+.lc-amount-pop {
+  animation: lc-amount-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lc-bar-glow {
+  animation: lc-bar-glow 0.7s ease-out;
+}
+
 .animate-fade-up {
   animation: lc-fade-up 0.35s ease-out both;
 }
@@ -198,7 +289,12 @@ textarea::placeholder {
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up,
   .animate-toast-in,
-  .skeleton {
+  .skeleton,
+  .lc-burst-particle,
+  .lc-burst-ring,
+  .lc-burst-flash,
+  .lc-amount-pop,
+  .lc-bar-glow {
     animation: none;
   }
 
@@ -207,7 +303,6 @@ textarea::placeholder {
   }
 }
 
-/* ——— Surfaces ——— */
 .lc-card {
   border-radius: 1rem;
   border: 1px solid var(--border);
@@ -401,7 +496,6 @@ textarea::placeholder {
   }
 }
 
-/* Table polish */
 .lc-table-wrap {
   overflow-x: auto;
   border-radius: 1rem;
