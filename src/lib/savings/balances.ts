@@ -1,0 +1,178 @@
+/**
+ * On-chain balance helpers for Ahorros.
+ * EVM: DeBank OpenAPI (optional DEBANK_ACCESS_KEY).
+ * Cardano: Koios address assets + CoinGecko prices.
+ */
+
+function num(v: unknown): number | null {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+export async function fetchEvmTotalUsd(address: string): Promise<{
+  usd: number | null;
+  error?: string;
+}> {
+  const addr = address.trim().toLowerCase();
+  if (!/^0x[a-f0-9]{40}$/.test(addr)) {
+    return { usd: null, error: "Dirección EVM inválida" };
+  }
+
+  const key =
+    process.env.DEBANK_ACCESS_KEY ||
+    process.env.DEBANK_API_KEY ||
+    process.env.DEBANK_ACCESSKEY ||
+    "";
+
+  try {
+    if (key) {
+      const res = await fetch(
+        `https://pro-openapi.debank.com/v1/user/total_balance?id=${encodeURIComponent(addr)}`,
+        {
+          headers: {
+            Accept: "application/json",
+            AccessKey: key,
+          },
+          next: { revalidate: 0 },
+        },
+      );
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        return {
+          usd: null,
+          error: `DeBank ${res.status}${text ? `: ${text.slice(0, 120)}` : ""}`,
+        };
+      }
+      const data = (await res.json()) as { total_usd_value?: number };
+      const usd = num(data.total_usd_value);
+      return { usd: usd ?? 0 };
+    }
+
+    // Fallback: public-ish endpoint (may rate-limit)
+    const res = await fetch(
+      `https://api.debank.com/user/total_balance?id=${encodeURIComponent(addr)}`,
+      {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "LlevaCuentas/1.0",
+        },
+        next: { revalidate: 0 },
+      },
+    );
+    if (!res.ok) {
+      return {
+        usd: null,
+        error:
+          "DeBank sin acceso. Configurá DEBANK_ACCESS_KEY en Vercel o cargá el saldo manualmente en un banco USD.",
+      };
+    }
+    const data = (await res.json()) as {
+      data?: { total_usd_value?: number };
+      total_usd_value?: number;
+    };
+    const usd =
+      num(data.data?.total_usd_value) ?? num(data.total_usd_value);
+    return { usd: usd ?? 0 };
+  } catch (e) {
+    return {
+      usd: null,
+      error: e instanceof Error ? e.message : "Error consultando DeBank",
+    };
+  }
+}
+
+/** Map common Cardano asset units to CoinGecko ids. */
+const CG_IDS: Record<string, string> = {
+  lovelace: "cardano",
+  // popular policy units can be extended later
+};
+
+async function fetchCoinGeckoPrices(ids: string[]): Promise<Map<string, number>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const map = new Map<string, number>();
+  if (unique.length === 0) return map;
+  try {
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(unique.join(","))}&vs_currencies=usd`,
+      { next: { revalidate: 120 } },
+    );
+    if (!res.ok) return map;
+    const data = (await res.json()) as Record<string, { usd?: number }>;
+    for (const id of unique) {
+      const v = num(data[id]?.usd);
+      if (v != null) map.set(id, v);
+    }
+  } catch {
+    /* ignore */
+  }
+  return map;
+}
+
+export async function fetchCardanoTotalUsd(address: string): Promise<{
+  usd: number | null;
+  error?: string;
+}> {
+  const addr = address.trim();
+  if (!/^(addr1|addr_test1)[a-z0-9]+$/i.test(addr)) {
+    return { usd: null, error: "Dirección Cardano inválida (addr1…)" };
+  }
+
+  try {
+    const res = await fetch("https://api.koios.rest/api/v1/address_info", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ _addresses: [addr] }),
+      next: { revalidate: 0 },
+    });
+    if (!res.ok) {
+      return { usd: null, error: `Koios ${res.status}` };
+    }
+    const rows = (await res.json()) as Array<{
+      balance?: string;
+      utxo_set?: Array<{{
+        asset_list?: Array<{ unit?: string; quantity?: string }>;
+      }}>;
+    }>;
+    const row = rows[0];
+    if (!row) return { usd: 0 };
+
+    // Aggregate units
+    const qty = new Map<string, number>();
+    const lovelace = num(row.balance);
+    if (lovelace != null) qty.set("lovelace", lovelace);
+
+    for (const u of row.utxo_set ?? []) {
+      for (const a of u.asset_list ?? []) {
+        if (!a.unit || !a.quantity) continue;
+        const q = num(a.quantity) ?? 0;
+        qty.set(a.unit, (qty.get(a.unit) ?? 0) + q);
+      }
+    }
+
+    const cgIds = new Set<string>(["cardano"]);
+    // Only price ADA for reliability without a full asset registry;
+    // native tokens without mapping count as 0 USD (still shown in sync).
+    const prices = await fetchCoinGeckoPrices([...cgIds]);
+    const adaPrice = prices.get("cardano") ?? 0;
+    const ada = (qty.get("lovelace") ?? 0) / 1_000_000;
+    const usd = ada * adaPrice;
+
+    return { usd };
+  } catch (e) {
+    return {
+      usd: null,
+      error: e instanceof Error ? e.message : "Error consultando Cardano",
+    };
+  }
+}
+
+export async function refreshWalletUsd(
+  kind: "evm" | "cardano",
+  address: string,
+): Promise<{ usd: number | null; error?: string }> {
+  if (kind === "evm") return fetchEvmTotalUsd(address);
+  return fetchCardanoTotalUsd(address);
+}

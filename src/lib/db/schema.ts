@@ -181,9 +181,43 @@ export const receiptItems = pgTable("receipt_items", {
   productCategory: text("product_category"),
 });
 
+/** Personal savings: EVM wallets, Cardano addresses, Argentine bank balances. */
+export const savingsAssets = pgTable(
+  "savings_assets",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<"evm" | "cardano" | "bank">().notNull(),
+    label: text("label").notNull(),
+    /** Wallet address (EVM 0x… or Cardano addr1…) */
+    address: text("address"),
+    /** Manual bank balances */
+    amountArs: numeric("amount_ars", { precision: 16, scale: 2 }),
+    amountUsd: numeric("amount_usd", { precision: 16, scale: 2 }),
+    /** Cached on-chain total in USD */
+    lastBalanceUsd: numeric("last_balance_usd", { precision: 16, scale: 2 }),
+    lastSyncedAt: timestamp("last_synced_at", { mode: "date" }),
+    syncError: text("sync_error"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("savings_user_idx").on(t.userId),
+    index("savings_household_idx").on(t.householdId),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Household = typeof households.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type Category = typeof categories.$inferSelect;
 export type Receipt = typeof receipts.$inferSelect;
 export type ReceiptItem = typeof receiptItems.$inferSelect;
+export type SavingsAsset = typeof savingsAssets.$inferSelect;
