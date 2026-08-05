@@ -10,6 +10,7 @@ import {
   convertUsdToArs,
   getMonthEndBuyRates,
 } from "@/lib/fx/month-end-rates";
+import { currentPeriodAr, periodFromDateString } from "@/lib/utils";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -25,20 +26,31 @@ export default async function DashboardPage() {
     .from(schema.transactions)
     .where(eq(schema.transactions.householdId, ctx.household.id));
 
-  const now = new Date();
-  const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevPeriod = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+  const period = currentPeriodAr();
+  const [py, pm] = period.split("-").map(Number);
+  const prevDate = new Date(py!, pm! - 2, 1); // month is 1-based in period; Date month 0-based
+  // Safer prev period without Date TZ pitfalls:
+  let prevY = py!;
+  let prevM = pm! - 1;
+  if (prevM < 1) {
+    prevM = 12;
+    prevY -= 1;
+  }
+  const prevPeriod = `${prevY}-${String(prevM).padStart(2, "0")}`;
+  void prevDate;
 
-  // Same rules as Análisis / mes-a-mes: real spends only, no payments, no bank accounting
   const spendTxs = txs.filter(
     (t) =>
       !t.isPayment &&
       !isBankAccountingEntry(t.descriptionNormalized ?? ""),
   );
 
-  const monthTx = spendTxs.filter((t) => t.date.startsWith(period));
-  const prevMonthTx = spendTxs.filter((t) => t.date.startsWith(prevPeriod));
+  const monthTx = spendTxs.filter(
+    (t) => periodFromDateString(t.date) === period,
+  );
+  const prevMonthTx = spendTxs.filter(
+    (t) => periodFromDateString(t.date) === prevPeriod,
+  );
 
   const rates = await getMonthEndBuyRates([period, prevPeriod]);
   const rateNow = rates.get(period)?.buy ?? 0;
