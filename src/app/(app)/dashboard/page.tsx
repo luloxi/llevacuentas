@@ -16,6 +16,14 @@ import {
 import { currentPeriodAr, periodFromDateString } from "@/lib/utils";
 import { isVisibleToUser } from "@/lib/transactions";
 
+const FIXED_HOUSEHOLD_SERVICES: Array<{ slug: string; name: string }> = [
+  { slug: "alquiler", name: "Alquiler" },
+  { slug: "luz", name: "Luz" },
+  { slug: "agua", name: "Agua" },
+  { slug: "gas", name: "Gas" },
+  { slug: "internet", name: "Internet" },
+];
+
 function isPrivateToUser(
   r: { ownership: string | null; paidByUserId: string | null },
   userId: string,
@@ -172,6 +180,17 @@ export default async function DashboardPage() {
     };
   });
 
+  const paidServiceSlugs = new Set<string>();
+  for (const t of sharedMonthTx) {
+    const cat = t.categoryId ? byId.get(t.categoryId) : null;
+    if (cat?.slug) paidServiceSlugs.add(cat.slug);
+  }
+  const householdServices = FIXED_HOUSEHOLD_SERVICES.map((svc) => ({
+    slug: svc.slug,
+    name: svc.name,
+    paid: paidServiceSlugs.has(svc.slug),
+  }));
+
   const firstName = (user.name || user.email || "").split(/\s+/)[0] || "vos";
 
   return (
@@ -187,6 +206,7 @@ export default async function DashboardPage() {
       debtSettled={debtSettled}
       monthTxCount={monthTx.length}
       categorySummary={categorySummary}
+      householdServices={householdServices}
     />
   );
 }
