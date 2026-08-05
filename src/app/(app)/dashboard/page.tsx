@@ -5,13 +5,24 @@ import { redirect } from "next/navigation";
 import { getDb, schema } from "@/lib/db";
 import { eq } from "drizzle-orm";
 import { DashboardHome } from "@/components/dashboard-home";
-import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
+import {
+  isBankAccountingEntry,
+  isCardPaymentEntry,
+} from "@/lib/bbva/bank-entries";
 import {
   convertUsdToArs,
   getMonthEndBuyRates,
 } from "@/lib/fx/month-end-rates";
 import { currentPeriodAr, periodFromDateString } from "@/lib/utils";
 import { isVisibleToUser } from "@/lib/transactions";
+
+function isPrivateToUser(
+  r: { ownership: string | null; paidByUserId: string | null },
+  userId: string,
+): boolean {
+  if (r.paidByUserId) return r.paidByUserId === userId;
+  return r.ownership === "personal" || r.ownership == null;
+}
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -86,6 +97,55 @@ export default async function DashboardPage() {
   const sharedTotalArs = totalCombined(sharedMonthTx, rateNow);
   const sharedPrevTotalArs = totalCombined(sharedPrevTx, ratePrev);
 
+  // Personal debt estimate (same privacy rules as /api/stats/deuda)
+  const debtRows = txs.filter((t) => isPrivateToUser(t, user.id));
+  const debtPeriods = [
+    ...new Set(debtRows.map((r) => periodFromDateString(r.date))),
+  ].sort();
+  const debtRates = await getMonthEndBuyRates(debtPeriods);
+  let balanceArs = 0;
+  for (const p of debtPeriods) {
+    let chargesArs = 0;
+    let chargesUsd = 0;
+    let paymentsArs = 0;
+    let paymentsUsd = 0;
+    let creditsArs = 0;
+    let creditsUsd = 0;
+    for (const r of debtRows) {
+      if (periodFromDateString(r.date) !== p) continue;
+      const desc = r.descriptionNormalized ?? "";
+      if (isBankAccountingEntry(desc)) continue;
+      const ars = r.amountArs != null ? Math.abs(Number(r.amountArs)) : 0;
+      const usd = r.amountUsd != null ? Math.abs(Number(r.amountUsd)) : 0;
+      const looksPay = isCardPaymentEntry(desc);
+      const isPay = Boolean(r.isPayment);
+      const isCredit = Boolean(r.isCredit);
+      if (looksPay || (isPay && !isCredit)) {
+        paymentsArs += ars;
+        paymentsUsd += usd;
+      } else if (isPay || isCredit) {
+        creditsArs += ars;
+        creditsUsd += usd;
+      } else {
+        if (r.ownership === "shared") continue;
+        chargesArs += ars;
+        chargesUsd += usd;
+      }
+    }
+    const rate = debtRates.get(p)?.buy ?? 0;
+    const charges =
+      chargesArs + convertUsdToArs(chargesUsd, rate);
+    const reductions =
+      paymentsArs +
+      convertUsdToArs(paymentsUsd, rate) +
+      creditsArs +
+      convertUsdToArs(creditsUsd, rate);
+    balanceArs += charges - reductions;
+    if (balanceArs < 0) balanceArs = 0;
+  }
+  const debtBalanceArs = balanceArs < 50 ? 0 : balanceArs;
+  const debtSettled = debtBalanceArs === 0 && debtPeriods.length > 0;
+
   const { byId } = await getCategoryMap();
 
   const byCat = new Map<string, number>();
@@ -123,6 +183,8 @@ export default async function DashboardPage() {
       prevTotalArs={prevTotalArs}
       sharedTotalArs={sharedTotalArs}
       sharedPrevTotalArs={sharedPrevTotalArs}
+      debtBalanceArs={debtBalanceArs}
+      debtSettled={debtSettled}
       monthTxCount={monthTx.length}
       categorySummary={categorySummary}
     />
