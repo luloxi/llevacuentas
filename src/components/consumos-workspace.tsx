@@ -1,23 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { LayoutList, LineChart, List } from "lucide-react";
 import { TransactionsTable } from "@/components/transactions-table";
 import { MesAMesView } from "@/components/mes-a-mes";
 import { PageStack, SegmentedControl, Toast } from "@/components/ui";
+import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 
-type Tab = "lista" | "resumen" | "charts";
+const TABS = ["lista", "resumen", "charts"] as const;
+type Tab = (typeof TABS)[number];
 
 function tabFromParam(raw: string | null): Tab {
   if (raw === "resumen" || raw === "charts" || raw === "lista") return raw;
   return "lista";
 }
 
-/**
- * Gastos hosts the expense list plus the former Análisis resumen/charts.
- * Add expense and card import live in the central + modal.
- */
 export function ConsumosWorkspace() {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>(() =>
@@ -53,39 +51,43 @@ export function ConsumosWorkspace() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  const onTab = useCallback((v: Tab) => setTab(v), []);
+  const swipe = useSwipeTabs({ tabs: TABS, value: tab, onChange: onTab });
+
   return (
-    <PageStack>
-      <div className="flex justify-end">
-        <SegmentedControl
-          value={tab}
-          onChange={setTab}
-          options={[
-            {
-              id: "lista",
-              label: "Lista",
-              icon: <List className="h-3.5 w-3.5" />,
-            },
-            {
-              id: "resumen",
-              label: "Resumen",
-              icon: <LayoutList className="h-3.5 w-3.5" />,
-            },
-            {
-              id: "charts",
-              label: "Gráficos",
-              icon: <LineChart className="h-3.5 w-3.5" />,
-            },
-          ]}
-        />
-      </div>
+    <PageStack className="!space-y-4">
+      <SegmentedControl
+        value={tab}
+        onChange={onTab}
+        className="w-full"
+        options={[
+          {
+            id: "lista",
+            label: "Lista",
+            icon: <List className="h-3.5 w-3.5" />,
+          },
+          {
+            id: "resumen",
+            label: "Resumen",
+            icon: <LayoutList className="h-3.5 w-3.5" />,
+          },
+          {
+            id: "charts",
+            label: "Gráficos",
+            icon: <LineChart className="h-3.5 w-3.5" />,
+          },
+        ]}
+      />
 
       {toast && <Toast>{toast}</Toast>}
 
-      {tab === "lista" ? (
-        <TransactionsTable key={tableKey} compactToolbar />
-      ) : (
-        <MesAMesView mode={tab === "charts" ? "charts" : "resumen"} />
-      )}
+      <div {...swipe} className="min-h-[40vh]">
+        {tab === "lista" ? (
+          <TransactionsTable key={tableKey} compactToolbar />
+        ) : (
+          <MesAMesView mode={tab === "charts" ? "charts" : "resumen"} />
+        )}
+      </div>
     </PageStack>
   );
 }
