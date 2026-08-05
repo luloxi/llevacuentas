@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ChevronDown, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, Search,
+  ChevronDown, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, Search, SlidersHorizontal, X,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { formatArs, formatUsd, formatDateAr, cn, currentPeriodAr, periodFromDateString } from "@/lib/utils";
@@ -27,6 +27,11 @@ type Tx = {
   category: Category | null; hasTicket: boolean; receipt: ReceiptInfo | null;
 };
 
+type OwnershipFilter = "all" | "personal" | "shared";
+type CategoryFilter = "all" | "uncategorized" | string; // string = category id
+type TicketFilter = "all" | "ticket" | "no-ticket";
+type CurrencyFilter = "all" | "ars" | "usd";
+
 const PRODUCT_SUBCATS = [
   "Lácteos","Panadería","Bebidas","Carnes","Verduras","Frutas",
   "Limpieza","Higiene","Snacks","Congelados","Almacén","Otros",
@@ -40,6 +45,11 @@ function memberLabel(m: Member) {
 function categoryLabel(name?: string | null) {
   if (!name) return "—";
   return name.toLowerCase() === "uncategorized" ? "Sin categoría" : name;
+}
+function isUncategorized(t: Tx) {
+  const slug = t.category?.slug?.toLowerCase();
+  const name = t.category?.name?.toLowerCase();
+  return !t.category || slug === "uncategorized" || name === "uncategorized" || name === "sin categoría";
 }
 
 async function parseJson<T>(res: Response): Promise<T> {
@@ -82,7 +92,11 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
   const [period, setPeriod] = useState(currentPeriodAr);
   const [allPeriods, setAllPeriods] = useState<string[]>([]);
   const [q, setQ] = useState("");
-  const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
+  const [ownershipF, setOwnershipF] = useState<OwnershipFilter>("all");
+  const [categoryF, setCategoryF] = useState<CategoryFilter>("all");
+  const [ticketF, setTicketF] = useState<TicketFilter>("all");
+  const [currencyF, setCurrencyF] = useState<CurrencyFilter>("all");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -92,6 +106,14 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
   const [pageSize, setPageSize] = useState(5);
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  const activeFilterCount = [
+    ownershipF !== "all",
+    categoryF !== "all",
+    ticketF !== "all",
+    currencyF !== "all",
+  ].filter(Boolean).length;
 
   useEffect(() => {
     if (!toast) return;
@@ -100,22 +122,21 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
   }, [toast]);
 
   useEffect(() => {
-    if (!exportOpen) return;
+    if (!exportOpen && !filterOpen) return;
     function onDoc(e: MouseEvent) {
-      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
-        setExportOpen(false);
-      }
+      const t = e.target as Node;
+      if (exportOpen && exportRef.current && !exportRef.current.contains(t)) setExportOpen(false);
+      if (filterOpen && filterRef.current && !filterRef.current.contains(t)) setFilterOpen(false);
     }
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [exportOpen]);
+  }, [exportOpen, filterOpen]);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     const params = new URLSearchParams();
     if (period) params.set("period", period);
     if (q) params.set("q", q);
-    if (uncategorizedOnly) params.set("uncategorized", "1");
     try {
       const res = await fetch(`/api/transactions?${params}`, { credentials: "include" });
       const data = await parseJson<{
@@ -149,7 +170,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
     } finally {
       setLoading(false);
     }
-  }, [period, q, uncategorizedOnly]);
+  }, [period, q]);
 
   useEffect(() => {
     let cancelled = false;
@@ -186,10 +207,19 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
     return () => window.removeEventListener("lc:expense-created", onCreated);
   }, [load]);
 
-  const sorted = useMemo(
-    () => [...rows].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
-    [rows],
-  );
+  const sorted = useMemo(() => {
+    let list = [...rows];
+    if (ownershipF !== "all") list = list.filter((t) => t.ownership === ownershipF);
+    if (categoryF === "uncategorized") list = list.filter(isUncategorized);
+    else if (categoryF !== "all") list = list.filter((t) => t.category?.id === categoryF);
+    if (ticketF === "ticket") list = list.filter((t) => t.hasTicket);
+    else if (ticketF === "no-ticket") list = list.filter((t) => !t.hasTicket);
+    if (currencyF === "ars") list = list.filter((t) => t.amountArs != null && t.amountArs > 0);
+    else if (currencyF === "usd") list = list.filter((t) => t.amountUsd != null && t.amountUsd > 0);
+    list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    return list;
+  }, [rows, ownershipF, categoryF, ticketF, currencyF]);
+
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageRows = useMemo(() => {
@@ -198,6 +228,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
   }, [sorted, safePage, pageSize]);
 
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+  useEffect(() => { setPage(1); }, [ownershipF, categoryF, ticketF, currencyF]);
 
   async function patch(id: string, body: Record<string, unknown>) {
     setError(null); setSavingId(id);
@@ -271,9 +302,22 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
     });
   }
 
+  function clearFilters() {
+    setOwnershipF("all");
+    setCategoryF("all");
+    setTicketF("all");
+    setCurrencyF("all");
+  }
+
   const periods = allPeriods.length
     ? allPeriods
     : [...new Set(rows.map((r) => periodFromDateString(r.date)))].sort().reverse();
+
+  const catOptions = useMemo(() => {
+    return categories
+      .filter((c) => c.slug !== "uncategorized")
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [categories]);
 
   function exportCsv() {
     const ws = XLSX.utils.json_to_sheet(toSheet(sorted, members));
@@ -289,9 +333,33 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
     setExportOpen(false);
   }
 
+  function Chip({
+    active,
+    onClick,
+    children,
+  }: {
+    active: boolean;
+    onClick: () => void;
+    children: React.ReactNode;
+  }) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "rounded-full border px-2.5 py-1 text-xs font-medium transition",
+          active
+            ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-100"
+            : "border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900",
+        )}
+      >
+        {children}
+      </button>
+    );
+  }
+
   return (
     <div className="space-y-3">
-      {/* Row 1: period + download | Sin categoría (opposite edge) */}
       <div className="flex w-full items-center gap-2">
         <select
           value={period}
@@ -307,7 +375,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
         <div className="relative shrink-0" ref={exportRef}>
           <button
             type="button"
-            onClick={() => setExportOpen((o) => !o)}
+            onClick={() => { setExportOpen((o) => !o); setFilterOpen(false); }}
             disabled={!sorted.length}
             className="lc-btn lc-btn-secondary !px-2.5 disabled:opacity-40"
             aria-label="Descargar"
@@ -321,51 +389,135 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
               <p className="border-b border-zinc-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:border-zinc-800">
                 Exportar listado filtrado
               </p>
-              <button
-                type="button"
-                onClick={exportCsv}
-                className="flex w-full items-start gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 dark:hover:bg-zinc-900"
-              >
+              <button type="button" onClick={exportCsv} className="flex w-full items-start gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 dark:hover:bg-zinc-900">
                 <FileText className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" />
                 <span>
                   <span className="block text-sm font-semibold">CSV</span>
-                  <span className="block text-xs text-zinc-500">
-                    Texto separado por comas. Ideal para Google Sheets o importar en otra app.
-                  </span>
+                  <span className="block text-xs text-zinc-500">Texto separado por comas. Ideal para Sheets.</span>
                 </span>
               </button>
-              <button
-                type="button"
-                onClick={exportXls}
-                className="flex w-full items-start gap-3 border-t border-zinc-100 px-3 py-2.5 text-left transition hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-              >
+              <button type="button" onClick={exportXls} className="flex w-full items-start gap-3 border-t border-zinc-100 px-3 py-2.5 text-left transition hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900">
                 <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
                 <span>
                   <span className="block text-sm font-semibold">Excel (.xlsx)</span>
-                  <span className="block text-xs text-zinc-500">
-                    Planilla de Excel lista para abrir en Office o LibreOffice.
-                  </span>
+                  <span className="block text-xs text-zinc-500">Planilla lista para Office o LibreOffice.</span>
                 </span>
               </button>
             </div>
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setUncategorizedOnly((v) => !v)}
-          className={cn(
-            "ml-auto shrink-0 rounded-xl border px-3 py-2 text-sm font-medium transition",
-            uncategorizedOnly
-              ? "border-amber-500 bg-amber-50 text-amber-900 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-100"
-              : "border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900",
+        {/* Filters menu */}
+        <div className="relative ml-auto shrink-0" ref={filterRef}>
+          <button
+            type="button"
+            onClick={() => { setFilterOpen((o) => !o); setExportOpen(false); }}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition",
+              activeFilterCount > 0 || filterOpen
+                ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-100"
+                : "border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900",
+            )}
+            aria-expanded={filterOpen}
+            aria-label="Filtros"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            Filtros
+            {activeFilterCount > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold text-white">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+
+          {filterOpen && (
+            <div className="absolute right-0 z-30 mt-1.5 w-[min(100vw-1.5rem,20rem)] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
+              <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Filtros</p>
+                {activeFilterCount > 0 && (
+                  <button type="button" onClick={clearFilters} className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                    Limpiar
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-3 p-3">
+                <div>
+                  <p className="mb-1.5 text-[11px] font-semibold text-zinc-500">Tipo</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Chip active={ownershipF === "all"} onClick={() => setOwnershipF("all")}>Todos</Chip>
+                    <Chip active={ownershipF === "personal"} onClick={() => setOwnershipF("personal")}>Personal</Chip>
+                    <Chip active={ownershipF === "shared"} onClick={() => setOwnershipF("shared")}>Hogar</Chip>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-1.5 text-[11px] font-semibold text-zinc-500">Categoría</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Chip active={categoryF === "all"} onClick={() => setCategoryF("all")}>Todas</Chip>
+                    <Chip active={categoryF === "uncategorized"} onClick={() => setCategoryF("uncategorized")}>Sin categoría</Chip>
+                    {catOptions.map((c) => (
+                      <Chip key={c.id} active={categoryF === c.id} onClick={() => setCategoryF(c.id)}>
+                        {categoryLabel(c.name)}
+                      </Chip>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-1.5 text-[11px] font-semibold text-zinc-500">Origen</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Chip active={ticketF === "all"} onClick={() => setTicketF("all")}>Todos</Chip>
+                    <Chip active={ticketF === "ticket"} onClick={() => setTicketF("ticket")}>Con ticket</Chip>
+                    <Chip active={ticketF === "no-ticket"} onClick={() => setTicketF("no-ticket")}>Sin ticket</Chip>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-1.5 text-[11px] font-semibold text-zinc-500">Moneda</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Chip active={currencyF === "all"} onClick={() => setCurrencyF("all")}>Todas</Chip>
+                    <Chip active={currencyF === "ars"} onClick={() => setCurrencyF("ars")}>Pesos</Chip>
+                    <Chip active={currencyF === "usd"} onClick={() => setCurrencyF("usd")}>Dólares</Chip>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
-        >
-          Sin categoría
-        </button>
+        </div>
       </div>
 
-      {/* Row 2: full-width search */}
+      {activeFilterCount > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {ownershipF !== "all" && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium dark:bg-zinc-800">
+              {ownershipF === "personal" ? "Personal" : "Hogar"}
+              <button type="button" onClick={() => setOwnershipF("all")} aria-label="Quitar"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {categoryF !== "all" && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium dark:bg-zinc-800">
+              {categoryF === "uncategorized"
+                ? "Sin categoría"
+                : categoryLabel(categories.find((c) => c.id === categoryF)?.name)}
+              <button type="button" onClick={() => setCategoryF("all")} aria-label="Quitar"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {ticketF !== "all" && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium dark:bg-zinc-800">
+              {ticketF === "ticket" ? "Con ticket" : "Sin ticket"}
+              <button type="button" onClick={() => setTicketF("all")} aria-label="Quitar"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {currencyF !== "all" && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium dark:bg-zinc-800">
+              {currencyF === "ars" ? "Pesos" : "Dólares"}
+              <button type="button" onClick={() => setCurrencyF("all")} aria-label="Quitar"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="relative w-full">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
         <input
@@ -383,11 +535,13 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
         <LoadingBlock label="Cargando consumos…" />
       ) : !sorted.length ? (
         <p className="rounded-2xl border border-dashed border-zinc-200 px-4 py-12 text-center text-sm text-zinc-500 dark:border-zinc-800">
-          {period
-            ? `No hay gastos en ${formatPeriodLabel(period)}. Probá otro mes o "Todos los meses".`
-            : compactToolbar
-              ? "No hay consumos. Usá Agregar o importá el resumen de la tarjeta."
-              : "No hay consumos."}
+          {activeFilterCount > 0
+            ? "Ningún gasto coincide con los filtros."
+            : period
+              ? `No hay gastos en ${formatPeriodLabel(period)}. Probá otro mes o "Todos los meses".`
+              : compactToolbar
+                ? "No hay consumos. Usá Agregar o importá el resumen de la tarjeta."
+                : "No hay consumos."}
         </p>
       ) : (
         <>
