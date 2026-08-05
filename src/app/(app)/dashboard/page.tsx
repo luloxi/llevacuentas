@@ -13,6 +13,7 @@ import {
   convertUsdToArs,
   getMonthEndBuyRates,
 } from "@/lib/fx/month-end-rates";
+import { getLiveRates } from "@/lib/fx/live-rates";
 import { currentPeriodAr, periodFromDateString } from "@/lib/utils";
 import { isVisibleToUser } from "@/lib/transactions";
 
@@ -83,7 +84,10 @@ export default async function DashboardPage() {
     (t) => periodFromDateString(t.date) === prevPeriod,
   );
 
-  const rates = await getMonthEndBuyRates([period, prevPeriod]);
+  const [rates, liveRatesResult] = await Promise.all([
+    getMonthEndBuyRates([period, prevPeriod]),
+    getLiveRates(),
+  ]);
   const rateNow = rates.get(period)?.buy ?? 0;
   const ratePrev = rates.get(prevPeriod)?.buy ?? 0;
 
@@ -105,7 +109,6 @@ export default async function DashboardPage() {
   const sharedTotalArs = totalCombined(sharedMonthTx, rateNow);
   const sharedPrevTotalArs = totalCombined(sharedPrevTx, ratePrev);
 
-  // Personal debt estimate (same privacy rules as /api/stats/deuda)
   const debtRows = txs.filter((t) => isPrivateToUser(t, user.id));
   const debtPeriods = [
     ...new Set(debtRows.map((r) => periodFromDateString(r.date))),
@@ -207,6 +210,7 @@ export default async function DashboardPage() {
       monthTxCount={monthTx.length}
       categorySummary={categorySummary}
       householdServices={householdServices}
+      liveRates={liveRatesResult.rates}
     />
   );
 }
