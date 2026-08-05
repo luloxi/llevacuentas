@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
   ArrowDownRight,
+  Check,
   ChevronRight,
   Minus,
   Moon,
@@ -24,6 +25,26 @@ type CategorySummary = {
   total: number;
   pct: number;
 };
+
+type HouseholdService = {
+  slug: string;
+  name: string;
+  paid: boolean;
+};
+
+const SKIPPED_SERVICES_KEY = "lc:hogar-skipped-services";
+
+function loadSkippedServices(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(SKIPPED_SERVICES_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as string[];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
 
 function easeOutCubic(t: number) {
   return 1 - Math.pow(1 - t, 3);
@@ -218,6 +239,7 @@ export function DashboardHome({
   debtSettled,
   monthTxCount,
   categorySummary,
+  householdServices = [],
 }: {
   firstName: string;
   period: string;
@@ -230,6 +252,7 @@ export function DashboardHome({
   debtSettled: boolean;
   monthTxCount: number;
   categorySummary: CategorySummary[];
+  householdServices?: HouseholdService[];
   householdName?: string;
   initialCategories?: unknown;
   initialMembers?: unknown;
@@ -240,6 +263,11 @@ export function DashboardHome({
   const [liveCats, setLiveCats] = useState(categorySummary);
   const [burst, setBurst] = useState(false);
   const [pop, setPop] = useState(false);
+  const [skipped, setSkipped] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    setSkipped(loadSkippedServices());
+  }, []);
 
   useEffect(() => {
     setLiveTotal(totalArs);
@@ -265,6 +293,8 @@ export function DashboardHome({
     window.addEventListener("lc:expense-created", onCreated);
     return () => window.removeEventListener("lc:expense-created", onCreated);
   }, [router, triggerCelebrate]);
+
+  const visibleServices = householdServices.filter((s) => !skipped.has(s.slug));
 
   return (
     <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-3">
@@ -375,6 +405,33 @@ export function DashboardHome({
             <p className="mt-0.5 text-lg font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
               {formatArs(sharedTotalArs)}
             </p>
+            {visibleServices.length > 0 && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                {visibleServices.map((svc) => {
+                  const color = colorForCategory(svc.slug);
+                  return (
+                    <span
+                      key={svc.slug}
+                      title={`${svc.name}: ${svc.paid ? "Pagado" : "Pendiente"}`}
+                      className={cn(
+                        "relative flex h-7 w-7 items-center justify-center rounded-lg",
+                        svc.paid
+                          ? "bg-[var(--brand-soft)] text-[var(--brand-fg)]"
+                          : "bg-[var(--surface-muted)] text-[var(--muted-fg)]",
+                      )}
+                      style={svc.paid ? undefined : { color }}
+                    >
+                      <CategoryIcon slug={svc.slug} size={13} />
+                      {svc.paid && (
+                        <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-[var(--brand)] text-white dark:text-[#121110]">
+                          <Check className="h-2 w-2" strokeWidth={3} />
+                        </span>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
             <VsPrevMeter
               total={sharedTotalArs}
               prevTotal={sharedPrevTotalArs}
