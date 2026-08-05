@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
   ArrowDownRight,
-  Check,
   ChevronRight,
   Minus,
   Moon,
@@ -407,29 +406,20 @@ export function DashboardHome({
             </p>
             {visibleServices.length > 0 && (
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                {visibleServices.map((svc) => {
-                  const color = colorForCategory(svc.slug);
-                  return (
-                    <span
-                      key={svc.slug}
-                      title={`${svc.name}: ${svc.paid ? "Pagado" : "Pendiente"}`}
-                      className={cn(
-                        "relative flex h-7 w-7 items-center justify-center rounded-lg",
-                        svc.paid
-                          ? "bg-[var(--brand-soft)] text-[var(--brand-fg)]"
-                          : "bg-[var(--surface-muted)] text-[var(--muted-fg)]",
-                      )}
-                      style={svc.paid ? undefined : { color }}
-                    >
-                      <CategoryIcon slug={svc.slug} size={13} />
-                      {svc.paid && (
-                        <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-[var(--brand)] text-white dark:text-[#121110]">
-                          <Check className="h-2 w-2" strokeWidth={3} />
-                        </span>
-                      )}
-                    </span>
-                  );
-                })}
+                {visibleServices.map((svc) => (
+                  <span
+                    key={svc.slug}
+                    title={`${svc.name}: ${svc.paid ? "Pagado" : "Pendiente"}`}
+                    className={cn(
+                      "flex h-7 w-7 items-center justify-center rounded-lg",
+                      svc.paid
+                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-400"
+                        : "bg-zinc-100 text-zinc-400 dark:bg-zinc-800/80 dark:text-zinc-500",
+                    )}
+                  >
+                    <CategoryIcon slug={svc.slug} size={13} />
+                  </span>
+                ))}
               </div>
             )}
             <VsPrevMeter
