@@ -262,7 +262,7 @@ export function DeudaView() {
             value={settled ? "Saldada" : formatArs(Math.max(summary.currentBalanceArs, 0))}
             hint={
               settled
-                ? "Sin saldo pendiente según los movimientos importados"
+                ? "Sin saldo pendiente según tus movimientos"
                 : summary.currentBalanceUsd !== 0
                   ? `+ ${formatUsd(Math.abs(summary.currentBalanceUsd))} en USD`
                   : undefined
@@ -289,17 +289,18 @@ export function DeudaView() {
 
       {settled && (
         <p className="rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-3 py-2 text-xs leading-relaxed text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100">
-          Cuenta en cero con los datos importados. Si cancelaste la tarjeta,
-          este panel queda como historial de cuánto se pagó y el pico que llegó
+          Cuenta en cero con tus datos importados. Si cancelaste la tarjeta,
+          este panel queda como historial de cuánto pagaste y el pico que llegó
           a tener la deuda.
         </p>
       )}
 
       <p className="rounded-xl border border-zinc-200/80 bg-white/60 px-3 py-2 text-xs leading-relaxed text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/40">
-        Estimación a partir de cargos menos pagos/créditos de los resúmenes
-        importados (USD al TC compra de fin de mes). Si faltan meses o algún
-        “SU PAGO”, el número puede desfasarse. La deuda no baja de $0 (pago de
-        más = saldada).
+        <strong className="font-semibold text-zinc-600 dark:text-zinc-300">Solo vos ves esto.</strong>{" "}
+        Estimación con tus cargos y pagos importados (no incluye gastos de otros
+        del hogar ni lo marcado como Hogar). USD al TC compra de fin de mes. Si
+        faltan meses o algún “SU PAGO”, el número puede desfasarse. La deuda no
+        baja de $0.
       </p>
 
       <SegmentedControl
@@ -423,7 +424,7 @@ export function DeudaView() {
                     colSpan={4}
                     className="px-3 py-8 text-center text-zinc-500"
                   >
-                    Todavía no hay pagos en los resúmenes importados.
+                    Todavía no hay pagos en tus resúmenes importados.
                   </td>
                 </tr>
               )}
