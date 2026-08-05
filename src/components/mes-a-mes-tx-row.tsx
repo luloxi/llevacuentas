@@ -14,7 +14,7 @@ type Tx = {
 };
 
 /**
- * Expense row for Resumen: name always visible on mobile (stacked layout).
+ * Expense row for Resumen: name always visible + currency impossible to confuse.
  */
 export function MesAMesTxRow({
   t,
@@ -38,7 +38,7 @@ export function MesAMesTxRow({
 
   return (
     <li className="rounded-xl border border-zinc-100/80 bg-white px-3 py-2.5 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs tabular-nums text-zinc-500">
             {formatDateAr(t.date)}
@@ -47,19 +47,29 @@ export function MesAMesTxRow({
             {t.descriptionNormalized || "Sin descripción"}
           </p>
         </div>
-        <div className="shrink-0 text-right">
+        <div className="flex shrink-0 flex-col items-end gap-1">
           {hasArs && (
-            <p className="font-semibold tabular-nums text-zinc-800 dark:text-zinc-100">
-              {formatArs(Math.abs(t.amountArs!))}
-            </p>
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-100 px-2 py-1 dark:bg-zinc-800">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                Pesos
+              </span>
+              <span className="text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
+                {formatArs(Math.abs(t.amountArs!))}
+              </span>
+            </span>
           )}
           {hasUsd && (
-            <p className="text-xs font-medium tabular-nums text-sky-700 dark:text-sky-300">
-              {formatUsd(Math.abs(t.amountUsd!))}
-            </p>
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-sky-100 px-2 py-1 dark:bg-sky-950">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                Dólares
+              </span>
+              <span className="text-sm font-semibold tabular-nums text-sky-900 dark:text-sky-100">
+                {formatUsd(Math.abs(t.amountUsd!))}
+              </span>
+            </span>
           )}
           {!hasArs && !hasUsd && (
-            <p className="text-zinc-400">—</p>
+            <span className="text-zinc-400">—</span>
           )}
         </div>
       </div>
