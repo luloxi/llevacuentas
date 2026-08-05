@@ -40,6 +40,7 @@ type LiveRate = {
 
 const SKIPPED_SERVICES_KEY = "lc:hogar-skipped-services";
 const SHOW_DEBT_KEY = "lc:home-show-debt";
+const SHOW_HOGAR_KEY = "lc:home-show-hogar";
 
 function loadSkippedServices(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -53,14 +54,14 @@ function loadSkippedServices(): Set<string> {
   }
 }
 
-function loadShowDebt(): boolean {
-  if (typeof window === "undefined") return true;
+function loadFlag(key: string, defaultValue = true): boolean {
+  if (typeof window === "undefined") return defaultValue;
   try {
-    const raw = window.localStorage.getItem(SHOW_DEBT_KEY);
-    if (raw === null) return true;
+    const raw = window.localStorage.getItem(key);
+    if (raw === null) return defaultValue;
     return raw !== "0" && raw !== "false";
   } catch {
-    return true;
+    return defaultValue;
   }
 }
 
@@ -322,10 +323,12 @@ export function DashboardHome({
   const [pop, setPop] = useState(false);
   const [skipped, setSkipped] = useState<Set<string>>(() => new Set());
   const [showDebt, setShowDebt] = useState(true);
+  const [showHogar, setShowHogar] = useState(true);
 
   useEffect(() => {
     setSkipped(loadSkippedServices());
-    setShowDebt(loadShowDebt());
+    setShowDebt(loadFlag(SHOW_DEBT_KEY));
+    setShowHogar(loadFlag(SHOW_HOGAR_KEY));
   }, []);
 
   useEffect(() => {
@@ -448,46 +451,48 @@ export function DashboardHome({
         </Link>
       )}
 
-      <Link
-        href="/compartido"
-        className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
-        aria-label={`Hogar ${formatArs(sharedTotalArs)}`}
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
-              Hogar
-            </p>
-            <p className="mt-0.5 text-lg font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
-              {formatArs(sharedTotalArs)}
-            </p>
-            {visibleServices.length > 0 && (
-              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                {visibleServices.map((svc) => (
-                  <span
-                    key={svc.slug}
-                    title={`${svc.name}: ${svc.paid ? "Pagado" : "Pendiente"}`}
-                    className={cn(
-                      "flex h-7 w-7 items-center justify-center rounded-lg",
-                      svc.paid
-                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/55 dark:text-emerald-300"
-                        : "bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500",
-                    )}
-                  >
-                    <CategoryIcon slug={svc.slug} size={13} />
-                  </span>
-                ))}
-              </div>
-            )}
-            <VsPrevMeter
-              total={sharedTotalArs}
-              prevTotal={sharedPrevTotalArs}
-              prevPeriod={prevPeriod}
-            />
+      {showHogar && (
+        <Link
+          href="/compartido"
+          className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
+          aria-label={`Hogar ${formatArs(sharedTotalArs)}`}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
+                Hogar
+              </p>
+              <p className="mt-0.5 text-lg font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+                {formatArs(sharedTotalArs)}
+              </p>
+              {visibleServices.length > 0 && (
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                  {visibleServices.map((svc) => (
+                    <span
+                      key={svc.slug}
+                      title={`${svc.name}: ${svc.paid ? "Pagado" : "Pendiente"}`}
+                      className={cn(
+                        "flex h-7 w-7 items-center justify-center rounded-lg",
+                        svc.paid
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/55 dark:text-emerald-300"
+                          : "bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500",
+                      )}
+                    >
+                      <CategoryIcon slug={svc.slug} size={13} />
+                    </span>
+                  ))}
+                </div>
+              )}
+              <VsPrevMeter
+                total={sharedTotalArs}
+                prevTotal={sharedPrevTotalArs}
+                prevPeriod={prevPeriod}
+              />
+            </div>
+            <TapHint />
           </div>
-          <TapHint />
-        </div>
-      </Link>
+        </Link>
+      )}
 
       {showDebt && (
         <Link
