@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   formatArs,
@@ -17,13 +17,16 @@ import { colorForCategory } from "@/lib/category-colors";
 import {
   ArrowDownRight,
   ArrowUpRight,
+  Check,
   ChevronDown,
   ChevronRight,
   Copy,
+  Home,
   LayoutList,
   LineChart,
   Link2,
   Minus,
+  Plus,
   UserPlus,
   Users,
   X,
@@ -69,6 +72,15 @@ type Expense = {
 
 type ViewTab = "vista" | "charts";
 
+/** Fixed household services shown as a permanent checklist in Hogar. */
+const FIXED_SERVICES: Array<{ slug: string; name: string }> = [
+  { slug: "alquiler", name: "Alquiler" },
+  { slug: "luz", name: "Luz" },
+  { slug: "agua", name: "Agua" },
+  { slug: "gas", name: "Gas" },
+  { slug: "internet", name: "Internet" },
+];
+
 function tabFromParam(raw: string | null): ViewTab {
   return raw === "charts" ? "charts" : "vista";
 }
@@ -76,6 +88,10 @@ function tabFromParam(raw: string | null): ViewTab {
 function firstName(name: string) {
   const n = name.trim();
   return n ? (n.split(/\s+/)[0] ?? n) : "Sin nombre";
+}
+
+function periodOfDate(date: string): string {
+  return date.slice(0, 7);
 }
 
 export function CompartidoView() {
@@ -101,6 +117,7 @@ export function CompartidoView() {
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [ticketOpen, setTicketOpen] = useState<Set<string>>(new Set());
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     setViewTab(tabFromParam(searchParams.get("tab")));
@@ -114,43 +131,51 @@ export function CompartidoView() {
     [router],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const q =
-          period === "all"
-            ? "?period=all"
-            : `?period=${encodeURIComponent(period)}`;
-        const res = await fetch(`/api/stats/compartido${q}`, {
-          credentials: "include",
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Error");
-        if (cancelled) return;
-        setExpenses(data.expenses ?? []);
-        setCategories(data.categories ?? []);
-        setPeriods(data.periods ?? []);
-        setMembers(data.members ?? []);
-        setInviteCode(data.inviteCode ?? "");
-        setHouseholdName(data.householdName ?? "");
-        setPrevPeriod(data.prevPeriod ?? null);
-        setPrevTotalArs(data.prevTotalArs ?? 0);
-        setTotal(data.summary?.totalArsCombined ?? 0);
-        setExpenseCount(data.summary?.expenseCount ?? 0);
-      } catch (e) {
-        if (!cancelled)
-          setError(e instanceof Error ? e.message : "Error de red");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const q =
+        period === "all"
+          ? "?period=all"
+          : `?period=${encodeURIComponent(period)}`;
+      const res = await fetch(`/api/stats/compartido${q}`, {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error");
+      setExpenses(data.expenses ?? []);
+      setCategories(data.categories ?? []);
+      setPeriods(data.periods ?? []);
+      setMembers(data.members ?? []);
+      setInviteCode(data.inviteCode ?? "");
+      setHouseholdName(data.householdName ?? "");
+      setPrevPeriod(data.prevPeriod ?? null);
+      setPrevTotalArs(data.prevTotalArs ?? 0);
+      setTotal(data.summary?.totalArsCombined ?? 0);
+      setExpenseCount(data.summary?.expenseCount ?? 0);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de red");
+    } finally {
+      setLoading(false);
+    }
   }, [period]);
+
+  useEffect(() => {
+    void load();
+  }, [load, reloadKey]);
+
+  useEffect(() => {
+    function onCreated() {
+      setReloadKey((k) => k + 1);
+    }
+    window.addEventListener("lc:expense-created", onCreated);
+    window.addEventListener("lc:card-imported", onCreated);
+    return () => {
+      window.removeEventListener("lc:expense-created", onCreated);
+      window.removeEventListener("lc:card-imported", onCreated);
+    };
+  }, []);
 
   const inviteLink =
     typeof window !== "undefined" && inviteCode
@@ -186,6 +211,38 @@ export function CompartidoView() {
       return next;
     });
   }
+
+  function openAddExpense() {
+    window.dispatchEvent(new Event("lc:open-add-expense"));
+  }
+
+  /** Checklist period: selected month, or current month when viewing "all". */
+  const checklistPeriod = period === "all" ? currentPeriodAr() : period;
+
+  const fixedServiceStatus = useMemo(() => {
+    return FIXED_SERVICES.map((svc) => {
+      const list = expenses.filter((e) => {
+        if (e.categorySlug !== svc.slug) return false;
+        if (period === "all") return periodOfDate(e.date) === checklistPeriod;
+        return true;
+      });
+      const totalArs = list.reduce((s, e) => s + e.amountCombined, 0);
+      const payers = [
+        ...new Set(list.map((e) => firstName(e.paidByName)).filter(Boolean)),
+      ];
+      return {
+        ...svc,
+        paid: list.length > 0,
+        totalArs,
+        count: list.length,
+        payers,
+        expenses: list,
+      };
+    });
+  }, [expenses, period, checklistPeriod]);
+
+  const paidCount = fixedServiceStatus.filter((s) => s.paid).length;
+  const allFixedPaid = paidCount === FIXED_SERVICES.length;
 
   if (loading && expenses.length === 0 && total === 0 && viewTab === "vista") {
     return <LoadingBlock label="Cargando hogar…" />;
@@ -326,6 +383,98 @@ export function CompartidoView() {
                   {expenseCount === 1 ? "" : "s"}
                 </p>
               )}
+            </div>
+
+            {/* Always-visible household fixed services checklist */}
+            <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+              <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-fg)]">
+                    <Home className="h-3.5 w-3.5" />
+                    Servicios de la casa
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--muted-fg)]">
+                    {formatPeriodLabel(checklistPeriod)}
+                    {period === "all" ? " · mes actual" : ""}
+                    {" · "}
+                    <span
+                      className={
+                        allFixedPaid
+                          ? "font-medium text-[var(--brand-fg)]"
+                          : "font-medium text-amber-700 dark:text-amber-400"
+                      }
+                    >
+                      {paidCount}/{FIXED_SERVICES.length} pagos
+                    </span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={openAddExpense}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--brand-fg)] transition hover:bg-[var(--brand-soft)]"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Cargar
+                </button>
+              </div>
+              <ul className="divide-y divide-[var(--border)]">
+                {fixedServiceStatus.map((svc) => {
+                  const color = colorForCategory(svc.slug);
+                  return (
+                    <li
+                      key={svc.slug}
+                      className="flex items-center gap-3 px-4 py-3"
+                    >
+                      <span
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                        style={{ backgroundColor: `${color}18`, color }}
+                      >
+                        <CategoryIcon slug={svc.slug} size={16} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{svc.name}</p>
+                        {svc.paid ? (
+                          <p className="text-xs text-[var(--muted-fg)]">
+                            {svc.payers.length > 0
+                              ? `Pagó ${svc.payers.join(", ")}`
+                              : "Registrado"}
+                            {svc.count > 1 ? ` · ${svc.count} cargos"` : ""}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-amber-700 dark:text-amber-400">
+                            Sin cargar este mes
+                          </p>
+                        )}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        {svc.paid ? (
+                          <>
+                            <p className="text-sm font-semibold tabular-nums">
+                              {formatArs(svc.totalArs)}
+                            </p>
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--brand-fg)]">
+                              <Check className="h-3 w-3" />
+                              Pagado
+                            </span>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={openAddExpense}
+                            className="rounded-full border border-dashed border-[var(--border)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted-fg)] transition hover:border-[var(--brand)]/40 hover:text-[var(--brand-fg)]"
+                          >
+                            Cargar
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="border-t border-[var(--border)] px-4 py-2.5 text-[11px] leading-relaxed text-[var(--muted-fg)]">
+                Marcá cada servicio como <strong>Hogar</strong> al cargarlo.
+                Si alguien pagó una parte, cargá un gasto por persona.
+              </p>
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
