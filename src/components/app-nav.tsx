@@ -22,19 +22,8 @@ const links = [
   { href: "/compartido", label: "Hogar", icon: Users },
 ];
 
-const OPEN_FLAG = "lc_open_add_expense";
-
-function openAddExpense(pathname: string, router: ReturnType<typeof useRouter>) {
-  if (pathname.startsWith("/consumos")) {
-    window.dispatchEvent(new Event("lc:open-add-expense"));
-    return;
-  }
-  try {
-    sessionStorage.setItem(OPEN_FLAG, "1");
-  } catch {
-    // ignore
-  }
-  router.push("/consumos");
+function openAddExpense() {
+  window.dispatchEvent(new Event("lc:open-add-expense"));
 }
 
 export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
@@ -95,7 +84,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
             })}
             <button
               type="button"
-              onClick={() => openAddExpense(pathname, router)}
+              onClick={openAddExpense}
               className="ml-1 flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold text-white shadow-md shadow-violet-600/25 transition hover:bg-violet-700"
             >
               <Plus className="h-4 w-4" strokeWidth={2.5} />
@@ -127,7 +116,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
           <div className="relative flex flex-col items-center">
             <button
               type="button"
-              onClick={() => openAddExpense(pathname, router)}
+              onClick={openAddExpense}
               className="absolute -top-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-b from-violet-500 to-violet-700 text-white shadow-lg shadow-violet-600/40 ring-4 ring-white transition active:scale-95 dark:ring-zinc-950"
               aria-label="Agregar gasto"
             >

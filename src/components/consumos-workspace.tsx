@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   FileSpreadsheet,
   List,
@@ -9,7 +8,6 @@ import {
   Upload,
 } from "lucide-react";
 import { TransactionsTable } from "@/components/transactions-table";
-import { AddExpenseModal } from "@/components/add-expense-modal";
 import { UploadModal } from "@/components/upload-modal";
 import {
   EmptyState,
@@ -18,12 +16,7 @@ import {
   Toast,
 } from "@/components/ui";
 
-type Category = { id: string; slug: string; name: string };
-type Member = { userId: string; name: string };
-
 type Tab = "gastos" | "importar";
-
-const OPEN_FLAG = "lc_open_add_expense";
 
 async function readErrorMessage(res: Response): Promise<string> {
   const text = await res.text();
@@ -44,72 +37,21 @@ async function readErrorMessage(res: Response): Promise<string> {
 }
 
 export function ConsumosWorkspace() {
-  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("gastos");
-  const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [members, setMembers] = useState<Member[]>([]);
   const [tableKey, setTableKey] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [toastTone, setToastTone] = useState<"ok" | "warn">("ok");
 
-  const loadMeta = useCallback(async () => {
-    try {
-      const res = await fetch("/api/transactions", { credentials: "include" });
-      if (!res.ok) return;
-      const text = await res.text();
-      if (!text || text.trimStart().startsWith("<")) return;
-      const data = JSON.parse(text) as {
-        categories?: Category[];
-        members?: Member[];
-      };
-      setCategories(data.categories ?? []);
-      setMembers(data.members ?? []);
-    } catch {
-      // ignore
-    }
-  }, []);
-
   useEffect(() => {
-    void loadMeta();
-  }, [loadMeta]);
-
-  // Open modal from deep link / FAB without remounting (no router.replace)
-  useEffect(() => {
-    let shouldOpen = false;
-
-    try {
-      if (sessionStorage.getItem(OPEN_FLAG) === "1") {
-        sessionStorage.removeItem(OPEN_FLAG);
-        shouldOpen = true;
-      }
-    } catch {
-      // private mode etc.
-    }
-
-    if (searchParams.get("scan") === "1") {
-      shouldOpen = true;
-      // Soft-clear query without Next navigation (avoids Suspense remount)
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", "/consumos");
-      }
-    }
-
-    if (shouldOpen) {
+    function onCreated() {
+      setToastTone("ok");
+      setToast("Gasto agregado.");
+      setTableKey((k) => k + 1);
       setTab("gastos");
-      setAddOpen(true);
     }
-  }, [searchParams]);
-
-  // Listen for open requests while already on this page
-  useEffect(() => {
-    function onOpen() {
-      setTab("gastos");
-      setAddOpen(true);
-    }
-    window.addEventListener("lc:open-add-expense", onOpen);
-    return () => window.removeEventListener("lc:open-add-expense", onOpen);
+    window.addEventListener("lc:expense-created", onCreated);
+    return () => window.removeEventListener("lc:expense-created", onCreated);
   }, []);
 
   useEffect(() => {
@@ -120,7 +62,6 @@ export function ConsumosWorkspace() {
 
   function refreshTable() {
     setTableKey((k) => k + 1);
-    void loadMeta();
   }
 
   async function handleCardImportFiles(files: File[]) {
@@ -194,7 +135,7 @@ export function ConsumosWorkspace() {
         {tab === "gastos" && (
           <button
             type="button"
-            onClick={() => setAddOpen(true)}
+            onClick={() => window.dispatchEvent(new Event("lc:open-add-expense"))}
             className="lc-btn lc-btn-primary"
           >
             <Plus className="h-4 w-4" />
@@ -210,18 +151,6 @@ export function ConsumosWorkspace() {
       ) : (
         <ImportCardPanel onOpenModal={() => setImportOpen(true)} />
       )}
-
-      <AddExpenseModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onCreated={() => {
-          setToastTone("ok");
-          setToast("Gasto agregado.");
-          refreshTable();
-        }}
-        categories={categories}
-        members={members}
-      />
 
       <UploadModal
         open={importOpen}
