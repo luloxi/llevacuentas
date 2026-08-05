@@ -15,10 +15,10 @@ export default async function AppLayout({
   const user = await requireUser();
 
   return (
-    <div className="app-shell">
+    <div className="app-shell flex min-h-dvh flex-col">
       <AddExpenseProvider>
         <AppNav isAdmin={isAdminEmail(user.email)} />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-24 md:px-6 md:pb-10">
+        <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 pb-24 md:px-6 md:pb-10">
           <Suspense fallback={null}>
             <SectionSwipe>{children}</SectionSwipe>
           </Suspense>
