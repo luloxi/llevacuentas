@@ -16,6 +16,7 @@ import {
 import { getLiveRates } from "@/lib/fx/live-rates";
 import { currentPeriodAr, periodFromDateString } from "@/lib/utils";
 import { isVisibleToUser } from "@/lib/transactions";
+import { ensureSchema } from "@/lib/db/ensure-schema";
 
 const FIXED_HOUSEHOLD_SERVICES: Array<{ slug: string; name: string }> = [
   { slug: "alquiler", name: "Alquiler" },
@@ -33,6 +34,12 @@ function isPrivateToUser(
   return r.ownership === "personal" || r.ownership == null;
 }
 
+function n(v: unknown): number {
+  if (v == null) return 0;
+  const x = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(x) ? x : 0;
+}
+
 export default async function DashboardPage() {
   const user = await requireUser();
 
@@ -41,6 +48,7 @@ export default async function DashboardPage() {
   const ctx = await getUserHousehold(user.id);
   if (!ctx) redirect("/onboarding");
 
+  await ensureSchema();
   const db = getDb();
   const txs = await db
     .select()
@@ -84,9 +92,13 @@ export default async function DashboardPage() {
     (t) => periodFromDateString(t.date) === prevPeriod,
   );
 
-  const [rates, liveRatesResult] = await Promise.all([
+  const [rates, liveRatesResult, savingsRows] = await Promise.all([
     getMonthEndBuyRates([period, prevPeriod]),
     getLiveRates(),
+    db
+      .select()
+      .from(schema.savingsAssets)
+      .where(eq(schema.savingsAssets.userId, user.id)),
   ]);
   const rateNow = rates.get(period)?.buy ?? 0;
   const ratePrev = rates.get(prevPeriod)?.buy ?? 0;
@@ -108,6 +120,19 @@ export default async function DashboardPage() {
   const prevTotalArs = totalCombined(prevMonthTx, ratePrev);
   const sharedTotalArs = totalCombined(sharedMonthTx, rateNow);
   const sharedPrevTotalArs = totalCombined(sharedPrevTx, ratePrev);
+
+  let savingsArs = 0;
+  let savingsUsd = 0;
+  let savingsUsdc = 0;
+  for (const r of savingsRows) {
+    if (r.kind === "bank") {
+      savingsArs += n(r.amountArs);
+      savingsUsd += n(r.amountUsd);
+    } else {
+      savingsUsdc += n(r.lastBalanceUsd);
+      savingsUsd += n(r.lastBalanceUsd);
+    }
+  }
 
   const debtRows = txs.filter((t) => isPrivateToUser(t, user.id));
   const debtPeriods = [
@@ -211,6 +236,9 @@ export default async function DashboardPage() {
       categorySummary={categorySummary}
       householdServices={householdServices}
       liveRates={liveRatesResult.rates}
+      savingsArs={savingsArs}
+      savingsUsd={savingsUsd}
+      savingsUsdc={savingsUsdc}
     />
   );
 }
