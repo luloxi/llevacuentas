@@ -115,15 +115,14 @@ function SpendBurst({ active }: { active: boolean }) {
   );
 }
 
-function Meter({
+/** Compact delta vs previous month — bar + % only */
+function MiniMeter({
   total,
   prevTotal,
-  prevPeriod,
   accent = "emerald",
 }: {
   total: number;
   prevTotal: number;
-  prevPeriod: string;
   accent?: "emerald" | "violet";
 }) {
   const delta =
@@ -154,30 +153,34 @@ function Meter({
         : "bg-gradient-to-r from-emerald-500 to-teal-400";
 
   return (
-    <div className="relative mx-auto mt-3 max-w-[220px]">
-      <div className="h-2.5 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800">
+    <div className="mt-2 flex items-center gap-2">
+      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800">
         <div
           className={cn("h-full rounded-full transition-all duration-700 ease-out", barGrad)}
           style={{ width: `${Math.min(100, barPct)}%` }}
         />
       </div>
-      <div className="mt-1.5 flex items-center justify-center gap-2 text-sm text-zinc-500">
-        <span className="tabular-nums">
-          {formatPeriodShort(prevPeriod)} · {formatArs(prevTotal)}
+      {delta != null && (
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium tabular-nums",
+            deltaColor,
+          )}
+        >
+          <DeltaIcon className="h-3 w-3" />
+          {Math.abs(delta).toFixed(0)}%
         </span>
-        {delta != null && (
-          <span
-            className={cn(
-              "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium",
-              deltaColor,
-            )}
-          >
-            <DeltaIcon className="h-3.5 w-3.5" />
-            {Math.abs(delta).toFixed(0)}%
-          </span>
-        )}
-      </div>
+      )}
     </div>
+  );
+}
+
+function TapHint() {
+  return (
+    <ChevronRight
+      className="h-4 w-4 shrink-0 text-zinc-300 transition group-hover:text-zinc-500 dark:text-zinc-600 dark:group-hover:text-zinc-400"
+      aria-hidden
+    />
   );
 }
 
@@ -242,160 +245,89 @@ export function DashboardHome({
   }, [router, triggerCelebrate]);
 
   return (
-    <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-4">
-      <div className="text-center">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Hola, {firstName}
-        </p>
-      </div>
+    <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-3">
+      <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
+        Hola, {firstName}
+      </p>
 
-      {/* Personal spend → Gastos lista */}
+      {/* 1. Total personal → lista */}
       <Link
         href="/consumos?tab=lista"
-        className="relative block rounded-2xl border border-emerald-200/70 bg-emerald-50/40 p-4 text-center transition active:scale-[0.99] dark:border-emerald-900/50 dark:bg-emerald-950/25"
+        className="group relative block rounded-2xl border border-emerald-200/60 bg-emerald-50/40 px-4 py-3.5 transition active:scale-[0.99] dark:border-emerald-900/40 dark:bg-emerald-950/25"
+        aria-label={`Tus gastos del mes, ${formatArs(Math.round(displayTotal))}`}
       >
         <SpendBurst active={burst} />
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700/80 dark:text-emerald-400/80">
-          Tus gastos · {formatPeriodLabel(period)}
-        </p>
-        <p
-          className={cn(
-            "mt-1 text-4xl font-bold tabular-nums tracking-tight text-zinc-900 transition-transform dark:text-zinc-50 sm:text-5xl",
-            pop && "lc-amount-pop",
-          )}
-        >
-          {formatArs(Math.round(displayTotal))}
-        </p>
-        <Meter
-          total={liveTotal}
-          prevTotal={prevTotalArs}
-          prevPeriod={prevPeriod}
-          accent="emerald"
-        />
-        {liveCount > 0 && (
-          <p className="mt-1 text-xs text-zinc-400">
-            {liveCount} movimiento{liveCount === 1 ? "" : "s"}
-          </p>
-        )}
-        <span className="mt-2 inline-flex items-center gap-0.5 text-[11px] font-medium text-emerald-700/70 dark:text-emerald-400/70">
-          Ver lista <ChevronRight className="h-3.5 w-3.5" />
-        </span>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 text-left">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700/70 dark:text-emerald-400/70">
+              {formatPeriodLabel(period)}
+            </p>
+            <p
+              className={cn(
+                "mt-0.5 text-3xl font-bold tabular-nums tracking-tight text-zinc-900 transition-transform dark:text-zinc-50",
+                pop && "lc-amount-pop",
+              )}
+            >
+              {formatArs(Math.round(displayTotal))}
+            </p>
+            {liveCount > 0 && (
+              <p className="mt-0.5 text-[11px] tabular-nums text-zinc-400">
+                {liveCount} mov.
+              </p>
+            )}
+          </div>
+          <TapHint />
+        </div>
+        <MiniMeter total={liveTotal} prevTotal={prevTotalArs} accent="emerald" />
       </Link>
 
-      {/* Hogar → /compartido */}
-      <Link
-        href="/compartido"
-        className="block rounded-2xl border border-violet-200/70 bg-violet-50/50 p-4 text-center transition active:scale-[0.99] dark:border-violet-900/50 dark:bg-violet-950/30"
-      >
-        <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-700 dark:text-violet-300">
-          <Users className="h-3.5 w-3.5" />
-          Hogar · {formatPeriodLabel(period)}
-        </p>
-        <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-violet-950 dark:text-violet-50">
-          {formatArs(sharedTotalArs)}
-        </p>
-        <Meter
-          total={sharedTotalArs}
-          prevTotal={sharedPrevTotalArs}
-          prevPeriod={prevPeriod}
-          accent="violet"
-        />
-        <span className="mt-2 inline-flex items-center gap-0.5 text-[11px] font-medium text-violet-700/70 dark:text-violet-400/70">
-          Ver hogar <ChevronRight className="h-3.5 w-3.5" />
-        </span>
-      </Link>
-
-      {/* Deuda → /deuda */}
-      <Link
-        href="/deuda"
-        className={cn(
-          "block rounded-2xl border p-4 text-center transition active:scale-[0.99]",
-          debtSettled
-            ? "border-emerald-200/70 bg-emerald-50/50 dark:border-emerald-900/50 dark:bg-emerald-950/30"
-            : "border-red-200/70 bg-red-50/50 dark:border-red-900/50 dark:bg-red-950/30",
-        )}
-      >
-        <p
-          className={cn(
-            "inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em]",
-            debtSettled
-              ? "text-emerald-700 dark:text-emerald-300"
-              : "text-red-700 dark:text-red-300",
-          )}
-        >
-          <Landmark className="h-3.5 w-3.5" />
-          Deuda
-        </p>
-        <p
-          className={cn(
-            "mt-1 text-2xl font-bold tabular-nums tracking-tight",
-            debtSettled
-              ? "text-emerald-950 dark:text-emerald-50"
-              : "text-red-950 dark:text-red-50",
-          )}
-        >
-          {debtSettled ? "Saldada" : formatArs(debtBalanceArs)}
-        </p>
-        <p className="mt-1 text-xs text-zinc-500">
-          {debtSettled
-            ? "Sin saldo pendiente en tu tarjeta"
-            : "Estimación con tus cargos y pagos"}
-        </p>
-        <span
-          className={cn(
-            "mt-2 inline-flex items-center gap-0.5 text-[11px] font-medium",
-            debtSettled
-              ? "text-emerald-700/70 dark:text-emerald-400/70"
-              : "text-red-700/70 dark:text-red-400/70",
-          )}
-        >
-          Ver deuda <ChevronRight className="h-3.5 w-3.5" />
-        </span>
-      </Link>
-
-      {/* Categorías → Gastos resumen */}
+      {/* 2. Categorías → resumen */}
       {liveCats.length > 0 && (
         <Link
           href="/consumos?tab=resumen"
-          className="block rounded-2xl border border-zinc-200/80 bg-white/70 p-4 transition active:scale-[0.99] dark:border-zinc-800 dark:bg-zinc-950/60"
+          className="group block rounded-2xl border border-zinc-200/80 bg-white/70 px-3.5 py-3 transition active:scale-[0.99] dark:border-zinc-800 dark:bg-zinc-950/60"
+          aria-label="Gastos por categoría"
         >
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-              Este mes por categoría
-            </p>
-            <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-zinc-400">
-              Ver resumen <ChevronRight className="h-3.5 w-3.5" />
-            </span>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex -space-x-1.5">
+              {liveCats.slice(0, 4).map((c) => {
+                const color = colorForCategory(c.slug);
+                return (
+                  <span
+                    key={c.id}
+                    className="flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-white dark:ring-zinc-950"
+                    style={{ backgroundColor: `${color}22`, color }}
+                  >
+                    <CategoryIcon slug={c.slug} size={12} />
+                  </span>
+                );
+              })}
+            </div>
+            <TapHint />
           </div>
-          <ul className="space-y-2.5">
+          <ul className="space-y-1.5">
             {liveCats.map((c) => {
               const color = colorForCategory(c.slug);
               return (
-                <li key={c.id} className="flex items-center gap-3">
+                <li key={c.id} className="flex items-center gap-2">
                   <span
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-                    style={{ backgroundColor: `${color}18`, color }}
-                  >
-                    <CategoryIcon slug={c.slug} size={18} />
+                    className="h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: color }}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-xs text-zinc-600 dark:text-zinc-300">
+                    {c.name}
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                        {c.name}
-                      </span>
-                      <span className="shrink-0 tabular-nums text-sm text-zinc-600 dark:text-zinc-400">
-                        {formatArs(c.total)}
-                      </span>
-                    </div>
-                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${Math.min(100, c.pct)}%`,
-                          backgroundColor: color,
-                        }}
-                      />
-                    </div>
+                  <span className="shrink-0 text-xs tabular-nums text-zinc-500">
+                    {formatArs(c.total)}
+                  </span>
+                  <div className="h-1 w-12 shrink-0 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.min(100, c.pct)}%`,
+                        backgroundColor: color,
+                      }}
+                    />
                   </div>
                 </li>
               );
@@ -403,6 +335,71 @@ export function DashboardHome({
           </ul>
         </Link>
       )}
+
+      {/* 3. Deuda */}
+      <Link
+        href="/deuda"
+        className={cn(
+          "group flex items-center gap-3 rounded-2xl border px-3.5 py-3 transition active:scale-[0.99]",
+          debtSettled
+            ? "border-emerald-200/60 bg-emerald-50/40 dark:border-emerald-900/40 dark:bg-emerald-950/25"
+            : "border-red-200/60 bg-red-50/40 dark:border-red-900/40 dark:bg-red-950/25",
+        )}
+        aria-label={
+          debtSettled
+            ? "Deuda saldada"
+            : `Deuda ${formatArs(debtBalanceArs)}`
+        }
+      >
+        <span
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+            debtSettled
+              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
+              : "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300",
+          )}
+        >
+          <Landmark className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p
+            className={cn(
+              "text-lg font-bold tabular-nums tracking-tight",
+              debtSettled
+                ? "text-emerald-900 dark:text-emerald-100"
+                : "text-red-900 dark:text-red-100",
+            )}
+          >
+            {debtSettled ? "Saldada" : formatArs(debtBalanceArs)}
+          </p>
+        </div>
+        <TapHint />
+      </Link>
+
+      {/* 4. Hogar last */}
+      <Link
+        href="/compartido"
+        className="group flex items-center gap-3 rounded-2xl border border-violet-200/60 bg-violet-50/40 px-3.5 py-3 transition active:scale-[0.99] dark:border-violet-900/40 dark:bg-violet-950/25"
+        aria-label={`Hogar ${formatArs(sharedTotalArs)}`}
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
+          <Users className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-lg font-bold tabular-nums tracking-tight text-violet-950 dark:text-violet-50">
+            {formatArs(sharedTotalArs)}
+          </p>
+          <MiniMeter
+            total={sharedTotalArs}
+            prevTotal={sharedPrevTotalArs}
+            accent="violet"
+          />
+        </div>
+        <TapHint />
+      </Link>
+
+      {/* silent: prevPeriod still available if needed later */}
+      <span className="sr-only">vs {formatPeriodShort(prevPeriod)}</span>
     </div>
   );
 }
