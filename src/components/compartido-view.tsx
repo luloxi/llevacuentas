@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   formatArs,
   formatUsd,
@@ -13,6 +13,7 @@ import { LoadingBlock, PageStack, SegmentedControl } from "@/components/ui";
 import { HogarCharts } from "@/components/hogar-charts";
 import { CategoryIcon } from "@/lib/category-icons";
 import { colorForCategory } from "@/lib/category-colors";
+import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -66,13 +67,16 @@ type Expense = {
   receiptItems: ReceiptItem[];
 };
 
+const VIEW_TABS = ["vista", "charts"] as const;
+type ViewTab = (typeof VIEW_TABS)[number];
+
 function firstName(name: string) {
   const n = name.trim();
   return n ? (n.split(/\s+/)[0] ?? n) : "Sin nombre";
 }
 
 export function CompartidoView() {
-  const [viewTab, setViewTab] = useState<"vista" | "charts">("vista");
+  const [viewTab, setViewTab] = useState<ViewTab>("vista");
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<Cat[]>([]);
   const [periods, setPeriods] = useState<string[]>([]);
@@ -90,6 +94,9 @@ export function CompartidoView() {
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [ticketOpen, setTicketOpen] = useState<Set<string>>(new Set());
+
+  const onViewTab = useCallback((v: ViewTab) => setViewTab(v), []);
+  const swipe = useSwipeTabs({ tabs: VIEW_TABS, value: viewTab, onChange: onViewTab });
 
   useEffect(() => {
     let cancelled = false;
@@ -197,26 +204,26 @@ export function CompartidoView() {
         : 0;
 
   return (
-    <PageStack>
-      <div className="flex justify-end">
-        <SegmentedControl
-          value={viewTab}
-          onChange={setViewTab}
-          options={[
-            {
-              id: "vista",
-              label: "Vista",
-              icon: <LayoutList className="h-3.5 w-3.5" />,
-            },
-            {
-              id: "charts",
-              label: "Gráficos",
-              icon: <LineChart className="h-3.5 w-3.5" />,
-            },
-          ]}
-        />
-      </div>
+    <PageStack className="!space-y-4">
+      <SegmentedControl
+        value={viewTab}
+        onChange={onViewTab}
+        className="w-full"
+        options={[
+          {
+            id: "vista",
+            label: "Vista",
+            icon: <LayoutList className="h-3.5 w-3.5" />,
+          },
+          {
+            id: "charts",
+            label: "Gráficos",
+            icon: <LineChart className="h-3.5 w-3.5" />,
+          },
+        ]}
+      />
 
+      <div {...swipe} className="min-h-[40vh] space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
           <Users className="h-4 w-4" strokeWidth={1.75} />
@@ -258,7 +265,6 @@ export function CompartidoView() {
             </select>
           </div>
 
-          {/* Hero indicator — violet like Home */}
           <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-b from-violet-50 to-white p-5 text-center shadow-sm dark:border-violet-900/50 dark:from-violet-950/40 dark:to-[var(--surface)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-700 dark:text-violet-300">
               Hogar · {period === "all" ? "Todos" : formatPeriodLabel(period)}
@@ -364,10 +370,8 @@ export function CompartidoView() {
                               <li
                                 key={e.id}
                                 className={cn(
-                                  "rounded-xl border bg-[var(--surface)]",
-                                  e.hasTicket
-                                    ? "border-violet-300 dark:border-violet-800"
-                                    : "border-violet-100 dark:border-violet-900/40",
+                                  "rounded-xl bg-[var(--surface)]",
+                                  e.hasTicket ? "lc-ticket" : "border border-violet-100 dark:border-violet-900/40",
                                 )}
                               >
                                 <div className="flex items-start justify-between gap-2 px-3 py-2">
@@ -375,9 +379,7 @@ export function CompartidoView() {
                                     <p className="text-sm font-medium leading-snug">
                                       {e.description}
                                       {e.hasTicket && (
-                                        <span className="ml-1.5 rounded-full bg-violet-600 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white">
-                                          Ticket
-                                        </span>
+                                        <span className="lc-ticket-badge ml-1.5">Ticket</span>
                                       )}
                                     </p>
                                     <p className="mt-0.5 text-xs text-[var(--muted-fg)]">
@@ -409,7 +411,7 @@ export function CompartidoView() {
                                     <button
                                       type="button"
                                       onClick={() => toggleTicket(e.id)}
-                                      className="flex w-full items-center justify-center gap-1 border-t border-violet-100 py-1.5 text-xs font-medium text-violet-700 dark:border-violet-900 dark:text-violet-300"
+                                      className="flex w-full items-center justify-center gap-1 border-t border-[var(--border)] py-1.5 text-xs font-medium text-[var(--brand-fg)]"
                                     >
                                       {ticketShown ? (
                                         <ChevronDown className="h-3.5 w-3.5" />
@@ -421,16 +423,14 @@ export function CompartidoView() {
                                         : `Ver ${e.receiptItems.length} ítems`}
                                     </button>
                                     {ticketShown && (
-                                      <ul className="space-y-1.5 border-t border-violet-100 bg-violet-50/50 px-3 py-2 dark:border-violet-900 dark:bg-violet-950/30">
+                                      <ul className="space-y-1.5 border-t border-[var(--border)] bg-[var(--surface-muted)]/50 px-3 py-2">
                                         {e.receiptItems.map((it) => (
                                           <li
                                             key={it.id}
                                             className="flex items-start justify-between gap-2 text-sm"
                                           >
                                             <div className="min-w-0">
-                                              <p className="leading-snug">
-                                                {it.name}
-                                              </p>
+                                              <p className="leading-snug">{it.name}</p>
                                               {it.productCategory && (
                                                 <p className="text-[11px] text-[var(--muted-fg)]">
                                                   {it.productCategory}
@@ -498,6 +498,7 @@ export function CompartidoView() {
           )}
         </>
       )}
+      </div>
 
       {inviteOpen && (
         <div
