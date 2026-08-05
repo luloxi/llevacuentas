@@ -32,6 +32,11 @@ const PRODUCT_SUBCATS = [
 ];
 const PAGE_SIZES = [5, 10, 25, 50] as const;
 
+function currentPeriod(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function memberLabel(m: Member) {
   const n = m.name.trim();
   return n ? (n.split(/\s+/)[0] ?? n) : "Sin nombre";
@@ -77,7 +82,9 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
   const [rows, setRows] = useState<Tx[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [period, setPeriod] = useState("");
+  /** YYYY-MM or "" = all. Default: current calendar month */
+  const [period, setPeriod] = useState(currentPeriod);
+  const [allPeriods, setAllPeriods] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -106,16 +113,51 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
         error?: string; transactions?: Tx[]; categories?: Category[]; members?: Member[];
       }>(res);
       if (!res.ok) { setError(data.error || `Error ${res.status}`); return; }
-      setRows((data.transactions ?? []).filter((t) => !t.isPayment));
+      const list = (data.transactions ?? []).filter((t) => !t.isPayment);
+      setRows(list);
       setCategories(data.categories ?? []);
       setMembers(data.members ?? []);
       setPage(1);
+
+      // Keep full period list even when filtered (merge from this response)
+      const fromRows = [...new Set(list.map((r) => r.date.slice(0, 7)))];
+      setAllPeriods((prev) => {
+        const merged = new Set([...prev, ...fromRows]);
+        if (period) merged.add(period);
+        return [...merged].sort().reverse();
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error de red");
     } finally {
       setLoading(false);
     }
   }, [period, q, uncategorizedOnly]);
+
+  // Once: seed full period list so the selector has every month
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/transactions", { credentials: "include" });
+        if (!res.ok || cancelled) return;
+        const data = await parseJson<{ transactions?: Tx[] }>(res);
+        if (cancelled) return;
+        const ps = [
+          ...new Set(
+            (data.transactions ?? [])
+              .filter((t) => !t.isPayment)
+              .map((r) => r.date.slice(0, 7)),
+          ),
+        ].sort().reverse();
+        setAllPeriods(ps);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -201,10 +243,9 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
     });
   }
 
-  const periods = useMemo(
-    () => [...new Set(rows.map((r) => r.date.slice(0, 7)))].sort().reverse(),
-    [rows],
-  );
+  const periods = allPeriods.length
+    ? allPeriods
+    : [...new Set(rows.map((r) => r.date.slice(0, 7)))].sort().reverse();
 
   function exportCsv() {
     const ws = XLSX.utils.json_to_sheet(toSheet(sorted, members));
@@ -226,8 +267,10 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar comercio…" className="lc-input w-full !pl-9" />
         </div>
         <select value={period} onChange={(e) => setPeriod(e.target.value)} className="lc-input">
+          {periods.map((p) => (
+            <option key={p} value={p}>{formatPeriodLabel(p)}</option>
+          ))}
           <option value="">Todos los períodos</option>
-          {periods.map((p) => <option key={p} value={p}>{formatPeriodLabel(p)}</option>)}
         </select>
         <label className={cn("inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm", uncategorizedOnly ? "border-amber-500 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/40" : "border-zinc-200 dark:border-zinc-700")}>
           <input type="checkbox" checked={uncategorizedOnly} onChange={(e) => setUncategorizedOnly(e.target.checked)} className="h-4 w-4 rounded" />
@@ -251,7 +294,11 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
         <LoadingBlock label="Cargando consumos…" />
       ) : !sorted.length ? (
         <p className="rounded-2xl border border-dashed border-zinc-200 px-4 py-12 text-center text-sm text-zinc-500 dark:border-zinc-800">
-          {compactToolbar ? "No hay consumos. Usá Agregar o importá el resumen de la tarjeta." : "No hay consumos."}
+          {period
+            ? `No hay gastos en ${formatPeriodLabel(period)}. Probá otro mes o "Todos los períodos".`
+            : compactToolbar
+              ? "No hay consumos. Usá Agregar o importá el resumen de la tarjeta."
+              : "No hay consumos."}
         </p>
       ) : (
         <>
