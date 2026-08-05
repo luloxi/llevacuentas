@@ -385,7 +385,6 @@ export function CompartidoView() {
               )}
             </div>
 
-            {/* Always-visible household fixed services checklist */}
             <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
               <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
                 <div className="min-w-0">
@@ -438,7 +437,7 @@ export function CompartidoView() {
                             {svc.payers.length > 0
                               ? `Pagó ${svc.payers.join(", ")}`
                               : "Registrado"}
-                            {svc.count > 1 ? ` · ${svc.count} cargos"` : ""}
+                            {svc.count > 1 ? ` · ${svc.count} cargos` : ""}
                           </p>
                         ) : (
                           <p className="text-xs text-amber-700 dark:text-amber-400">
