@@ -5,6 +5,19 @@ import { getCategoryMap } from "@/lib/household";
 import { periodFromDateString } from "@/lib/utils";
 
 /**
+ * Visibility:
+ * - shared → visible to every household member
+ * - personal → only the member who paid / owns it (paidByUserId)
+ */
+export function isVisibleToUser(
+  tx: { ownership: string; paidByUserId: string | null },
+  userId: string,
+): boolean {
+  if (tx.ownership === "shared") return true;
+  return tx.paidByUserId === userId;
+}
+
+/**
  * List household transactions for Consumos / analysis APIs.
  * Kept free of PDF/xlsx import deps so /api/transactions can load on serverless.
  */
@@ -18,6 +31,13 @@ export async function listTransactions(
     uncategorizedOnly?: boolean;
     /** Include card payments / credits (default false — Consumos shows expenses only) */
     includePayments?: boolean;
+    /**
+     * When set, apply privacy: personal only if paidByUserId matches,
+     * shared always visible. Required for multi-member households.
+     */
+    viewerUserId?: string;
+    /** Only shared (Hogar). Ignores personal even of the viewer. */
+    sharedOnly?: boolean;
   },
 ) {
   const db = getDb();
@@ -32,15 +52,20 @@ export async function listTransactions(
 
   return rows.filter((r) => {
     if (!opts?.includePayments && r.isPayment) return false;
-    // Pesificación / transferencia deuda: not a real spend
     if (
       !opts?.includePayments &&
       isBankAccountingEntry(r.descriptionNormalized)
     ) {
       return false;
     }
+
+    if (opts?.sharedOnly) {
+      if (r.ownership !== "shared") return false;
+    } else if (opts?.viewerUserId) {
+      if (!isVisibleToUser(r, opts.viewerUserId)) return false;
+    }
+
     if (opts?.period) {
-      // Strict calendar month from stored date text (never Date() / TZ)
       if (periodFromDateString(r.date) !== opts.period) return false;
     }
     if (opts?.categoryId && r.categoryId !== opts.categoryId) return false;
