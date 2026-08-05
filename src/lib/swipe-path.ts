@@ -1,12 +1,13 @@
 /**
  * Continuous mobile swipe order:
- * Inicio → Lista → Resumen → Gráficos → Vista hogar → Gráficos hogar → Evolución → Pagos
+ * Inicio → Lista → Resumen → Gráficos → Vista hogar → Gráficos hogar → Ahorros → Evolución → Pagos
  */
 
 export type SwipeStep =
   | { href: "/dashboard" }
   | { href: "/consumos"; tab: "lista" | "resumen" | "charts" }
   | { href: "/compartido"; tab: "vista" | "charts" }
+  | { href: "/ahorros" }
   | { href: "/deuda"; tab: "evolucion" | "pagos" };
 
 export const SWIPE_PATH: readonly SwipeStep[] = [
@@ -16,6 +17,7 @@ export const SWIPE_PATH: readonly SwipeStep[] = [
   { href: "/consumos", tab: "charts" },
   { href: "/compartido", tab: "vista" },
   { href: "/compartido", tab: "charts" },
+  { href: "/ahorros" },
   { href: "/deuda", tab: "evolucion" },
   { href: "/deuda", tab: "pagos" },
 ] as const;
@@ -51,12 +53,16 @@ export function resolveSwipeIndex(
     return idx >= 0 ? idx : 4;
   }
 
+  if (path === "/ahorros" || path.startsWith("/ahorros/")) {
+    return SWIPE_PATH.findIndex((s) => s.href === "/ahorros");
+  }
+
   if (path === "/deuda" || path.startsWith("/deuda/")) {
     const t = tab === "pagos" ? "pagos" : "evolucion";
     const idx = SWIPE_PATH.findIndex(
       (s) => s.href === "/deuda" && "tab" in s && s.tab === t,
     );
-    return idx >= 0 ? idx : 6;
+    return idx >= 0 ? idx : 7;
   }
 
   return -1;

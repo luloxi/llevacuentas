@@ -10,6 +10,7 @@ import {
   LogOut,
   Shield,
   Plus,
+  PiggyBank,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth/client";
@@ -19,6 +20,7 @@ const links = [
   { href: "/dashboard", label: "Inicio", icon: Home },
   { href: "/consumos", label: "Gastos", icon: List },
   { href: "/compartido", label: "Hogar", icon: Users },
+  { href: "/ahorros", label: "Ahorros", icon: PiggyBank },
   { href: "/deuda", label: "Deuda", icon: Landmark },
 ];
 
@@ -45,7 +47,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
     : links;
 
   const left = links.slice(0, 2);
-  const right = links.slice(2, 4);
+  const right = links.slice(2);
 
   return (
     <>
@@ -101,7 +103,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
       </header>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-md md:hidden">
-        <div className="relative mx-auto grid max-w-lg grid-cols-5 items-end gap-0.5 px-1.5 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
+        <div className="relative mx-auto grid max-w-lg grid-cols-6 items-end gap-0.5 px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
           {left.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
@@ -154,10 +156,8 @@ function NavSlot({
     <Link
       href={href}
       className={cn(
-        "relative flex flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-medium transition-colors",
-        active
-          ? "text-[var(--brand-fg)]"
-          : "text-[var(--muted-fg)]",
+        "relative flex flex-col items-center gap-0.5 rounded-xl px-0.5 py-1.5 text-[10px] font-medium transition-colors",
+        active ? "text-[var(--brand-fg)]" : "text-[var(--muted-fg)]",
       )}
     >
       <span
