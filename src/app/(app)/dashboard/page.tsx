@@ -37,7 +37,6 @@ export default async function DashboardPage() {
   }
   const prevPeriod = `${prevY}-${String(prevM).padStart(2, "0")}`;
 
-  // My private + all shared (never others' private)
   const spendTxs = txs.filter(
     (t) =>
       !t.isPayment &&
@@ -45,10 +44,23 @@ export default async function DashboardPage() {
       isVisibleToUser(t, user.id),
   );
 
+  const sharedTxs = txs.filter(
+    (t) =>
+      !t.isPayment &&
+      !isBankAccountingEntry(t.descriptionNormalized ?? "") &&
+      t.ownership === "shared",
+  );
+
   const monthTx = spendTxs.filter(
     (t) => periodFromDateString(t.date) === period,
   );
   const prevMonthTx = spendTxs.filter(
+    (t) => periodFromDateString(t.date) === prevPeriod,
+  );
+  const sharedMonthTx = sharedTxs.filter(
+    (t) => periodFromDateString(t.date) === period,
+  );
+  const sharedPrevTx = sharedTxs.filter(
     (t) => periodFromDateString(t.date) === prevPeriod,
   );
 
@@ -59,24 +71,20 @@ export default async function DashboardPage() {
   function totalCombined(
     list: typeof monthTx,
     buyRate: number,
-  ): { combined: number; ars: number; usd: number } {
+  ): number {
     let ars = 0;
     let usd = 0;
     for (const t of list) {
       if (t.amountArs != null) ars += Math.abs(Number(t.amountArs));
       if (t.amountUsd != null) usd += Math.abs(Number(t.amountUsd));
     }
-    return {
-      ars,
-      usd,
-      combined: ars + convertUsdToArs(usd, buyRate),
-    };
+    return ars + convertUsdToArs(usd, buyRate);
   }
 
-  const thisMonth = totalCombined(monthTx, rateNow);
-  const lastMonth = totalCombined(prevMonthTx, ratePrev);
-  const totalArs = thisMonth.combined;
-  const prevTotalArs = lastMonth.combined;
+  const totalArs = totalCombined(monthTx, rateNow);
+  const prevTotalArs = totalCombined(prevMonthTx, ratePrev);
+  const sharedTotalArs = totalCombined(sharedMonthTx, rateNow);
+  const sharedPrevTotalArs = totalCombined(sharedPrevTx, ratePrev);
 
   const { byId } = await getCategoryMap();
 
@@ -106,27 +114,17 @@ export default async function DashboardPage() {
 
   const firstName = (user.name || user.email || "").split(/\s+/)[0] || "vos";
 
-  const members = ctx.members.map((m) => ({
-    userId: m.userId,
-    name: m.displayName || m.name || m.email || "Sin nombre",
-  }));
-
-  const cats = [...byId.values()]
-    .filter((c) => c.kind === "expense")
-    .map((c) => ({ id: c.id, slug: c.slug, name: c.name }));
-
   return (
     <DashboardHome
       firstName={firstName}
-      householdName={ctx.household.name}
       period={period}
       prevPeriod={prevPeriod}
       totalArs={totalArs}
       prevTotalArs={prevTotalArs}
+      sharedTotalArs={sharedTotalArs}
+      sharedPrevTotalArs={sharedPrevTotalArs}
       monthTxCount={monthTx.length}
       categorySummary={categorySummary}
-      initialCategories={cats}
-      initialMembers={members}
     />
   );
 }
