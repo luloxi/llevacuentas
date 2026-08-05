@@ -415,35 +415,7 @@ export function DeudaView() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={toggleShowOnHome}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-medium transition",
-            showOnHome
-              ? "border-[var(--border)] bg-[var(--surface)] text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
-              : "border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400",
-          )}
-          title={
-            showOnHome
-              ? "Ocultar la tarjeta de deuda del inicio"
-              : "Mostrar la tarjeta de deuda en el inicio"
-          }
-        >
-          {showOnHome ? (
-            <>
-              <EyeOff className="h-3.5 w-3.5" strokeWidth={1.75} />
-              Ocultar del inicio
-            </>
-          ) : (
-            <>
-              <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />
-              Mostrar en inicio
-            </>
-          )}
-        </button>
-
+      <div className="flex justify-end">
         <SegmentedControl
           value={tab}
           onChange={onTab}
@@ -474,10 +446,35 @@ export function DeudaView() {
         </div>
       )}
 
-      <p className="text-[11px] leading-snug text-zinc-500">
-        Solo vos ves esto · cargos y pagos tuyos (sin Hogar ni otros). USD al TC
-        de fin de mes.
-      </p>
+      <div className="flex justify-start">
+        <button
+          type="button"
+          onClick={toggleShowOnHome}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-medium transition",
+            showOnHome
+              ? "border-[var(--border)] bg-[var(--surface)] text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+              : "border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400",
+          )}
+          title={
+            showOnHome
+              ? "Ocultar la tarjeta de deuda del inicio"
+              : "Mostrar la tarjeta de deuda en el inicio"
+          }
+        >
+          {showOnHome ? (
+            <>
+              <EyeOff className="h-3.5 w-3.5" strokeWidth={1.75} />
+              Ocultar del inicio
+            </>
+          ) : (
+            <>
+              <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />
+              Mostrar en inicio
+            </>
+          )}
+        </button>
+      </div>
 
       {tab === "evolucion" ? (
         <div className="space-y-3">
