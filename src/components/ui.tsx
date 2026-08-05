@@ -28,15 +28,15 @@ export function PageHeader({
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         {eyebrow && (
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-emerald-700/80 dark:text-emerald-400/80">
+          <p className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--brand-fg)]">
             {eyebrow}
           </p>
         )}
-        <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+        <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-[var(--foreground)]">
           {title}
         </h1>
         {description && (
-          <p className="mt-1 max-w-xl text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1 max-w-xl text-sm leading-relaxed text-[var(--muted-fg)]">
             {description}
           </p>
         )}
@@ -70,6 +70,7 @@ export function Surface({
   );
 }
 
+/** Full-width, edge-flush internal tabs. */
 export function SegmentedControl<T extends string>({
   value,
   onChange,
@@ -83,7 +84,7 @@ export function SegmentedControl<T extends string>({
 }) {
   return (
     <div className={cn("lc-seg", className)} role="tablist">
-      {options.map((opt) => (
+      {options.map((opt, i) => (
         <button
           key={opt.id}
           type="button"
@@ -91,7 +92,10 @@ export function SegmentedControl<T extends string>({
           aria-selected={value === opt.id}
           data-active={value === opt.id}
           onClick={() => onChange(opt.id)}
-          className="lc-seg-item"
+          className={cn(
+            "lc-seg-item",
+            i < options.length - 1 && "lc-seg-item-divide",
+          )}
         >
           {opt.icon}
           {opt.label}
@@ -116,33 +120,33 @@ export function StatTile({
 }) {
   const tones = {
     neutral:
-      "border-zinc-200/90 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/60",
+      "border-[var(--border)] bg-[var(--surface)]",
     brand:
-      "border-emerald-200/80 bg-gradient-to-br from-emerald-50/90 to-white dark:border-emerald-900/50 dark:from-emerald-950/40 dark:to-zinc-950/60",
+      "border-[var(--border)] bg-[var(--brand-soft)]",
     danger:
-      "border-red-200/80 bg-gradient-to-br from-red-50/90 to-white dark:border-red-900/50 dark:from-red-950/30 dark:to-zinc-950/60",
+      "border-red-200/80 bg-red-50/50 dark:border-red-900/50 dark:bg-red-950/30",
     violet:
-      "border-violet-200/80 bg-gradient-to-br from-violet-50/90 to-white dark:border-violet-900/40 dark:from-violet-950/30 dark:to-zinc-950/60",
+      "border-violet-200/80 bg-violet-50/50 dark:border-violet-900/40 dark:bg-violet-950/30",
     amber:
-      "border-amber-200/80 bg-gradient-to-br from-amber-50/90 to-white dark:border-amber-900/40 dark:from-amber-950/25 dark:to-zinc-950/60",
+      "border-amber-200/80 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-950/25",
   } as const;
 
   const valueTone = {
-    neutral: "text-zinc-900 dark:text-zinc-50",
-    brand: "text-emerald-900 dark:text-emerald-100",
+    neutral: "text-[var(--foreground)]",
+    brand: "text-[var(--brand-fg)]",
     danger: "text-red-800 dark:text-red-200",
     violet: "text-violet-950 dark:text-violet-100",
     amber: "text-amber-950 dark:text-amber-100",
   } as const;
 
   return (
-    <div className={cn("rounded-2xl border p-4 shadow-sm backdrop-blur", tones[tone])}>
+    <div className={cn("rounded-2xl border p-4", tones[tone])}>
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-fg)]">
           {label}
         </p>
         {icon && (
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/70 text-emerald-700 shadow-sm dark:bg-zinc-900/70 dark:text-emerald-300">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--brand-fg)]">
             {icon}
           </div>
         )}
@@ -150,7 +154,7 @@ export function StatTile({
       <p className={cn("mt-1.5 text-xl font-bold tabular-nums tracking-tight", valueTone[tone])}>
         {value}
       </p>
-      {hint && <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-[var(--muted-fg)]">{hint}</p>}
     </div>
   );
 }
@@ -169,13 +173,13 @@ export function EmptyState({
   return (
     <div className="lc-card flex flex-col items-center px-6 py-12 text-center">
       {icon && (
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-600/25">
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand-fg)]">
           {icon}
         </div>
       )}
       <h3 className="text-base font-semibold tracking-tight">{title}</h3>
       {description && (
-        <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+        <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-[var(--muted-fg)]">
           {description}
         </p>
       )}
@@ -187,8 +191,8 @@ export function EmptyState({
 export function LoadingBlock({ label = "Cargando…" }: { label?: string }) {
   return (
     <div className="lc-card space-y-3 p-5" role="status" aria-live="polite">
-      <div className="flex items-center gap-2 text-sm text-zinc-500">
-        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+      <div className="flex items-center gap-2 text-sm text-[var(--muted-fg)]">
+        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--brand)]" />
         {label}
       </div>
       <div className="skeleton h-3 w-2/5" />
@@ -218,7 +222,7 @@ export function Toast({
 
 export function FieldLabel({ children }: { children: ReactNode }) {
   return (
-    <span className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
+    <span className="mb-1 block text-xs font-medium text-[var(--muted-fg)]">
       {children}
     </span>
   );
