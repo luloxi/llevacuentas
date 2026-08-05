@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LayoutList, LineChart, List } from "lucide-react";
 import { TransactionsTable } from "@/components/transactions-table";
 import { MesAMesView } from "@/components/mes-a-mes";
 import { PageStack, SegmentedControl, Toast } from "@/components/ui";
-import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 
 const TABS = ["lista", "resumen", "charts"] as const;
 type Tab = (typeof TABS)[number];
@@ -18,6 +17,7 @@ function tabFromParam(raw: string | null): Tab {
 
 export function ConsumosWorkspace() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>(() =>
     tabFromParam(searchParams.get("tab")),
   );
@@ -51,8 +51,13 @@ export function ConsumosWorkspace() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  const onTab = useCallback((v: Tab) => setTab(v), []);
-  const swipe = useSwipeTabs({ tabs: TABS, value: tab, onChange: onTab });
+  const onTab = useCallback(
+    (v: Tab) => {
+      setTab(v);
+      router.replace(`/consumos?tab=${v}`, { scroll: false });
+    },
+    [router],
+  );
 
   return (
     <PageStack className="!space-y-4">
@@ -81,7 +86,7 @@ export function ConsumosWorkspace() {
 
       {toast && <Toast>{toast}</Toast>}
 
-      <div {...swipe} className="min-h-[40vh]">
+      <div className="min-h-[40vh]">
         {tab === "lista" ? (
           <TransactionsTable key={tableKey} compactToolbar />
         ) : (
