@@ -197,22 +197,7 @@ export function CompartidoView() {
 
   return (
     <PageStack>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <h1 className="truncate text-lg font-bold tracking-tight">
-            {householdName || "Hogar"}
-          </h1>
-          {inviteCode && (
-            <button
-              type="button"
-              onClick={() => setInviteOpen(true)}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800 transition hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-200 dark:hover:bg-violet-950"
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-              Invitar
-            </button>
-          )}
-        </div>
+      <div className="flex justify-end">
         <SegmentedControl
           value={viewTab}
           onChange={setViewTab}
@@ -229,6 +214,22 @@ export function CompartidoView() {
             },
           ]}
         />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="min-w-0 truncate text-lg font-bold tracking-tight">
+          {householdName || "Hogar"}
+        </h1>
+        {inviteCode && (
+          <button
+            type="button"
+            onClick={() => setInviteOpen(true)}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800 transition hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-200 dark:hover:bg-violet-950"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            Invitar
+          </button>
+        )}
       </div>
 
       {viewTab === "charts" ? (
