@@ -7,7 +7,6 @@ import {
   Loader2,
   PenLine,
   Plus,
-  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -72,6 +71,14 @@ async function readErrorMessage(res: Response): Promise<string> {
     if (text.length < 200) return text;
   }
   return `Error ${res.status}`;
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="mb-1.5 block text-[11px] font-medium tracking-wide text-[var(--muted-fg)]">
+      {children}
+    </span>
+  );
 }
 
 export function AddExpenseModal({
@@ -278,7 +285,6 @@ export function AddExpenseModal({
       setImportNote(note);
       window.dispatchEvent(new Event("lc:card-imported"));
       onCreated();
-      // Brief pause so user sees result, then close
       window.setTimeout(() => onClose(), 900);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo importar");
@@ -345,7 +351,7 @@ export function AddExpenseModal({
     >
       <button
         type="button"
-        className="absolute inset-0 bg-zinc-950/60 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-[#121110]/55 backdrop-blur-[3px]"
         aria-label="Cerrar"
         disabled={busy}
         onClick={() => {
@@ -353,35 +359,28 @@ export function AddExpenseModal({
         }}
       />
 
-      <div className="animate-fade-up relative z-10 flex max-h-[min(90vh,720px)] w-full max-w-md flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-white shadow-[0_25px_80px_-20px_rgba(0,0,0,0.45)] dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="relative shrink-0 overflow-hidden px-5 pt-5 pb-3">
-          {mode === "choose" && (
-            <div
-              className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-500/10 via-emerald-400/5 to-transparent dark:from-violet-500/15 dark:via-emerald-500/5"
-              aria-hidden
-            />
-          )}
-          <div className="relative flex items-start justify-between gap-3">
-            <div>
+      <div className="animate-fade-up relative z-10 flex max-h-[min(92vh,720px)] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_24px_64px_-24px_rgba(0,0,0,0.35)]">
+        <div className="shrink-0 border-b border-[var(--border)] px-5 pb-4 pt-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
               {mode === "choose" ? (
                 <>
-                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600 dark:text-violet-400">
-                    <Sparkles className="h-3 w-3" />
-                    Nuevo gasto
+                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--muted-fg)]">
+                    Nuevo
                   </p>
-                  <h2 className="mt-1 text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-                    ¿Cómo lo cargamos?
+                  <h2 className="mt-1 text-xl font-semibold tracking-tight text-[var(--foreground)]">
+                    ¿Cómo lo cargás?
                   </h2>
-                  <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                  <p className="mt-1 text-sm leading-relaxed text-[var(--muted-fg)]">
                     Ticket, a mano o resumen de tarjeta.
                   </p>
                 </>
               ) : (
                 <>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--muted-fg)]">
                     {fromScan ? "Desde el ticket" : "A mano"}
                   </p>
-                  <h2 className="mt-0.5 text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+                  <h2 className="mt-1 text-lg font-semibold tracking-tight text-[var(--foreground)]">
                     Completar gasto
                   </h2>
                 </>
@@ -391,14 +390,14 @@ export function AddExpenseModal({
               type="button"
               disabled={busy}
               onClick={onClose}
-              className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              className="rounded-full p-2 text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
             >
-              <X className="h-5 w-5" />
+              <X className="h-5 w-5" strokeWidth={1.75} />
             </button>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           <input
             ref={scanRef}
             type="file"
@@ -427,31 +426,28 @@ export function AddExpenseModal({
           />
 
           {mode === "choose" && (
-            <div className="flex flex-col gap-3 pt-1">
+            <div className="flex flex-col gap-2.5">
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => scanRef.current?.click()}
-                className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-500 via-violet-600 to-fuchsia-700 p-[1px] text-left shadow-lg shadow-violet-600/30 transition active:scale-[0.985] disabled:opacity-60"
+                className="flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-4 text-left transition hover:border-[var(--brand)]/40 hover:bg-[var(--brand-soft)] active:scale-[0.99] disabled:opacity-60"
               >
-                <div className="relative flex items-center gap-4 rounded-[0.95rem] bg-gradient-to-br from-violet-500 to-violet-700 px-5 py-5 text-white">
-                  <div className="pointer-events-none absolute -right-6 -top-6 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
-                  <span className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25">
-                    {scanning ? (
-                      <Loader2 className="h-7 w-7 animate-spin" />
-                    ) : (
-                      <Camera className="h-7 w-7" strokeWidth={1.75} />
-                    )}
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-white dark:text-[#121110]">
+                  {scanning ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Camera className="h-5 w-5" strokeWidth={1.75} />
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[15px] font-semibold tracking-tight text-[var(--foreground)]">
+                    {scanning ? "Leyendo ticket…" : "Escanear ticket"}
                   </span>
-                  <span className="relative min-w-0">
-                    <span className="block text-lg font-semibold tracking-tight">
-                      {scanning ? "Leyendo ticket…" : "Escanear ticket"}
-                    </span>
-                    <span className="mt-0.5 block text-sm text-violet-100/90">
-                      Sacá una foto y lo completamos por vos
-                    </span>
+                  <span className="mt-0.5 block text-sm text-[var(--muted-fg)]">
+                    Foto y lo completamos por vos
                   </span>
-                </div>
+                </span>
               </button>
 
               <button
@@ -462,16 +458,16 @@ export function AddExpenseModal({
                   setScanNote(null);
                   setMode("manual");
                 }}
-                className="group flex items-center gap-4 rounded-2xl border border-zinc-200/90 bg-zinc-50/80 px-5 py-4.5 text-left shadow-sm transition hover:border-emerald-300/80 hover:bg-emerald-50/50 active:scale-[0.985] dark:border-zinc-800 dark:bg-zinc-900/80 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/20"
+                className="flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-4 text-left transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)] active:scale-[0.99]"
               >
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 text-emerald-700 ring-1 ring-emerald-200/60 dark:from-emerald-950 dark:to-teal-950 dark:text-emerald-300 dark:ring-emerald-900">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--brand-fg)]">
                   <PenLine className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-base font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                  <span className="block text-[15px] font-semibold tracking-tight text-[var(--foreground)]">
                     Cargar a mano
                   </span>
-                  <span className="mt-0.5 block text-sm text-zinc-500 dark:text-zinc-400">
+                  <span className="mt-0.5 block text-sm text-[var(--muted-fg)]">
                     Comercio, monto y listo
                   </span>
                 </span>
@@ -481,9 +477,9 @@ export function AddExpenseModal({
                 type="button"
                 disabled={busy}
                 onClick={() => cardRef.current?.click()}
-                className="group flex items-center gap-4 rounded-2xl border border-zinc-200/90 bg-zinc-50/80 px-5 py-4.5 text-left shadow-sm transition hover:border-sky-300/80 hover:bg-sky-50/50 active:scale-[0.985] dark:border-zinc-800 dark:bg-zinc-900/80 dark:hover:border-sky-800 dark:hover:bg-sky-950/20"
+                className="flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-4 text-left transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)] active:scale-[0.99]"
               >
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-100 to-blue-100 text-sky-700 ring-1 ring-sky-200/60 dark:from-sky-950 dark:to-blue-950 dark:text-sky-300 dark:ring-sky-900">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--muted-fg)]">
                   {importing ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
                   ) : (
@@ -491,22 +487,22 @@ export function AddExpenseModal({
                   )}
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-base font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                  <span className="block text-[15px] font-semibold tracking-tight text-[var(--foreground)]">
                     {importing ? "Importando…" : "Importar tarjeta"}
                   </span>
-                  <span className="mt-0.5 block text-sm text-zinc-500 dark:text-zinc-400">
+                  <span className="mt-0.5 block text-sm text-[var(--muted-fg)]">
                     Excel o PDF del resumen BBVA
                   </span>
                 </span>
               </button>
 
               {importNote && (
-                <p className="rounded-xl bg-sky-50 px-3 py-2.5 text-xs font-medium text-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
+                <p className="rounded-xl border border-[var(--border)] bg-[var(--brand-soft)] px-3 py-2.5 text-xs font-medium text-[var(--brand-fg)]">
                   {importNote}
                 </p>
               )}
               {error && (
-                <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">
+                <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
                   {error}
                 </p>
               )}
@@ -514,17 +510,17 @@ export function AddExpenseModal({
           )}
 
           {mode === "manual" && (
-            <div className="space-y-3.5 pt-1">
+            <div className="space-y-4">
               {fromScan && scanNote && (
-                <div className="flex items-start justify-between gap-2 rounded-xl border border-violet-200/80 bg-violet-50 px-3 py-2.5 dark:border-violet-900/50 dark:bg-violet-950/40">
-                  <p className="text-xs font-medium leading-relaxed text-violet-900 dark:text-violet-100">
+                <div className="flex items-start justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--brand-soft)] px-3 py-2.5">
+                  <p className="text-xs font-medium leading-relaxed text-[var(--brand-fg)]">
                     {scanNote}
                   </p>
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() => scanRef.current?.click()}
-                    className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold text-violet-700 hover:bg-violet-100 dark:text-violet-200 dark:hover:bg-violet-900/50"
+                    className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold text-[var(--brand-fg)] hover:bg-[var(--surface)]"
                   >
                     {scanning ? "…" : "Otra foto"}
                   </button>
@@ -532,48 +528,89 @@ export function AddExpenseModal({
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <label className="block text-sm">
-                  <span className="mb-1 block text-xs font-medium text-zinc-500">Fecha</span>
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
+                <label className="block">
+                  <FieldLabel>Fecha</FieldLabel>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="lc-input w-full"
+                  />
                 </label>
-                <label className="block text-sm">
-                  <span className="mb-1 block text-xs font-medium text-zinc-500">Categoría</span>
-                  <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                <label className="block">
+                  <FieldLabel>Categoría</FieldLabel>
+                  <select
+                    value={categoryId}
+                    onChange={(e) => setCategoryId(e.target.value)}
+                    className="lc-input w-full"
+                  >
                     {categories.map((c) => (
-                      <option key={c.id} value={c.id}>{categoryLabel(c.name)}</option>
+                      <option key={c.id} value={c.id}>
+                        {categoryLabel(c.name)}
+                      </option>
                     ))}
                   </select>
                 </label>
               </div>
 
-              <label className="block text-sm">
-                <span className="mb-1 block text-xs font-medium text-zinc-500">Comercio</span>
-                <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Carrefour, Uber…" autoFocus={!fromScan} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900" />
+              <label className="block">
+                <FieldLabel>Comercio</FieldLabel>
+                <input
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Carrefour, Uber…"
+                  autoFocus={!fromScan}
+                  className="lc-input w-full"
+                />
               </label>
 
               <div className="grid grid-cols-2 gap-3">
-                <label className="block text-sm">
-                  <span className="mb-1 block text-xs font-medium text-zinc-500">Pesos</span>
-                  <input inputMode="decimal" value={amountArs} onChange={(e) => setAmountArs(e.target.value)} placeholder="0,00" className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm tabular-nums dark:border-zinc-700 dark:bg-zinc-900" />
+                <label className="block">
+                  <FieldLabel>Pesos</FieldLabel>
+                  <input
+                    inputMode="decimal"
+                    value={amountArs}
+                    onChange={(e) => setAmountArs(e.target.value)}
+                    placeholder="0,00"
+                    className="lc-input w-full tabular-nums"
+                  />
                 </label>
-                <label className="block text-sm">
-                  <span className="mb-1 block text-xs font-medium text-zinc-500">Dólares</span>
-                  <input inputMode="decimal" value={amountUsd} onChange={(e) => setAmountUsd(e.target.value)} placeholder="—" className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm tabular-nums dark:border-zinc-700 dark:bg-zinc-900" />
+                <label className="block">
+                  <FieldLabel>Dólares</FieldLabel>
+                  <input
+                    inputMode="decimal"
+                    value={amountUsd}
+                    onChange={(e) => setAmountUsd(e.target.value)}
+                    placeholder="—"
+                    className="lc-input w-full tabular-nums"
+                  />
                 </label>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <label className="block text-sm">
-                  <span className="mb-1 block text-xs font-medium text-zinc-500">Pagó</span>
-                  <select value={paidByUserId} onChange={(e) => setPaidByUserId(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                <label className="block">
+                  <FieldLabel>Pagó</FieldLabel>
+                  <select
+                    value={paidByUserId}
+                    onChange={(e) => setPaidByUserId(e.target.value)}
+                    className="lc-input w-full"
+                  >
                     {members.map((m) => (
-                      <option key={m.userId} value={m.userId}>{memberLabel(m)}</option>
+                      <option key={m.userId} value={m.userId}>
+                        {memberLabel(m)}
+                      </option>
                     ))}
                   </select>
                 </label>
-                <label className="block text-sm">
-                  <span className="mb-1 block text-xs font-medium text-zinc-500">Visibilidad</span>
-                  <select value={ownership} onChange={(e) => setOwnership(e.target.value as "personal" | "shared")} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                <label className="block">
+                  <FieldLabel>Visibilidad</FieldLabel>
+                  <select
+                    value={ownership}
+                    onChange={(e) =>
+                      setOwnership(e.target.value as "personal" | "shared")
+                    }
+                    className="lc-input w-full"
+                  >
                     <option value="personal">Solo yo</option>
                     <option value="shared">Hogar</option>
                   </select>
@@ -591,51 +628,170 @@ export function AddExpenseModal({
                 className={cn(
                   "flex w-full items-center justify-between rounded-xl border px-4 py-3 text-sm",
                   complex
-                    ? "border-emerald-500 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-950/30"
-                    : "border-zinc-200 dark:border-zinc-700",
+                    ? "border-[var(--brand)]/40 bg-[var(--brand-soft)]"
+                    : "border-[var(--border)]",
                 )}
               >
-                <span className="font-medium">Detalle por ítems</span>
-                <span className={cn("relative h-6 w-11 rounded-full", complex ? "bg-emerald-600" : "bg-zinc-300 dark:bg-zinc-600")}>
-                  <span className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition", complex ? "left-5" : "left-0.5")} />
+                <span className="font-medium text-[var(--foreground)]">
+                  Detalle por ítems
+                </span>
+                <span
+                  className={cn(
+                    "relative h-6 w-11 rounded-full transition",
+                    complex ? "bg-[var(--brand)]" : "bg-[var(--border-strong)]",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition",
+                      complex ? "left-5" : "left-0.5",
+                    )}
+                  />
                 </span>
               </button>
 
               {complex && (
-                <div className="space-y-2 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+                <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/40 p-3">
                   {items.map((it, idx) => (
-                    <div key={it.key} className="space-y-2 rounded-lg border border-zinc-200 p-2.5 dark:border-zinc-700">
+                    <div
+                      key={it.key}
+                      className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5"
+                    >
                       <div className="flex gap-2">
-                        <input value={it.name} onChange={(e) => setItems((list) => list.map((row, i) => i === idx ? { ...row, name: e.target.value } : row))} placeholder={`Producto ${idx + 1}`} className="min-w-0 flex-1 rounded-md border border-zinc-200 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900" />
-                        <button type="button" onClick={() => setItems((list) => list.length <= 1 ? [newItem()] : list.filter((_, i) => i !== idx))} className="p-1.5 text-zinc-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                        <input
+                          value={it.name}
+                          onChange={(e) =>
+                            setItems((list) =>
+                              list.map((row, i) =>
+                                i === idx
+                                  ? { ...row, name: e.target.value }
+                                  : row,
+                              ),
+                            )
+                          }
+                          placeholder={`Producto ${idx + 1}`}
+                          className="lc-input min-w-0 flex-1 !py-1.5"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setItems((list) =>
+                              list.length <= 1
+                                ? [newItem()]
+                                : list.filter((_, i) => i !== idx),
+                            )
+                          }
+                          className="p-1.5 text-[var(--muted-fg)] hover:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                       <div className="grid grid-cols-3 gap-2">
-                        <input value={it.quantity} onChange={(e) => setItems((list) => list.map((row, i) => i === idx ? { ...row, quantity: e.target.value } : row))} placeholder="Cant." inputMode="decimal" className="rounded-md border border-zinc-200 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900" />
-                        <input value={it.unitPrice} onChange={(e) => setItems((list) => list.map((row, i) => i === idx ? { ...row, unitPrice: e.target.value } : row))} placeholder="P. unit." inputMode="decimal" className="rounded-md border border-zinc-200 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900" />
-                        <input value={it.lineTotal} onChange={(e) => setItems((list) => list.map((row, i) => i === idx ? { ...row, lineTotal: e.target.value } : row))} placeholder="Total" inputMode="decimal" className="rounded-md border border-zinc-200 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900" />
+                        <input
+                          value={it.quantity}
+                          onChange={(e) =>
+                            setItems((list) =>
+                              list.map((row, i) =>
+                                i === idx
+                                  ? { ...row, quantity: e.target.value }
+                                  : row,
+                              ),
+                            )
+                          }
+                          placeholder="Cant."
+                          inputMode="decimal"
+                          className="lc-input !px-2 !py-1.5 text-xs"
+                        />
+                        <input
+                          value={it.unitPrice}
+                          onChange={(e) =>
+                            setItems((list) =>
+                              list.map((row, i) =>
+                                i === idx
+                                  ? { ...row, unitPrice: e.target.value }
+                                  : row,
+                              ),
+                            )
+                          }
+                          placeholder="P. unit."
+                          inputMode="decimal"
+                          className="lc-input !px-2 !py-1.5 text-xs"
+                        />
+                        <input
+                          value={it.lineTotal}
+                          onChange={(e) =>
+                            setItems((list) =>
+                              list.map((row, i) =>
+                                i === idx
+                                  ? { ...row, lineTotal: e.target.value }
+                                  : row,
+                              ),
+                            )
+                          }
+                          placeholder="Total"
+                          inputMode="decimal"
+                          className="lc-input !px-2 !py-1.5 text-xs"
+                        />
                       </div>
-                      <select value={it.productCategory} onChange={(e) => setItems((list) => list.map((row, i) => i === idx ? { ...row, productCategory: e.target.value } : row))} className="w-full rounded-md border border-zinc-200 px-2 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-900">
+                      <select
+                        value={it.productCategory}
+                        onChange={(e) =>
+                          setItems((list) =>
+                            list.map((row, i) =>
+                              i === idx
+                                ? { ...row, productCategory: e.target.value }
+                                : row,
+                            ),
+                          )
+                        }
+                        className="lc-input w-full !py-1.5 text-xs"
+                      >
                         <option value="">Subcategoría…</option>
-                        {PRODUCT_SUBCATS.map((s) => <option key={s} value={s}>{s}</option>)}
+                        {PRODUCT_SUBCATS.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   ))}
-                  <button type="button" onClick={() => setItems((list) => [...list, newItem()])} className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                  <button
+                    type="button"
+                    onClick={() => setItems((list) => [...list, newItem()])}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-[var(--brand-fg)]"
+                  >
                     <Plus className="h-3.5 w-3.5" /> Ítem
                   </button>
                 </div>
               )}
 
               {error && (
-                <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">{error}</p>
+                <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+                  {error}
+                </p>
               )}
 
               <div className="flex gap-2 pt-1">
-                <button type="button" disabled={busy} onClick={() => { setMode("choose"); setFromScan(false); setScanNote(null); }} className="flex-1 rounded-xl border border-zinc-200 px-4 py-3 text-sm font-medium dark:border-zinc-700">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setMode("choose");
+                    setFromScan(false);
+                    setScanNote(null);
+                  }}
+                  className="lc-btn lc-btn-secondary flex-1 !py-3"
+                >
                   Atrás
                 </button>
-                <button type="button" disabled={busy || !description.trim()} onClick={() => void save()} className="lc-btn lc-btn-primary flex-1 !py-3 disabled:opacity-50">
-                  {saving && <Loader2 className="h-4 w-4 animate-spin" />} Guardar
+                <button
+                  type="button"
+                  disabled={busy || !description.trim()}
+                  onClick={() => void save()}
+                  className="lc-btn lc-btn-primary flex-1 !py-3 disabled:opacity-50"
+                >
+                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}{" "}
+                  Guardar
                 </button>
               </div>
             </div>
