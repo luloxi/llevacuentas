@@ -2,14 +2,20 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
   ArrowUpRight,
   ArrowDownRight,
   ChevronRight,
+  Eye,
+  EyeOff,
+  LayoutGrid,
   Minus,
   Moon,
   Sun,
+  X,
 } from "lucide-react";
 import { formatArs, formatUsd, cn } from "@/lib/utils";
 import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
@@ -38,9 +44,35 @@ type LiveRate = {
   hint?: string;
 };
 
+type HomeSectionId =
+  | "gastos"
+  | "categorias"
+  | "ahorros"
+  | "hogar"
+  | "deuda"
+  | "cotizaciones";
+
 const SKIPPED_SERVICES_KEY = "lc:hogar-skipped-services";
-const SHOW_DEBT_KEY = "lc:home-show-debt";
-const SHOW_HOGAR_KEY = "lc:home-show-hogar";
+const HOME_ORDER_KEY = "lc:home-order";
+const HOME_HIDDEN_KEY = "lc:home-hidden";
+
+const DEFAULT_ORDER: HomeSectionId[] = [
+  "gastos",
+  "categorias",
+  "ahorros",
+  "hogar",
+  "deuda",
+  "cotizaciones",
+];
+
+const SECTION_LABELS: Record<HomeSectionId, string> = {
+  gastos: "Tus gastos",
+  categorias: "Por categoría",
+  ahorros: "Ahorros",
+  hogar: "Hogar",
+  deuda: "Deuda",
+  cotizaciones: "Cotizaciones",
+};
 
 function loadSkippedServices(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -54,15 +86,61 @@ function loadSkippedServices(): Set<string> {
   }
 }
 
-function loadFlag(key: string, defaultValue = true): boolean {
-  if (typeof window === "undefined") return defaultValue;
+function loadOrder(): HomeSectionId[] {
+  if (typeof window === "undefined") return DEFAULT_ORDER;
   try {
-    const raw = window.localStorage.getItem(key);
-    if (raw === null) return defaultValue;
-    return raw !== "0" && raw !== "false";
+    const raw = window.localStorage.getItem(HOME_ORDER_KEY);
+    if (!raw) return DEFAULT_ORDER;
+    const arr = JSON.parse(raw) as string[];
+    if (!Array.isArray(arr)) return DEFAULT_ORDER;
+    const valid = arr.filter((id): id is HomeSectionId =>
+      DEFAULT_ORDER.includes(id as HomeSectionId),
+    );
+    for (const id of DEFAULT_ORDER) {
+      if (!valid.includes(id)) valid.push(id);
+    }
+    return valid;
   } catch {
-    return defaultValue;
+    return DEFAULT_ORDER;
   }
+}
+
+function loadHidden(): Set<HomeSectionId> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    // Migrate old flags
+    const legacyDebt = window.localStorage.getItem("lc:home-show-debt");
+    const legacyHogar = window.localStorage.getItem("lc:home-show-hogar");
+    const raw = window.localStorage.getItem(HOME_HIDDEN_KEY);
+    let hidden = new Set<HomeSectionId>();
+    if (raw) {
+      const arr = JSON.parse(raw) as string[];
+      if (Array.isArray(arr)) {
+        for (const id of arr) {
+          if (DEFAULT_ORDER.includes(id as HomeSectionId)) {
+            hidden.add(id as HomeSectionId);
+          }
+        }
+      }
+    } else {
+      if (legacyDebt === "0" || legacyDebt === "false") hidden.add("deuda");
+      if (legacyHogar === "0" || legacyHogar === "false") hidden.add("hogar");
+    }
+    return hidden;
+  } catch {
+    return new Set();
+  }
+}
+
+function saveOrder(order: HomeSectionId[]) {
+  window.localStorage.setItem(HOME_ORDER_KEY, JSON.stringify(order));
+}
+
+function saveHidden(hidden: Set<HomeSectionId>) {
+  window.localStorage.setItem(
+    HOME_HIDDEN_KEY,
+    JSON.stringify([...hidden]),
+  );
 }
 
 function formatRate(n: number) {
@@ -283,6 +361,111 @@ function RatesStrip({ rates }: { rates: LiveRate[] }) {
   );
 }
 
+function HomeLayoutEditor({
+  open,
+  onClose,
+  order,
+  hidden,
+  onChange,
+}: {
+  open: boolean;
+  onClose: () => void;
+  order: HomeSectionId[];
+  hidden: Set<HomeSectionId>;
+  onChange: (order: HomeSectionId[], hidden: Set<HomeSectionId>) => void;
+}) {
+  if (!open) return null;
+
+  function move(id: HomeSectionId, dir: -1 | 1) {
+    const i = order.indexOf(id);
+    if (i < 0) return;
+    const j = i + dir;
+    if (j < 0 || j >= order.length) return;
+    const next = [...order];
+    const tmp = next[i]!;
+    next[i] = next[j]!;
+    next[j] = tmp;
+    onChange(next, hidden);
+  }
+
+  function toggle(id: HomeSectionId) {
+    const next = new Set(hidden);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange(order, next);
+  }
+
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold tracking-tight">Inicio</p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--muted-fg)] hover:bg-[var(--surface-muted)]"
+          aria-label="Cerrar"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <p className="mb-2 text-[11px] text-[var(--muted-fg)]">
+        Ordená y mostrá u ocultá las tarjetas del home.
+      </p>
+      <ul className="space-y-1.5">
+        {order.map((id, i) => {
+          const isHidden = hidden.has(id);
+          return (
+            <li
+              key={id}
+              className={cn(
+                "flex items-center gap-1.5 rounded-xl border px-2 py-1.5",
+                isHidden
+                  ? "border-dashed border-[var(--border)] opacity-60"
+                  : "border-[var(--border)] bg-[var(--surface-muted)]/40",
+              )}
+            >
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                {SECTION_LABELS[id]}
+              </span>
+              <button
+                type="button"
+                disabled={i === 0}
+                onClick={() => move(id, -1)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted-fg)] hover:bg-[var(--surface)] disabled:opacity-30"
+                aria-label="Subir"
+              >
+                <ArrowUp className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                disabled={i === order.length - 1}
+                onClick={() => move(id, 1)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted-fg)] hover:bg-[var(--surface)] disabled:opacity-30"
+                aria-label="Bajar"
+              >
+                <ArrowDown className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => toggle(id)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted-fg)] hover:bg-[var(--surface)]"
+                aria-label={isHidden ? "Mostrar" : "Ocultar"}
+                title={isHidden ? "Mostrar" : "Ocultar"}
+              >
+                {isHidden ? (
+                  <EyeOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Eye className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export function DashboardHome({
   firstName,
   period,
@@ -325,25 +508,24 @@ export function DashboardHome({
 }) {
   const router = useRouter();
   const [liveTotal, setLiveTotal] = useState(totalArs);
-  const [liveCount, setLiveCount] = useState(monthTxCount);
   const [liveCats, setLiveCats] = useState(categorySummary);
   const [burst, setBurst] = useState(false);
   const [pop, setPop] = useState(false);
   const [skipped, setSkipped] = useState<Set<string>>(() => new Set());
-  const [showDebt, setShowDebt] = useState(true);
-  const [showHogar, setShowHogar] = useState(true);
+  const [order, setOrder] = useState<HomeSectionId[]>(DEFAULT_ORDER);
+  const [hidden, setHidden] = useState<Set<HomeSectionId>>(() => new Set());
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     setSkipped(loadSkippedServices());
-    setShowDebt(loadFlag(SHOW_DEBT_KEY));
-    setShowHogar(loadFlag(SHOW_HOGAR_KEY));
+    setOrder(loadOrder());
+    setHidden(loadHidden());
   }, []);
 
   useEffect(() => {
     setLiveTotal(totalArs);
-    setLiveCount(monthTxCount);
     setLiveCats(categorySummary);
-  }, [totalArs, monthTxCount, categorySummary]);
+  }, [totalArs, categorySummary]);
 
   const displayTotal = useCountUp(liveTotal, 750);
 
@@ -357,7 +539,6 @@ export function DashboardHome({
   useEffect(() => {
     function onCreated() {
       triggerCelebrate();
-      setLiveCount((c) => c + 1);
       router.refresh();
     }
     window.addEventListener("lc:expense-created", onCreated);
@@ -368,148 +549,146 @@ export function DashboardHome({
   const hasSavings =
     savingsArs > 0 || savingsUsd > 0 || savingsUsdc > 0 || savingsNetArs > 0;
 
-  return (
-    <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm text-[var(--muted-fg)]">
-            Hola, {firstName}
-          </p>
-          <p className="text-xs font-medium capitalize text-[var(--muted-fg)]/80">
-            {formatPeriodLabel(period)}
-          </p>
-        </div>
-        <ThemeToggle />
-      </div>
+  function onLayoutChange(nextOrder: HomeSectionId[], nextHidden: Set<HomeSectionId>) {
+    setOrder(nextOrder);
+    setHidden(nextHidden);
+    saveOrder(nextOrder);
+    saveHidden(nextHidden);
+  }
 
-      <Link
-        href="/consumos?tab=lista"
-        className="group relative block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5 transition active:scale-[0.99]"
-        aria-label={`Tus gastos, ${formatArs(Math.round(displayTotal))}`}
-      >
-        <SpendBurst active={burst} />
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--brand-fg)]">
-              Tus gastos
-            </p>
-            <p
-              className={cn(
-                "mt-1 text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)]",
-                pop && "lc-amount-pop",
-              )}
-            >
-              {formatArs(Math.round(displayTotal))}
-            </p>
-            {liveCount > 0 && (
-              <p className="mt-0.5 text-[11px] tabular-nums text-[var(--muted-fg)]">
-                {liveCount} movimiento{liveCount === 1 ? "" : "s"}
-              </p>
-            )}
-          </div>
-          <TapHint />
-        </div>
-        <VsPrevMeter
-          total={liveTotal}
-          prevTotal={prevTotalArs}
-          prevPeriod={prevPeriod}
-        />
-      </Link>
-
-      {liveCats.length > 0 && (
+  const sections = useMemo(() => {
+    const map: Record<HomeSectionId, React.ReactNode> = {
+      gastos: (
         <Link
-          href="/consumos?tab=resumen"
-          className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
-          aria-label="Gastos por categoría"
+          key="gastos"
+          href="/consumos?tab=lista"
+          className="group relative block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5 transition active:scale-[0.99]"
+          aria-label={`Tus gastos, ${formatArs(Math.round(displayTotal))}`}
         >
-          <div className="mb-2.5 flex items-center justify-between gap-2">
+          <SpendBurst active={burst} />
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--brand-fg)]">
+                Tus gastos
+              </p>
+              <p
+                className={cn(
+                  "mt-1 text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)]",
+                  pop && "lc-amount-pop",
+                )}
+              >
+                {formatArs(Math.round(displayTotal))}
+              </p>
+            </div>
+            <TapHint />
+          </div>
+          <VsPrevMeter
+            total={liveTotal}
+            prevTotal={prevTotalArs}
+            prevPeriod={prevPeriod}
+          />
+        </Link>
+      ),
+      categorias:
+        liveCats.length > 0 ? (
+          <Link
+            key="categorias"
+            href="/consumos?tab=resumen"
+            className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
+            aria-label="Gastos por categoría"
+          >
+            <div className="mb-2.5 flex items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
+                Por categoría
+              </p>
+              <TapHint />
+            </div>
+            <ul className="space-y-2">
+              {liveCats.map((c) => {
+                const color = colorForCategory(c.slug);
+                return (
+                  <li key={c.id} className="flex items-center gap-2.5">
+                    <span
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                      style={{ backgroundColor: `${color}14`, color }}
+                    >
+                      <CategoryIcon slug={c.slug} size={13} />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-xs text-[var(--foreground)]/80">
+                      {c.name}
+                    </span>
+                    <span className="shrink-0 text-xs tabular-nums text-[var(--muted-fg)]">
+                      {formatArs(c.total)}
+                    </span>
+                    <div className="h-1 w-10 shrink-0 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+                      <div
+                        className="h-full rounded-full opacity-80"
+                        style={{
+                          width: `${Math.min(100, c.pct)}%`,
+                          backgroundColor: color,
+                        }}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </Link>
+        ) : null,
+      ahorros: (
+        <Link
+          key="ahorros"
+          href="/ahorros"
+          className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3.5 transition active:scale-[0.99]"
+          aria-label="Ahorros"
+        >
+          <div className="mb-1 flex items-center justify-between gap-2">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
-              Por categoría
+              Ahorros
             </p>
             <TapHint />
           </div>
-          <ul className="space-y-2">
-            {liveCats.map((c) => {
-              const color = colorForCategory(c.slug);
-              return (
-                <li key={c.id} className="flex items-center gap-2.5">
-                  <span
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-                    style={{ backgroundColor: `${color}14`, color }}
-                  >
-                    <CategoryIcon slug={c.slug} size={13} />
+          {hasSavings ? (
+            <>
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <p className="text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+                  {formatArs(Math.round(savingsNetArs))}
+                </p>
+                <p className="text-[11px] text-[var(--muted-fg)]">
+                  neto en pesos
+                </p>
+              </div>
+              <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--muted-fg)]">
+                <span>
+                  Pesos{" "}
+                  <span className="tabular-nums font-medium text-[var(--foreground)]/80">
+                    {formatArs(savingsArs)}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-xs text-[var(--foreground)]/80">
-                    {c.name}
+                </span>
+                <span>
+                  USD{" "}
+                  <span className="tabular-nums font-medium text-[var(--foreground)]/80">
+                    {formatUsd(savingsUsd)}
                   </span>
-                  <span className="shrink-0 text-xs tabular-nums text-[var(--muted-fg)]">
-                    {formatArs(c.total)}
+                </span>
+                <span>
+                  USDC{" "}
+                  <span className="tabular-nums font-medium text-[var(--brand-fg)]">
+                    {formatUsd(savingsUsdc)}
                   </span>
-                  <div className="h-1 w-10 shrink-0 overflow-hidden rounded-full bg-[var(--surface-muted)]">
-                    <div
-                      className="h-full rounded-full opacity-80"
-                      style={{
-                        width: `${Math.min(100, c.pct)}%`,
-                        backgroundColor: color,
-                      }}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-[var(--muted-fg)]">
+              Agregá wallets y bancos
+            </p>
+          )}
         </Link>
-      )}
-
-      <Link
-        href="/ahorros"
-        className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3.5 transition active:scale-[0.99]"
-        aria-label="Ahorros"
-      >
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
-            Ahorros
-          </p>
-          <TapHint />
-        </div>
-        {hasSavings ? (
-          <>
-            <p className="text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
-              {formatArs(Math.round(savingsNetArs))}
-            </p>
-            <p className="mt-0.5 text-[10px] text-[var(--muted-fg)]">
-              Neto en pesos
-            </p>
-            <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--muted-fg)]">
-              <span>
-                Pesos{" "}
-                <span className="tabular-nums font-medium text-[var(--foreground)]/80">
-                  {formatArs(savingsArs)}
-                </span>
-              </span>
-              <span>
-                USD{" "}
-                <span className="tabular-nums font-medium text-[var(--foreground)]/80">
-                  {formatUsd(savingsUsd)}
-                </span>
-              </span>
-              <span>
-                USDC{" "}
-                <span className="tabular-nums font-medium text-[var(--brand-fg)]">
-                  {formatUsd(savingsUsdc)}
-                </span>
-              </span>
-            </div>
-          </>
-        ) : (
-          <p className="text-sm text-[var(--muted-fg)]">
-            Agregá wallets y bancos
-          </p>
-        )}
-      </Link>
-
-      {showHogar && (
+      ),
+      hogar: (
         <Link
+          key="hogar"
           href="/compartido"
           className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
           aria-label={`Hogar ${formatArs(sharedTotalArs)}`}
@@ -549,10 +728,10 @@ export function DashboardHome({
             <TapHint />
           </div>
         </Link>
-      )}
-
-      {showDebt && (
+      ),
+      deuda: (
         <Link
+          key="deuda"
           href="/deuda"
           className="group flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
           aria-label={
@@ -578,9 +757,76 @@ export function DashboardHome({
           </div>
           <TapHint />
         </Link>
-      )}
+      ),
+      cotizaciones: <RatesStrip key="cotizaciones" rates={liveRates} />,
+    };
 
-      <RatesStrip rates={liveRates} />
+    return order
+      .filter((id) => !hidden.has(id))
+      .map((id) => map[id])
+      .filter(Boolean);
+  }, [
+    order,
+    hidden,
+    displayTotal,
+    burst,
+    pop,
+    liveTotal,
+    prevTotalArs,
+    prevPeriod,
+    liveCats,
+    hasSavings,
+    savingsNetArs,
+    savingsArs,
+    savingsUsd,
+    savingsUsdc,
+    sharedTotalArs,
+    sharedPrevTotalArs,
+    visibleServices,
+    debtSettled,
+    debtBalanceArs,
+    liveRates,
+  ]);
+
+  return (
+    <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm text-[var(--muted-fg)]">
+            Hola, {firstName}
+          </p>
+          <p className="text-xs font-medium capitalize text-[var(--muted-fg)]/80">
+            {formatPeriodLabel(period)}
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setEditing((v) => !v)}
+            className={cn(
+              "inline-flex h-8 w-8 items-center justify-center rounded-full border transition",
+              editing
+                ? "border-[var(--brand)]/40 bg-[var(--brand)]/10 text-[var(--brand-fg)]"
+                : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]",
+            )}
+            aria-label="Editar inicio"
+            title="Orden y visibilidad"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" strokeWidth={1.75} />
+          </button>
+          <ThemeToggle />
+        </div>
+      </div>
+
+      <HomeLayoutEditor
+        open={editing}
+        onClose={() => setEditing(false)}
+        order={order}
+        hidden={hidden}
+        onChange={onLayoutChange}
+      />
+
+      {sections}
     </div>
   );
 }
