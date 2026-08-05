@@ -99,6 +99,9 @@ export async function GET(req: Request) {
         amountUsd: r.amountUsd != null ? Number(r.amountUsd) : null,
         installment: r.installment,
         isPayment: r.isPayment,
+        ownership: (r.ownership === "shared" ? "shared" : "personal") as
+          | "personal"
+          | "shared",
         paidByUserId: r.paidByUserId,
         source: r.source,
         category: r.categoryId ? (byId.get(r.categoryId) ?? null) : null,
@@ -307,7 +310,6 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Falta id" }, { status: 400 });
     }
 
-    // Load description before update for learning
     const db = getDb();
     const [before] = await db
       .select()
