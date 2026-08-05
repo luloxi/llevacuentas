@@ -49,19 +49,17 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
 
   return (
     <>
-      <header className="sticky top-0 z-40 hidden border-b border-emerald-900/8 bg-white/75 shadow-sm shadow-emerald-900/[0.03] backdrop-blur-xl md:block dark:border-white/5 dark:bg-zinc-950/70 dark:shadow-black/20">
+      <header className="sticky top-0 z-40 hidden border-b border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-md md:block">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2.5 md:px-6">
           <Link
             href="/dashboard"
-            className="group flex items-center gap-2.5 font-semibold tracking-tight"
+            className="group flex items-center gap-2.5 font-semibold tracking-tight text-[var(--foreground)]"
           >
             <BrandLogo
-              size={34}
-              className="transition-transform duration-200 group-hover:scale-105"
+              size={32}
+              className="transition-transform duration-200 group-hover:scale-[1.03]"
             />
-            <span className="bg-gradient-to-r from-zinc-900 to-zinc-600 bg-clip-text text-transparent dark:from-white dark:to-zinc-400">
-              LlevaCuentas
-            </span>
+            <span className="text-[15px] tracking-tight">LlevaCuentas</span>
           </Link>
           <nav className="flex items-center gap-0.5">
             {desktopLinks.map(({ href, label, icon: Icon }) => {
@@ -71,13 +69,13 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
                   key={href}
                   href={href}
                   className={cn(
-                    "relative flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-150",
+                    "relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                     active
-                      ? "bg-gradient-to-b from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-600/25"
-                      : "text-zinc-600 hover:bg-emerald-50/80 hover:text-emerald-900 dark:text-zinc-300 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-100",
+                      ? "bg-[var(--brand-soft)] text-[var(--brand-fg)]"
+                      : "text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]",
                   )}
                 >
-                  <Icon className={cn("h-4 w-4", active && "drop-shadow-sm")} />
+                  <Icon className="h-4 w-4" strokeWidth={active ? 2.25 : 1.75} />
                   {label}
                 </Link>
               );
@@ -85,30 +83,30 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
             <button
               type="button"
               onClick={openAddExpense}
-              className="ml-1 flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold text-white shadow-md shadow-violet-600/25 transition hover:bg-violet-700"
+              className="lc-btn lc-btn-primary ml-2 !px-3 !py-2"
             >
-              <Plus className="h-4 w-4" strokeWidth={2.5} />
+              <Plus className="h-4 w-4" strokeWidth={2.25} />
               Agregar
             </button>
             <button
               type="button"
               onClick={() => void logout()}
-              className="ml-1.5 flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              className="ml-1 flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-4 w-4" strokeWidth={1.75} />
               Salir
             </button>
           </nav>
         </div>
       </header>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200/80 bg-white/90 shadow-[0_-8px_30px_-12px_rgb(0_0_0/0.12)] backdrop-blur-xl md:hidden dark:border-zinc-800/80 dark:bg-zinc-950/90 dark:shadow-black/40">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-md md:hidden">
         <div className="relative mx-auto grid max-w-lg grid-cols-5 items-end gap-0.5 px-1.5 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
           {left.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
               <NavSlot key={href} href={href} label={label} active={active}>
-                <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 2} />
+                <Icon className="h-5 w-5" strokeWidth={active ? 2.1 : 1.75} />
               </NavSlot>
             );
           })}
@@ -117,12 +115,12 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
             <button
               type="button"
               onClick={openAddExpense}
-              className="absolute -top-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-b from-violet-500 to-violet-700 text-white shadow-lg shadow-violet-600/40 ring-4 ring-white transition active:scale-95 dark:ring-zinc-950"
+              className="absolute -top-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--brand)] text-white shadow-md shadow-black/10 ring-[3px] ring-[var(--surface)] transition active:scale-95 dark:text-[#121110]"
               aria-label="Agregar gasto"
             >
-              <Plus className="h-7 w-7" strokeWidth={2.5} />
+              <Plus className="h-6 w-6" strokeWidth={2.25} />
             </button>
-            <span className="mt-10 text-[10px] font-medium text-violet-600 dark:text-violet-400">
+            <span className="mt-9 text-[10px] font-medium text-[var(--muted-fg)]">
               Agregar
             </span>
           </div>
@@ -131,7 +129,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
             const active = pathname.startsWith(href);
             return (
               <NavSlot key={href} href={href} label={label} active={active}>
-                <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 2} />
+                <Icon className="h-5 w-5" strokeWidth={active ? 2.1 : 1.75} />
               </NavSlot>
             );
           })}
@@ -156,18 +154,16 @@ function NavSlot({
     <Link
       href={href}
       className={cn(
-        "relative flex flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[10px] font-medium transition-colors",
+        "relative flex flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-medium transition-colors",
         active
-          ? "text-emerald-600 dark:text-emerald-400"
-          : "text-zinc-500",
+          ? "text-[var(--brand-fg)]"
+          : "text-[var(--muted-fg)]",
       )}
     >
       <span
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-xl transition-all",
-          active
-            ? "bg-emerald-100 text-emerald-700 shadow-sm dark:bg-emerald-950 dark:text-emerald-300"
-            : "text-zinc-500",
+          "flex h-8 w-8 items-center justify-center rounded-xl transition-colors",
+          active ? "bg-[var(--brand-soft)]" : "",
         )}
       >
         {children}
