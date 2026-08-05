@@ -42,27 +42,29 @@ export function ConsumosWorkspace() {
 
   return (
     <PageStack>
-      <SegmentedControl
-        value={tab}
-        onChange={setTab}
-        options={[
-          {
-            id: "lista",
-            label: "Lista",
-            icon: <List className="h-3.5 w-3.5" />,
-          },
-          {
-            id: "resumen",
-            label: "Resumen",
-            icon: <LayoutList className="h-3.5 w-3.5" />,
-          },
-          {
-            id: "charts",
-            label: "Gráficos",
-            icon: <LineChart className="h-3.5 w-3.5" />,
-          },
-        ]}
-      />
+      <div className="flex justify-end">
+        <SegmentedControl
+          value={tab}
+          onChange={setTab}
+          options={[
+            {
+              id: "lista",
+              label: "Lista",
+              icon: <List className="h-3.5 w-3.5" />,
+            },
+            {
+              id: "resumen",
+              label: "Resumen",
+              icon: <LayoutList className="h-3.5 w-3.5" />,
+            },
+            {
+              id: "charts",
+              label: "Gráficos",
+              icon: <LineChart className="h-3.5 w-3.5" />,
+            },
+          ]}
+        />
+      </div>
 
       {toast && <Toast>{toast}</Toast>}
 
