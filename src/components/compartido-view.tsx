@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   formatArs,
   formatUsd,
@@ -13,7 +14,6 @@ import { LoadingBlock, PageStack, SegmentedControl } from "@/components/ui";
 import { HogarCharts } from "@/components/hogar-charts";
 import { CategoryIcon } from "@/lib/category-icons";
 import { colorForCategory } from "@/lib/category-colors";
-import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -67,8 +67,11 @@ type Expense = {
   receiptItems: ReceiptItem[];
 };
 
-const VIEW_TABS = ["vista", "charts"] as const;
-type ViewTab = (typeof VIEW_TABS)[number];
+type ViewTab = "vista" | "charts";
+
+function tabFromParam(raw: string | null): ViewTab {
+  return raw === "charts" ? "charts" : "vista";
+}
 
 function firstName(name: string) {
   const n = name.trim();
@@ -76,7 +79,11 @@ function firstName(name: string) {
 }
 
 export function CompartidoView() {
-  const [viewTab, setViewTab] = useState<ViewTab>("vista");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [viewTab, setViewTab] = useState<ViewTab>(() =>
+    tabFromParam(searchParams.get("tab")),
+  );
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<Cat[]>([]);
   const [periods, setPeriods] = useState<string[]>([]);
@@ -95,8 +102,17 @@ export function CompartidoView() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [ticketOpen, setTicketOpen] = useState<Set<string>>(new Set());
 
-  const onViewTab = useCallback((v: ViewTab) => setViewTab(v), []);
-  const swipe = useSwipeTabs({ tabs: VIEW_TABS, value: viewTab, onChange: onViewTab });
+  useEffect(() => {
+    setViewTab(tabFromParam(searchParams.get("tab")));
+  }, [searchParams]);
+
+  const onViewTab = useCallback(
+    (v: ViewTab) => {
+      setViewTab(v);
+      router.replace(`/compartido?tab=${v}`, { scroll: false });
+    },
+    [router],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -223,7 +239,7 @@ export function CompartidoView() {
         ]}
       />
 
-      <div {...swipe} className="min-h-[40vh] space-y-4">
+      <div className="min-h-[40vh] space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--muted-fg)]">
             <Users className="h-4 w-4" strokeWidth={1.75} />
@@ -286,7 +302,7 @@ export function CompartidoView() {
                   <div className="mt-1.5 flex items-center justify-center gap-2 text-[11px] text-[var(--muted-fg)]">
                     {prevPeriod && (
                       <span className="tabular-nums">
-                        vs {formatPeriodShort(prevPeriod)} · {" "}
+                        vs {formatPeriodShort(prevPeriod)} ·{" "}
                         {formatArs(prevTotalArs)}
                       </span>
                     )}
