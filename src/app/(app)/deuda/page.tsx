@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import { requireUser } from "@/lib/session";
 import { getUserHousehold } from "@/lib/household";
 import { hasDatabase } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { DeudaView } from "@/components/deuda-view";
+import { LoadingBlock } from "@/components/ui";
 
 export default async function DeudaPage() {
   const user = await requireUser();
@@ -10,5 +12,9 @@ export default async function DeudaPage() {
   const ctx = await getUserHousehold(user.id);
   if (!ctx) redirect("/onboarding");
 
-  return <DeudaView />;
+  return (
+    <Suspense fallback={<LoadingBlock label="Cargando deuda…" />}>
+      <DeudaView />
+    </Suspense>
+  );
 }
