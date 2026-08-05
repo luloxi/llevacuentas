@@ -10,6 +10,9 @@ import {
 } from "lucide-react";
 import { cn, formatArs, formatUsd } from "@/lib/utils";
 import { LoadingBlock, PageStack, Surface } from "@/components/ui";
+import { AddressInput } from "@/components/address-input";
+import { AddressDisplay } from "@/components/address-display";
+import type { EnsResolution } from "@/lib/ens";
 
 type Asset = {
   id: string;
@@ -34,10 +37,8 @@ type Summary = {
 
 type AddKind = "evm" | "cardano" | "bank" | null;
 
-function shortAddr(a: string | null) {
-  if (!a) return "";
-  if (a.length <= 16) return a;
-  return `${a.slice(0, 8)}…${a.slice(-6)}`;
+function looksLikeEnsLabel(label: string) {
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(label.trim());
 }
 
 export function AhorrosView() {
@@ -49,6 +50,7 @@ export function AhorrosView() {
   const [addKind, setAddKind] = useState<AddKind>(null);
   const [label, setLabel] = useState("");
   const [address, setAddress] = useState("");
+  const [resolvedEvm, setResolvedEvm] = useState<EnsResolution | null>(null);
   const [amountArs, setAmountArs] = useState("");
   const [amountUsd, setAmountUsd] = useState("");
   const [saving, setSaving] = useState(false);
@@ -88,6 +90,7 @@ export function AhorrosView() {
           : "Banco",
     );
     setAddress("");
+    setResolvedEvm(null);
     setAmountArs("");
     setAmountUsd("");
   }
@@ -104,6 +107,18 @@ export function AhorrosView() {
       if (addKind === "bank") {
         body.amountArs = amountArs ? Number(amountArs.replace(",", ".")) : 0;
         body.amountUsd = amountUsd ? Number(amountUsd.replace(",", ".")) : 0;
+      } else if (addKind === "evm") {
+        if (!resolvedEvm?.address) {
+          throw new Error("Resolvé una address o ENS válida antes de guardar");
+        }
+        body.address = resolvedEvm.address;
+        body.ens = resolvedEvm.ens;
+        if (
+          resolvedEvm.ens &&
+          (!label.trim() || label.trim() === "Wallet EVM")
+        ) {
+          body.label = resolvedEvm.ens;
+        }
       } else {
         body.address = address.trim();
       }
@@ -168,6 +183,8 @@ export function AhorrosView() {
   const wallets = assets.filter((a) => a.kind !== "bank");
   const banks = assets.filter((a) => a.kind === "bank");
 
+  const canSaveEvm = addKind !== "evm" || Boolean(resolvedEvm?.address);
+
   return (
     <PageStack className="!space-y-4">
       <div className="flex items-start justify-between gap-2">
@@ -192,10 +209,7 @@ export function AhorrosView() {
 
       {summary && (
         <div className="grid grid-cols-3 gap-2">
-          <Mini
-            label="Pesos"
-            value={formatArs(summary.totalArs)}
-          />
+          <Mini label="Pesos" value={formatArs(summary.totalArs)} />
           <Mini label="Dólares" value={formatUsd(summary.totalUsd)} />
           <Mini
             label="Cripto / USDC"
@@ -245,7 +259,7 @@ export function AhorrosView() {
           </p>
           <input
             className="lc-input w-full"
-            placeholder="Nombre"
+            placeholder="Nombre (opcional)"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
           />
@@ -266,12 +280,18 @@ export function AhorrosView() {
                 onChange={(e) => setAmountUsd(e.target.value)}
               />
             </div>
+          ) : addKind === "evm" ? (
+            <AddressInput
+              value={address}
+              onChange={setAddress}
+              onResolved={setResolvedEvm}
+              placeholder="0x… o nombre.eth"
+              disabled={saving}
+            />
           ) : (
             <input
               className="lc-input w-full font-mono text-sm"
-              placeholder={
-                addKind === "evm" ? "0x…" : "addr1…"
-              }
+              placeholder="addr1…"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
             />
@@ -280,7 +300,7 @@ export function AhorrosView() {
             <button
               type="button"
               className="lc-btn lc-btn-primary flex-1"
-              disabled={saving}
+              disabled={saving || !canSaveEvm}
               onClick={() => void submitAdd()}
             >
               {saving ? "Guardando…" : "Guardar"}
@@ -310,13 +330,25 @@ export function AhorrosView() {
                 className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
+                  <div className="min-w-0 space-y-1.5">
                     <p className="text-sm font-medium">{a.label}</p>
-                    <p className="mt-0.5 font-mono text-[11px] text-[var(--muted-fg)]">
-                      {a.kind.toUpperCase()} · {shortAddr(a.address)}
-                    </p>
+                    {a.kind === "evm" && a.address ? (
+                      <AddressDisplay
+                        address={a.address}
+                        ens={
+                          looksLikeEnsLabel(a.label) ? a.label : null
+                        }
+                      />
+                    ) : (
+                      <p className="font-mono text-[11px] text-[var(--muted-fg)]">
+                        {a.kind.toUpperCase()}
+                        {a.address
+                          ? ` · ${a.address.slice(0, 10)}…${a.address.slice(-6)}`
+                          : ""}
+                      </p>
+                    )}
                     {a.syncError && (
-                      <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+                      <p className="text-[11px] text-amber-700 dark:text-amber-400">
                         {a.syncError}
                       </p>
                     )}
@@ -486,7 +518,9 @@ function BankRow({
         <button
           type="button"
           className="lc-btn lc-btn-primary mt-2 w-full !py-1.5 text-xs"
-          onClick={() => void onSave(asset.id, ars, usd).then(() => setDirty(false))}
+          onClick={() =>
+            void onSave(asset.id, ars, usd).then(() => setDirty(false))
+          }
         >
           Guardar cambios
         </button>
