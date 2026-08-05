@@ -209,12 +209,12 @@ export function AhorrosView() {
 
       {summary && (
         <Surface className="!p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
-            Neto en pesos
-          </p>
-          <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
-            {formatArs(Math.round(summary.netArs))}
-          </p>
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <p className="text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+              {formatArs(Math.round(summary.netArs))}
+            </p>
+            <p className="text-[11px] text-[var(--muted-fg)]">neto en pesos</p>
+          </div>
           {summary.blueRate != null && summary.blueRate > 0 && (
             <p className="mt-0.5 text-[10px] text-[var(--muted-fg)]">
               Incluye USD al blue (${Math.round(summary.blueRate).toLocaleString("es-AR")})
