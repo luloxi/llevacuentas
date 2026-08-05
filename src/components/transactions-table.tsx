@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, Download, RefreshCw, Search,
 } from "lucide-react";
 import * as XLSX from "xlsx";
-import { formatArs, formatUsd, formatDateAr, cn } from "@/lib/utils";
+import { formatArs, formatUsd, formatDateAr, cn, currentPeriodAr, periodFromDateString } from "@/lib/utils";
 import { formatPeriodLabel } from "@/lib/period-label";
 import { LoadingBlock, Toast } from "@/components/ui";
 
@@ -22,7 +22,8 @@ type ReceiptInfo = {
 type Tx = {
   id: string; date: string; descriptionNormalized: string;
   amountArs: number | null; amountUsd: number | null; installment: string | null;
-  isPayment: boolean; paidByUserId: string | null; source: string;
+  isPayment: boolean; ownership: "personal" | "shared";
+  paidByUserId: string | null; source: string;
   category: Category | null; hasTicket: boolean; receipt: ReceiptInfo | null;
 };
 
@@ -31,11 +32,6 @@ const PRODUCT_SUBCATS = [
   "Limpieza","Higiene","Snacks","Congelados","Almacén","Otros",
 ];
 const PAGE_SIZES = [5, 10, 25, 50] as const;
-
-function currentPeriod(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
 
 function memberLabel(m: Member) {
   const n = m.name.trim();
@@ -69,6 +65,7 @@ function toSheet(rows: Tx[], members: Member[]) {
     "Monto $": r.amountArs ?? "",
     USD: r.amountUsd ?? "",
     Categoría: categoryLabel(r.category?.name),
+    Tipo: r.ownership === "shared" ? "Hogar" : "Personal",
     Pagó: (() => {
       const m = members.find((x) => x.userId === r.paidByUserId);
       return m ? memberLabel(m) : "";
@@ -82,8 +79,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
   const [rows, setRows] = useState<Tx[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  /** YYYY-MM or "" = all. Default: current calendar month */
-  const [period, setPeriod] = useState(currentPeriod);
+  const [period, setPeriod] = useState(currentPeriodAr);
   const [allPeriods, setAllPeriods] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
@@ -113,14 +109,24 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
         error?: string; transactions?: Tx[]; categories?: Category[]; members?: Member[];
       }>(res);
       if (!res.ok) { setError(data.error || `Error ${res.status}`); return; }
-      const list = (data.transactions ?? []).filter((t) => !t.isPayment);
-      setRows(list);
+      const list = (data.transactions ?? [])
+        .filter((t) => !t.isPayment)
+        .map((t) => ({
+          ...t,
+          ownership: t.ownership === "shared" ? "shared" as const : "personal" as const,
+        }));
+
+      // Client-side safety: never show another month when a period is selected
+      const filtered = period
+        ? list.filter((t) => periodFromDateString(t.date) === period)
+        : list;
+
+      setRows(filtered);
       setCategories(data.categories ?? []);
       setMembers(data.members ?? []);
       setPage(1);
 
-      // Keep full period list even when filtered (merge from this response)
-      const fromRows = [...new Set(list.map((r) => r.date.slice(0, 7)))];
+      const fromRows = [...new Set(list.map((r) => periodFromDateString(r.date)))];
       setAllPeriods((prev) => {
         const merged = new Set([...prev, ...fromRows]);
         if (period) merged.add(period);
@@ -133,7 +139,6 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
     }
   }, [period, q, uncategorizedOnly]);
 
-  // Once: seed full period list so the selector has every month
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -146,7 +151,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
           ...new Set(
             (data.transactions ?? [])
               .filter((t) => !t.isPayment)
-              .map((r) => r.date.slice(0, 7)),
+              .map((r) => periodFromDateString(r.date)),
           ),
         ].sort().reverse();
         setAllPeriods(ps);
@@ -160,6 +165,14 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    function onCreated() {
+      void load();
+    }
+    window.addEventListener("lc:expense-created", onCreated);
+    return () => window.removeEventListener("lc:expense-created", onCreated);
+  }, [load]);
 
   const sorted = useMemo(
     () => [...rows].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
@@ -188,6 +201,9 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
       const next = { ...r };
       if (nextCat !== undefined) next.category = nextCat;
       if ("paidByUserId" in body) next.paidByUserId = (body.paidByUserId as string | null) ?? null;
+      if ("ownership" in body) {
+        next.ownership = body.ownership === "shared" ? "shared" : "personal";
+      }
       return next;
     }));
 
@@ -200,7 +216,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) { setRows(prev); setError(data?.error || "No se pudo guardar"); return; }
-      if (data?.learned) setToast("Guardado.");
+      if (data?.learned || body.ownership) setToast("Guardado.");
     } catch {
       setRows(prev); setError("Error de red al guardar");
     } finally {
@@ -245,7 +261,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
 
   const periods = allPeriods.length
     ? allPeriods
-    : [...new Set(rows.map((r) => r.date.slice(0, 7)))].sort().reverse();
+    : [...new Set(rows.map((r) => periodFromDateString(r.date)))].sort().reverse();
 
   function exportCsv() {
     const ws = XLSX.utils.json_to_sheet(toSheet(sorted, members));
@@ -329,7 +345,23 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
                         {categories.map((c) => <option key={c.id} value={c.id}>{categoryLabel(c.name)}</option>)}
                       </select>
                     )}
-                    <select value={r.paidByUserId ?? members[0]?.userId ?? ""} disabled={savingId === r.id || !members.length} onChange={(e) => void patch(r.id, { paidByUserId: e.target.value || null })} className="lc-input !px-2 !py-1.5 text-xs">
+                    <select
+                      value={r.ownership}
+                      disabled={savingId === r.id}
+                      onChange={(e) => void patch(r.id, { ownership: e.target.value })}
+                      className={cn(
+                        "lc-input !px-2 !py-1.5 text-xs font-medium",
+                        r.ownership === "shared"
+                          ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
+                          : "",
+                      )}
+                    >
+                      <option value="personal">Personal</option>
+                      <option value="shared">Hogar</option>
+                    </select>
+                  </div>
+                  <div className="mt-2">
+                    <select value={r.paidByUserId ?? members[0]?.userId ?? ""} disabled={savingId === r.id || !members.length} onChange={(e) => void patch(r.id, { paidByUserId: e.target.value || null })} className="lc-input w-full !px-2 !py-1.5 text-xs">
                       {members.map((m) => <option key={m.userId} value={m.userId}>{memberLabel(m)}</option>)}
                     </select>
                   </div>
@@ -372,6 +404,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
                   <th className="px-3 py-2.5">Monto $</th>
                   <th className="px-3 py-2.5">USD</th>
                   <th className="px-3 py-2.5">Categoría</th>
+                  <th className="px-3 py-2.5">Tipo</th>
                   <th className="px-3 py-2.5">Pagó</th>
                 </tr>
               </thead>
@@ -407,6 +440,22 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
                           )}
                         </td>
                         <td className="px-3 py-2">
+                          <select
+                            value={r.ownership}
+                            disabled={savingId === r.id}
+                            onChange={(e) => void patch(r.id, { ownership: e.target.value })}
+                            className={cn(
+                              "lc-input max-w-[110px] !px-1.5 !py-1 text-xs font-medium",
+                              r.ownership === "shared"
+                                ? "border-sky-300 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/40"
+                                : "",
+                            )}
+                          >
+                            <option value="personal">Personal</option>
+                            <option value="shared">Hogar</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
                           <select value={r.paidByUserId ?? members[0]?.userId ?? ""} disabled={savingId === r.id || !members.length} onChange={(e) => void patch(r.id, { paidByUserId: e.target.value || null })} className="lc-input max-w-[120px] !px-1.5 !py-1 text-xs">
                             {members.map((m) => <option key={m.userId} value={m.userId}>{memberLabel(m)}</option>)}
                           </select>
@@ -414,7 +463,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
                       </tr>
                       {isTicket && isOpen && r.receipt && (
                         <tr className="bg-violet-50/50 dark:bg-violet-950/20">
-                          <td colSpan={7} className="px-4 py-3">
+                          <td colSpan={8} className="px-4 py-3">
                             <div className="rounded-xl border border-violet-200 bg-white p-3 dark:border-violet-900 dark:bg-zinc-950">
                               <p className="mb-2 text-xs font-semibold uppercase text-violet-700 dark:text-violet-300">
                                 Detalle del ticket{r.receipt.items.length ? ` · ${r.receipt.items.length} ítems` : ""}
