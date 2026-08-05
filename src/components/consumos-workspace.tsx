@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { LayoutList, LineChart, List } from "lucide-react";
 import { TransactionsTable } from "@/components/transactions-table";
-import { PageStack, Toast } from "@/components/ui";
+import { MesAMesView } from "@/components/mes-a-mes";
+import { PageStack, SegmentedControl, Toast } from "@/components/ui";
+
+type Tab = "lista" | "resumen" | "charts";
 
 /**
- * Gastos = list + filters only.
+ * Gastos hosts the expense list plus the former Análisis resumen/charts.
  * Add expense and card import live in the central + modal.
  */
 export function ConsumosWorkspace() {
+  const [tab, setTab] = useState<Tab>("lista");
   const [tableKey, setTableKey] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -37,8 +42,35 @@ export function ConsumosWorkspace() {
 
   return (
     <PageStack>
+      <SegmentedControl
+        value={tab}
+        onChange={setTab}
+        options={[
+          {
+            id: "lista",
+            label: "Lista",
+            icon: <List className="h-3.5 w-3.5" />,
+          },
+          {
+            id: "resumen",
+            label: "Resumen",
+            icon: <LayoutList className="h-3.5 w-3.5" />,
+          },
+          {
+            id: "charts",
+            label: "Gráficos",
+            icon: <LineChart className="h-3.5 w-3.5" />,
+          },
+        ]}
+      />
+
       {toast && <Toast>{toast}</Toast>}
-      <TransactionsTable key={tableKey} compactToolbar />
+
+      {tab === "lista" ? (
+        <TransactionsTable key={tableKey} compactToolbar />
+      ) : (
+        <MesAMesView mode={tab === "charts" ? "charts" : "resumen"} />
+      )}
     </PageStack>
   );
 }
