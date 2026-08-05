@@ -1,15 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  List,
-  PieChart,
-  Users,
   ArrowUpRight,
   ArrowDownRight,
   Minus,
+  Users,
 } from "lucide-react";
 import { formatArs, cn } from "@/lib/utils";
 import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
@@ -59,7 +56,6 @@ function useCountUp(target: number, durationMs = 700) {
     };
   }, [target, durationMs]);
 
-  // Keep fromRef in sync when settling without animation jump on first mount
   useEffect(() => {
     fromRef.current = value;
   }, [value]);
@@ -103,7 +99,6 @@ function SpendBurst({ active }: { active: boolean }) {
               marginTop: -size / 2,
               background: color,
               boxShadow: `0 0 8px ${color}`,
-              // CSS vars for keyframes
               ["--bx" as string]: `${x}px`,
               ["--by" as string]: `${y}px`,
               animationDelay: `${delay}ms`,
@@ -117,68 +112,19 @@ function SpendBurst({ active }: { active: boolean }) {
   );
 }
 
-export function DashboardHome({
-  firstName,
-  householdName,
-  period,
+function Meter({
+  total,
+  prevTotal,
   prevPeriod,
-  totalArs,
-  prevTotalArs,
-  monthTxCount,
-  categorySummary,
+  accent = "emerald",
 }: {
-  firstName: string;
-  householdName: string;
-  period: string;
+  total: number;
+  prevTotal: number;
   prevPeriod: string;
-  totalArs: number;
-  prevTotalArs: number;
-  monthTxCount: number;
-  categorySummary: CategorySummary[];
-  initialCategories?: unknown;
-  initialMembers?: unknown;
+  accent?: "emerald" | "violet";
 }) {
-  const router = useRouter();
-  const [liveTotal, setLiveTotal] = useState(totalArs);
-  const [liveCount, setLiveCount] = useState(monthTxCount);
-  const [liveCats, setLiveCats] = useState(categorySummary);
-  const [burst, setBurst] = useState(false);
-  const [pop, setPop] = useState(false);
-  const [barBoost, setBarBoost] = useState(false);
-
-  // Sync when server props refresh (router.refresh)
-  useEffect(() => {
-    setLiveTotal(totalArs);
-    setLiveCount(monthTxCount);
-    setLiveCats(categorySummary);
-  }, [totalArs, monthTxCount, categorySummary]);
-
-  const displayTotal = useCountUp(liveTotal, 750);
-
-  const triggerCelebrate = useCallback(() => {
-    setBurst(true);
-    setPop(true);
-    setBarBoost(true);
-    window.setTimeout(() => setBurst(false), 900);
-    window.setTimeout(() => setPop(false), 500);
-    window.setTimeout(() => setBarBoost(false), 900);
-  }, []);
-
-  useEffect(() => {
-    function onCreated() {
-      triggerCelebrate();
-      // Soft optimistic nudge: +1 mov until server data arrives
-      setLiveCount((c) => c + 1);
-      router.refresh();
-    }
-    window.addEventListener("lc:expense-created", onCreated);
-    return () => window.removeEventListener("lc:expense-created", onCreated);
-  }, [router, triggerCelebrate]);
-
   const delta =
-    prevTotalArs > 0
-      ? ((liveTotal - prevTotalArs) / prevTotalArs) * 100
-      : null;
+    prevTotal > 0 ? ((total - prevTotal) / prevTotal) * 100 : null;
   const DeltaIcon =
     delta == null || Math.abs(delta) < 0.5
       ? Minus
@@ -191,29 +137,115 @@ export function DashboardHome({
       : delta > 0
         ? "text-amber-600 dark:text-amber-400"
         : "text-emerald-600 dark:text-emerald-400";
-
   const barPct =
-    prevTotalArs > 0
-      ? Math.min(120, (liveTotal / prevTotalArs) * 100)
-      : liveTotal > 0
+    prevTotal > 0
+      ? Math.min(120, (total / prevTotal) * 100)
+      : total > 0
         ? 100
         : 0;
+  const barGrad =
+    barPct >= 100
+      ? "bg-gradient-to-r from-amber-500 to-orange-500"
+      : accent === "violet"
+        ? "bg-gradient-to-r from-violet-500 to-fuchsia-400"
+        : "bg-gradient-to-r from-emerald-500 to-teal-400";
 
   return (
-    <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-6">
+    <div className="relative mx-auto mt-3 max-w-[220px]">
+      <div className="h-2.5 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800">
+        <div
+          className={cn("h-full rounded-full transition-all duration-700 ease-out", barGrad)}
+          style={{ width: `${Math.min(100, barPct)}%` }}
+        />
+      </div>
+      <div className="mt-1.5 flex items-center justify-center gap-2 text-sm text-zinc-500">
+        <span className="tabular-nums">
+          {formatPeriodShort(prevPeriod)} · {formatArs(prevTotal)}
+        </span>
+        {delta != null && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium",
+              deltaColor,
+            )}
+          >
+            <DeltaIcon className="h-3.5 w-3.5" />
+            {Math.abs(delta).toFixed(0)}%
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function DashboardHome({
+  firstName,
+  period,
+  prevPeriod,
+  totalArs,
+  prevTotalArs,
+  sharedTotalArs,
+  sharedPrevTotalArs,
+  monthTxCount,
+  categorySummary,
+}: {
+  firstName: string;
+  period: string;
+  prevPeriod: string;
+  totalArs: number;
+  prevTotalArs: number;
+  sharedTotalArs: number;
+  sharedPrevTotalArs: number;
+  monthTxCount: number;
+  categorySummary: CategorySummary[];
+  householdName?: string;
+  initialCategories?: unknown;
+  initialMembers?: unknown;
+}) {
+  const router = useRouter();
+  const [liveTotal, setLiveTotal] = useState(totalArs);
+  const [liveCount, setLiveCount] = useState(monthTxCount);
+  const [liveCats, setLiveCats] = useState(categorySummary);
+  const [burst, setBurst] = useState(false);
+  const [pop, setPop] = useState(false);
+
+  useEffect(() => {
+    setLiveTotal(totalArs);
+    setLiveCount(monthTxCount);
+    setLiveCats(categorySummary);
+  }, [totalArs, monthTxCount, categorySummary]);
+
+  const displayTotal = useCountUp(liveTotal, 750);
+
+  const triggerCelebrate = useCallback(() => {
+    setBurst(true);
+    setPop(true);
+    window.setTimeout(() => setBurst(false), 900);
+    window.setTimeout(() => setPop(false), 500);
+  }, []);
+
+  useEffect(() => {
+    function onCreated() {
+      triggerCelebrate();
+      setLiveCount((c) => c + 1);
+      router.refresh();
+    }
+    window.addEventListener("lc:expense-created", onCreated);
+    return () => window.removeEventListener("lc:expense-created", onCreated);
+  }, [router, triggerCelebrate]);
+
+  return (
+    <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-5">
       <div className="text-center">
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
           Hola, {firstName}
         </p>
-        <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-zinc-400">
-          {householdName}
-        </p>
 
-        <div className="relative mt-6">
+        <div className="relative mt-5">
           <SpendBurst active={burst} />
 
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700/80 dark:text-emerald-400/80">
-            {formatPeriodLabel(period)}
+            Tus gastos · {formatPeriodLabel(period)}
           </p>
           <p
             className={cn(
@@ -224,37 +256,12 @@ export function DashboardHome({
             {formatArs(Math.round(displayTotal))}
           </p>
 
-          <div className="relative mx-auto mt-3 max-w-[220px]">
-            <div className="h-2.5 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all duration-700 ease-out",
-                  barPct >= 100
-                    ? "bg-gradient-to-r from-amber-500 to-orange-500"
-                    : "bg-gradient-to-r from-emerald-500 to-teal-400",
-                  barBoost && "lc-bar-glow",
-                )}
-                style={{ width: `${Math.min(100, barPct)}%` }}
-              />
-            </div>
-            <div className="mt-1.5 flex items-center justify-center gap-2 text-sm text-zinc-500">
-              <span className="tabular-nums">
-                {formatPeriodShort(prevPeriod)} · {formatArs(prevTotalArs)}
-              </span>
-              {delta != null && (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium",
-                    deltaColor,
-                    pop && "lc-amount-pop",
-                  )}
-                >
-                  <DeltaIcon className="h-3.5 w-3.5" />
-                  {Math.abs(delta).toFixed(0)}%
-                </span>
-              )}
-            </div>
-          </div>
+          <Meter
+            total={liveTotal}
+            prevTotal={prevTotalArs}
+            prevPeriod={prevPeriod}
+            accent="emerald"
+          />
 
           {liveCount > 0 && (
             <p className="mt-1 text-xs text-zinc-400">
@@ -264,10 +271,21 @@ export function DashboardHome({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2.5">
-        <NavPill href="/consumos" icon={<List className="h-5 w-5" />} label="Gastos" />
-        <NavPill href="/analisis" icon={<PieChart className="h-5 w-5" />} label="Análisis" />
-        <NavPill href="/compartido" icon={<Users className="h-5 w-5" />} label="Hogar" />
+      {/* Hogar level on home */}
+      <div className="rounded-2xl border border-violet-200/70 bg-violet-50/50 p-4 text-center dark:border-violet-900/50 dark:bg-violet-950/30">
+        <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-700 dark:text-violet-300">
+          <Users className="h-3.5 w-3.5" />
+          Hogar · {formatPeriodLabel(period)}
+        </p>
+        <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-violet-950 dark:text-violet-50">
+          {formatArs(sharedTotalArs)}
+        </p>
+        <Meter
+          total={sharedTotalArs}
+          prevTotal={sharedPrevTotalArs}
+          prevPeriod={prevPeriod}
+          accent="violet"
+        />
       </div>
 
       {liveCats.length > 0 && (
@@ -312,29 +330,5 @@ export function DashboardHome({
         </div>
       )}
     </div>
-  );
-}
-
-function NavPill({
-  href,
-  icon,
-  label,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex flex-col items-center gap-1.5 rounded-2xl border border-zinc-200/90 bg-white/80 px-3 py-3.5 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300/70 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950/70 dark:hover:border-emerald-800"
-    >
-      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
-        {icon}
-      </span>
-      <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-        {label}
-      </span>
-    </Link>
   );
 }
