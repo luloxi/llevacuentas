@@ -48,7 +48,6 @@ export async function fetchEvmTotalUsd(address: string): Promise<{
       return { usd: usd ?? 0 };
     }
 
-    // Fallback: public-ish endpoint (may rate-limit)
     const res = await fetch(
       `https://api.debank.com/user/total_balance?id=${encodeURIComponent(addr)}`,
       {
@@ -63,7 +62,7 @@ export async function fetchEvmTotalUsd(address: string): Promise<{
       return {
         usd: null,
         error:
-          "DeBank sin acceso. Configurá DEBANK_ACCESS_KEY en Vercel o cargá el saldo manualmente en un banco USD.",
+          "DeBank sin acceso. Configurá DEBANK_ACCESS_KEY en Vercel o cargá el saldo manualmente.",
       };
     }
     const data = (await res.json()) as {
@@ -80,12 +79,6 @@ export async function fetchEvmTotalUsd(address: string): Promise<{
     };
   }
 }
-
-/** Map common Cardano asset units to CoinGecko ids. */
-const CG_IDS: Record<string, string> = {
-  lovelace: "cardano",
-  // popular policy units can be extended later
-};
 
 async function fetchCoinGeckoPrices(ids: string[]): Promise<Map<string, number>> {
   const unique = [...new Set(ids.filter(Boolean))];
@@ -132,14 +125,13 @@ export async function fetchCardanoTotalUsd(address: string): Promise<{
     }
     const rows = (await res.json()) as Array<{
       balance?: string;
-      utxo_set?: Array<{{
+      utxo_set?: Array<{
         asset_list?: Array<{ unit?: string; quantity?: string }>;
-      }}>;
+      }>;
     }>;
     const row = rows[0];
     if (!row) return { usd: 0 };
 
-    // Aggregate units
     const qty = new Map<string, number>();
     const lovelace = num(row.balance);
     if (lovelace != null) qty.set("lovelace", lovelace);
@@ -152,10 +144,7 @@ export async function fetchCardanoTotalUsd(address: string): Promise<{
       }
     }
 
-    const cgIds = new Set<string>(["cardano"]);
-    // Only price ADA for reliability without a full asset registry;
-    // native tokens without mapping count as 0 USD (still shown in sync).
-    const prices = await fetchCoinGeckoPrices([...cgIds]);
+    const prices = await fetchCoinGeckoPrices(["cardano"]);
     const adaPrice = prices.get("cardano") ?? 0;
     const ada = (qty.get("lovelace") ?? 0) / 1_000_000;
     const usd = ada * adaPrice;
