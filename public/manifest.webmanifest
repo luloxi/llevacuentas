@@ -4,8 +4,8 @@
   "description": "Importá gastos de tarjeta, tickets y balance compartido",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#f6f7f4",
-  "theme_color": "#059669",
+  "background_color": "#f7f6f3",
+  "theme_color": "#3d7a6a",
   "lang": "es-AR",
   "icons": [
     {
