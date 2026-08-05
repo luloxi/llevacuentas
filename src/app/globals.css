@@ -448,6 +448,69 @@ html.dark .lc-btn-primary {
   color: var(--brand-fg);
 }
 
+/*
+ * Remap leftover Tailwind violet utilities (tickets / legacy chrome)
+ * to the zen brand palette so the list never pops purple.
+ */
+.border-violet-100,
+.border-violet-200,
+.border-violet-200\/60,
+.border-violet-200\/80,
+.border-violet-300,
+.border-violet-300\/80,
+.border-violet-700,
+.border-violet-800,
+.border-violet-900,
+.border-violet-900\/40,
+.border-violet-900\/50 {
+  border-color: var(--border) !important;
+}
+
+.bg-violet-50,
+.bg-violet-50\/40,
+.bg-violet-50\/50,
+.bg-violet-50\/60,
+.bg-violet-50\/80,
+.bg-violet-100 {
+  background-color: color-mix(in srgb, var(--brand-soft) 70%, var(--surface)) !important;
+}
+
+.bg-violet-600,
+.bg-violet-950,
+.bg-violet-950\/20,
+.bg-violet-950\/30,
+.bg-violet-950\/40,
+.bg-violet-950\/50,
+.bg-violet-950\/60,
+.bg-violet-900\/50 {
+  background-color: var(--brand-soft) !important;
+}
+
+.bg-violet-600 {
+  background-color: var(--brand) !important;
+}
+
+.text-violet-100,
+.text-violet-200,
+.text-violet-300,
+.text-violet-400,
+.text-violet-600,
+.text-violet-700,
+.text-violet-800,
+.text-violet-900,
+.text-violet-950 {
+  color: var(--brand-fg) !important;
+}
+
+.from-violet-50,
+.from-violet-500,
+.from-violet-950\/40,
+.to-fuchsia-400 {
+  --tw-gradient-from: var(--brand-soft) !important;
+  --tw-gradient-to: var(--brand) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
 .lc-toast {
   position: fixed;
   right: 1rem;
