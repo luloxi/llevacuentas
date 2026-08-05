@@ -80,6 +80,28 @@ const FIXED_SERVICES: Array<{ slug: string; name: string }> = [
   { slug: "internet", name: "Internet" },
 ];
 
+const SKIPPED_SERVICES_KEY = "lc:hogar-skipped-services";
+
+function loadSkippedServices(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(SKIPPED_SERVICES_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as string[];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSkippedServices(set: Set<string>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    SKIPPED_SERVICES_KEY,
+    JSON.stringify([...set]),
+  );
+}
+
 function tabFromParam(raw: string | null): ViewTab {
   return raw === "charts" ? "charts" : "vista";
 }
@@ -118,6 +140,11 @@ export function CompartidoView() {
   const [ticketOpen, setTicketOpen] = useState<Set<string>>(new Set());
   const [reloadKey, setReloadKey] = useState(0);
   const [servicesOpen, setServicesOpen] = useState(false);
+  const [skipped, setSkipped] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    setSkipped(loadSkippedServices());
+  }, []);
 
   useEffect(() => {
     setViewTab(tabFromParam(searchParams.get("tab")));
@@ -212,8 +239,32 @@ export function CompartidoView() {
     });
   }
 
-  function openAddExpense() {
-    window.dispatchEvent(new Event("lc:open-add-expense"));
+  function openAddExpense(preset?: {
+    categorySlug?: string;
+    description?: string;
+  }) {
+    window.dispatchEvent(
+      new CustomEvent("lc:open-add-expense", {
+        detail: preset
+          ? {
+              categorySlug: preset.categorySlug,
+              description: preset.description,
+              ownership: "shared" as const,
+              mode: "manual" as const,
+            }
+          : undefined,
+      }),
+    );
+  }
+
+  function toggleSkipped(slug: string) {
+    setSkipped((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      saveSkippedServices(next);
+      return next;
+    });
   }
 
   /** Checklist period: selected month, or current month when viewing "all". */
@@ -230,19 +281,24 @@ export function CompartidoView() {
       const payers = [
         ...new Set(list.map((e) => firstName(e.paidByName)).filter(Boolean)),
       ];
+      const na = skipped.has(svc.slug);
       return {
         ...svc,
         paid: list.length > 0,
+        na,
         totalArs,
         count: list.length,
         payers,
         expenses: list,
       };
     });
-  }, [expenses, period, checklistPeriod]);
+  }, [expenses, period, checklistPeriod, skipped]);
 
-  const paidCount = fixedServiceStatus.filter((s) => s.paid).length;
-  const allFixedPaid = paidCount === FIXED_SERVICES.length;
+  const applicable = fixedServiceStatus.filter((s) => !s.na);
+  const paidCount = applicable.filter((s) => s.paid).length;
+  const applicableCount = applicable.length;
+  const allFixedPaid =
+    applicableCount > 0 && paidCount === applicableCount;
 
   if (loading && expenses.length === 0 && total === 0 && viewTab === "vista") {
     return <LoadingBlock label="Cargando hogar…" />;
@@ -393,37 +449,22 @@ export function CompartidoView() {
                   <p className="text-xs text-[var(--muted-fg)]">
                     {formatPeriodLabel(checklistPeriod)}
                     {period === "all" ? " · mes actual" : ""}
-                    {" · "}
-                    <span
-                      className={
-                        allFixedPaid
-                          ? "font-medium text-[var(--brand-fg)]"
-                          : "font-medium text-amber-700 dark:text-amber-400"
-                      }
-                    >
-                      {paidCount}/{FIXED_SERVICES.length} pagos
-                    </span>
+                    {applicableCount > 0 && (
+                      <>
+                        {" · "}
+                        <span
+                          className={
+                            allFixedPaid
+                              ? "font-medium text-[var(--brand-fg)]"
+                              : "font-medium text-amber-700 dark:text-amber-400"
+                          }
+                        >
+                          {paidCount}/{applicableCount} pagos
+                        </span>
+                      </>
+                    )}
                   </p>
                 </div>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openAddExpense();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      openAddExpense();
-                    }
-                  }}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--brand-fg)] transition hover:bg-[var(--brand-soft)]"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Cargar
-                </span>
               </button>
 
               {servicesOpen && (
@@ -434,7 +475,10 @@ export function CompartidoView() {
                       return (
                         <li
                           key={svc.slug}
-                          className="flex items-center gap-3 px-4 py-3"
+                          className={cn(
+                            "flex items-center gap-3 px-4 py-3",
+                            svc.na && "opacity-60",
+                          )}
                         >
                           <span
                             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
@@ -444,7 +488,11 @@ export function CompartidoView() {
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium">{svc.name}</p>
-                            {svc.paid ? (
+                            {svc.na ? (
+                              <p className="text-xs text-[var(--muted-fg)]">
+                                No aplica en este hogar
+                              </p>
+                            ) : svc.paid ? (
                               <p className="text-xs text-[var(--muted-fg)]">
                                 {svc.payers.length > 0
                                   ? `Pagó ${svc.payers.join(", ")}`
@@ -459,8 +507,16 @@ export function CompartidoView() {
                               </p>
                             )}
                           </div>
-                          <div className="shrink-0 text-right">
-                            {svc.paid ? (
+                          <div className="flex shrink-0 flex-col items-end gap-1.5">
+                            {svc.na ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleSkipped(svc.slug)}
+                                className="rounded-full border border-[var(--border)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)]"
+                              >
+                                Reactivar
+                              </button>
+                            ) : svc.paid ? (
                               <>
                                 <p className="text-sm font-semibold tabular-nums">
                                   {formatArs(svc.totalArs)}
@@ -471,13 +527,27 @@ export function CompartidoView() {
                                 </span>
                               </>
                             ) : (
-                              <button
-                                type="button"
-                                onClick={openAddExpense}
-                                className="rounded-full border border-dashed border-[var(--border)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted-fg)] transition hover:border-[var(--brand)]/40 hover:text-[var(--brand-fg)]"
-                              >
-                                Cargar
-                              </button>
+                              <div className="flex flex-col items-end gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openAddExpense({
+                                      categorySlug: svc.slug,
+                                      description: svc.name,
+                                    })
+                                  }
+                                  className="rounded-full border border-dashed border-[var(--border)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted-fg)] transition hover:border-[var(--brand)]/40 hover:text-[var(--brand-fg)]"
+                                >
+                                  Cargar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSkipped(svc.slug)}
+                                  className="text-[10px] font-medium text-[var(--muted-fg)] underline-offset-2 hover:underline"
+                                >
+                                  No aplica
+                                </button>
+                              </div>
                             )}
                           </div>
                         </li>
@@ -485,9 +555,9 @@ export function CompartidoView() {
                     })}
                   </ul>
                   <p className="border-t border-[var(--border)] px-4 py-2.5 text-[11px] leading-relaxed text-[var(--muted-fg)]">
-                    Marcá cada servicio como <strong>Hogar</strong> al
-                    cargarlo. Si alguien pagó una parte, cargá un gasto por
-                    persona.
+                    Al cargar se marca como <strong>Hogar</strong> y con la
+                    categoría del servicio. Si no usan gas u otro servicio,
+                    tocá <strong>No aplica</strong>.
                   </p>
                 </>
               )}
