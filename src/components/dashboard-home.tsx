@@ -300,6 +300,7 @@ export function DashboardHome({
   savingsArs = 0,
   savingsUsd = 0,
   savingsUsdc = 0,
+  savingsNetArs = 0,
 }: {
   firstName: string;
   period: string;
@@ -317,6 +318,7 @@ export function DashboardHome({
   savingsArs?: number;
   savingsUsd?: number;
   savingsUsdc?: number;
+  savingsNetArs?: number;
   householdName?: string;
   initialCategories?: unknown;
   initialMembers?: unknown;
@@ -364,7 +366,7 @@ export function DashboardHome({
 
   const visibleServices = householdServices.filter((s) => !skipped.has(s.slug));
   const hasSavings =
-    savingsArs > 0 || savingsUsd > 0 || savingsUsdc > 0;
+    savingsArs > 0 || savingsUsd > 0 || savingsUsdc > 0 || savingsNetArs > 0;
 
   return (
     <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-3">
@@ -461,36 +463,44 @@ export function DashboardHome({
 
       <Link
         href="/ahorros"
-        className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
+        className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3.5 transition active:scale-[0.99]"
         aria-label="Ahorros"
       >
-        <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="mb-1 flex items-center justify-between gap-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
             Ahorros
           </p>
           <TapHint />
         </div>
         {hasSavings ? (
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div>
-              <p className="text-[10px] text-[var(--muted-fg)]">Pesos</p>
-              <p className="text-sm font-semibold tabular-nums">
-                {formatArs(savingsArs)}
-              </p>
+          <>
+            <p className="text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+              {formatArs(Math.round(savingsNetArs))}
+            </p>
+            <p className="mt-0.5 text-[10px] text-[var(--muted-fg)]">
+              Neto en pesos
+            </p>
+            <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--muted-fg)]">
+              <span>
+                Pesos{" "}
+                <span className="tabular-nums font-medium text-[var(--foreground)]/80">
+                  {formatArs(savingsArs)}
+                </span>
+              </span>
+              <span>
+                USD{" "}
+                <span className="tabular-nums font-medium text-[var(--foreground)]/80">
+                  {formatUsd(savingsUsd)}
+                </span>
+              </span>
+              <span>
+                USDC{" "}
+                <span className="tabular-nums font-medium text-[var(--brand-fg)]">
+                  {formatUsd(savingsUsdc)}
+                </span>
+              </span>
             </div>
-            <div>
-              <p className="text-[10px] text-[var(--muted-fg)]">Dólares</p>
-              <p className="text-sm font-semibold tabular-nums">
-                {formatUsd(savingsUsd)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-[var(--muted-fg)]">USDC</p>
-              <p className="text-sm font-semibold tabular-nums text-[var(--brand-fg)]">
-                {formatUsd(savingsUsdc)}
-              </p>
-            </div>
-          </div>
+          </>
         ) : (
           <p className="text-sm text-[var(--muted-fg)]">
             Agregá wallets y bancos
