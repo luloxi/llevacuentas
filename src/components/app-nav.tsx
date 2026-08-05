@@ -18,8 +18,8 @@ import { BrandLogo } from "@/components/brand-logo";
 const links = [
   { href: "/dashboard", label: "Inicio", icon: Home },
   { href: "/consumos", label: "Gastos", icon: List },
-  { href: "/deuda", label: "Deuda", icon: Landmark },
   { href: "/compartido", label: "Hogar", icon: Users },
+  { href: "/deuda", label: "Deuda", icon: Landmark },
 ];
 
 function openAddExpense() {
