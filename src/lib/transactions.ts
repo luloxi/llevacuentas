@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
 import { getDb, schema } from "@/lib/db";
 import { getCategoryMap } from "@/lib/household";
+import { periodFromDateString } from "@/lib/utils";
 
 /**
  * List household transactions for Consumos / analysis APIs.
@@ -38,7 +39,10 @@ export async function listTransactions(
     ) {
       return false;
     }
-    if (opts?.period && !r.date.startsWith(opts.period)) return false;
+    if (opts?.period) {
+      // Strict calendar month from stored date text (never Date() / TZ)
+      if (periodFromDateString(r.date) !== opts.period) return false;
+    }
     if (opts?.categoryId && r.categoryId !== opts.categoryId) return false;
     if (opts?.uncategorizedOnly) {
       const slug = r.categoryId ? byId.get(r.categoryId)?.slug : null;
