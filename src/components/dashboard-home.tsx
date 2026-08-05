@@ -1,10 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
   ArrowDownRight,
+  ChevronRight,
+  Landmark,
   Minus,
   Users,
 } from "lucide-react";
@@ -186,6 +189,8 @@ export function DashboardHome({
   prevTotalArs,
   sharedTotalArs,
   sharedPrevTotalArs,
+  debtBalanceArs,
+  debtSettled,
   monthTxCount,
   categorySummary,
 }: {
@@ -196,6 +201,8 @@ export function DashboardHome({
   prevTotalArs: number;
   sharedTotalArs: number;
   sharedPrevTotalArs: number;
+  debtBalanceArs: number;
+  debtSettled: boolean;
   monthTxCount: number;
   categorySummary: CategorySummary[];
   householdName?: string;
@@ -235,44 +242,51 @@ export function DashboardHome({
   }, [router, triggerCelebrate]);
 
   return (
-    <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-5">
+    <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-4">
       <div className="text-center">
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
           Hola, {firstName}
         </p>
-
-        <div className="relative mt-5">
-          <SpendBurst active={burst} />
-
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700/80 dark:text-emerald-400/80">
-            Tus gastos · {formatPeriodLabel(period)}
-          </p>
-          <p
-            className={cn(
-              "mt-1 text-4xl font-bold tabular-nums tracking-tight text-zinc-900 transition-transform dark:text-zinc-50 sm:text-5xl",
-              pop && "lc-amount-pop",
-            )}
-          >
-            {formatArs(Math.round(displayTotal))}
-          </p>
-
-          <Meter
-            total={liveTotal}
-            prevTotal={prevTotalArs}
-            prevPeriod={prevPeriod}
-            accent="emerald"
-          />
-
-          {liveCount > 0 && (
-            <p className="mt-1 text-xs text-zinc-400">
-              {liveCount} movimiento{liveCount === 1 ? "" : "s"}
-            </p>
-          )}
-        </div>
       </div>
 
-      {/* Hogar level on home */}
-      <div className="rounded-2xl border border-violet-200/70 bg-violet-50/50 p-4 text-center dark:border-violet-900/50 dark:bg-violet-950/30">
+      {/* Personal spend → Gastos lista */}
+      <Link
+        href="/consumos?tab=lista"
+        className="relative block rounded-2xl border border-emerald-200/70 bg-emerald-50/40 p-4 text-center transition active:scale-[0.99] dark:border-emerald-900/50 dark:bg-emerald-950/25"
+      >
+        <SpendBurst active={burst} />
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700/80 dark:text-emerald-400/80">
+          Tus gastos · {formatPeriodLabel(period)}
+        </p>
+        <p
+          className={cn(
+            "mt-1 text-4xl font-bold tabular-nums tracking-tight text-zinc-900 transition-transform dark:text-zinc-50 sm:text-5xl",
+            pop && "lc-amount-pop",
+          )}
+        >
+          {formatArs(Math.round(displayTotal))}
+        </p>
+        <Meter
+          total={liveTotal}
+          prevTotal={prevTotalArs}
+          prevPeriod={prevPeriod}
+          accent="emerald"
+        />
+        {liveCount > 0 && (
+          <p className="mt-1 text-xs text-zinc-400">
+            {liveCount} movimiento{liveCount === 1 ? "" : "s"}
+          </p>
+        )}
+        <span className="mt-2 inline-flex items-center gap-0.5 text-[11px] font-medium text-emerald-700/70 dark:text-emerald-400/70">
+          Ver lista <ChevronRight className="h-3.5 w-3.5" />
+        </span>
+      </Link>
+
+      {/* Hogar → /compartido */}
+      <Link
+        href="/compartido"
+        className="block rounded-2xl border border-violet-200/70 bg-violet-50/50 p-4 text-center transition active:scale-[0.99] dark:border-violet-900/50 dark:bg-violet-950/30"
+      >
         <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-700 dark:text-violet-300">
           <Users className="h-3.5 w-3.5" />
           Hogar · {formatPeriodLabel(period)}
@@ -286,13 +300,73 @@ export function DashboardHome({
           prevPeriod={prevPeriod}
           accent="violet"
         />
-      </div>
+        <span className="mt-2 inline-flex items-center gap-0.5 text-[11px] font-medium text-violet-700/70 dark:text-violet-400/70">
+          Ver hogar <ChevronRight className="h-3.5 w-3.5" />
+        </span>
+      </Link>
 
+      {/* Deuda → /deuda */}
+      <Link
+        href="/deuda"
+        className={cn(
+          "block rounded-2xl border p-4 text-center transition active:scale-[0.99]",
+          debtSettled
+            ? "border-emerald-200/70 bg-emerald-50/50 dark:border-emerald-900/50 dark:bg-emerald-950/30"
+            : "border-red-200/70 bg-red-50/50 dark:border-red-900/50 dark:bg-red-950/30",
+        )}
+      >
+        <p
+          className={cn(
+            "inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em]",
+            debtSettled
+              ? "text-emerald-700 dark:text-emerald-300"
+              : "text-red-700 dark:text-red-300",
+          )}
+        >
+          <Landmark className="h-3.5 w-3.5" />
+          Deuda
+        </p>
+        <p
+          className={cn(
+            "mt-1 text-2xl font-bold tabular-nums tracking-tight",
+            debtSettled
+              ? "text-emerald-950 dark:text-emerald-50"
+              : "text-red-950 dark:text-red-50",
+          )}
+        >
+          {debtSettled ? "Saldada" : formatArs(debtBalanceArs)}
+        </p>
+        <p className="mt-1 text-xs text-zinc-500">
+          {debtSettled
+            ? "Sin saldo pendiente en tu tarjeta"
+            : "Estimación con tus cargos y pagos"}
+        </p>
+        <span
+          className={cn(
+            "mt-2 inline-flex items-center gap-0.5 text-[11px] font-medium",
+            debtSettled
+              ? "text-emerald-700/70 dark:text-emerald-400/70"
+              : "text-red-700/70 dark:text-red-400/70",
+          )}
+        >
+          Ver deuda <ChevronRight className="h-3.5 w-3.5" />
+        </span>
+      </Link>
+
+      {/* Categorías → Gastos resumen */}
       {liveCats.length > 0 && (
-        <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/60">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-            Este mes
-          </p>
+        <Link
+          href="/consumos?tab=resumen"
+          className="block rounded-2xl border border-zinc-200/80 bg-white/70 p-4 transition active:scale-[0.99] dark:border-zinc-800 dark:bg-zinc-950/60"
+        >
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+              Este mes por categoría
+            </p>
+            <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-zinc-400">
+              Ver resumen <ChevronRight className="h-3.5 w-3.5" />
+            </span>
+          </div>
           <ul className="space-y-2.5">
             {liveCats.map((c) => {
               const color = colorForCategory(c.slug);
@@ -327,7 +401,7 @@ export function DashboardHome({
               );
             })}
           </ul>
-        </div>
+        </Link>
       )}
     </div>
   );
