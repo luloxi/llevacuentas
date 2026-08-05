@@ -16,7 +16,6 @@ import { MesAMesTxRow } from "@/components/mes-a-mes-tx-row";
 import {
   EmptyState,
   LoadingBlock,
-  PageStack,
   Surface,
   Toast,
 } from "@/components/ui";
@@ -152,7 +151,6 @@ function aggregateMonths(months: MonthBlock[]): MonthBlock {
   };
 }
 
-/** Resumen / gráficos — embebe en Gastos via mode. */
 export function MesAMesView({
   mode = "resumen",
 }: {
@@ -408,7 +406,7 @@ export function MesAMesView({
                 onClick={goPrev}
                 disabled={!canPrev}
                 aria-label="Mes anterior"
-                className="rounded-xl border border-zinc-200 bg-white p-2 text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -417,7 +415,7 @@ export function MesAMesView({
                 onClick={goNext}
                 disabled={!canNext}
                 aria-label="Mes siguiente"
-                className="rounded-xl border border-zinc-200 bg-white p-2 text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-30 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -508,24 +506,24 @@ function ChartsPanel({ chart }: { chart: ChartData | null }) {
 function TotalRow({
   label,
   value,
-  tone = "default",
+  tone,
 }: {
   label: string;
   value: string;
-  tone?: "default" | "sky" | "strong";
+  tone: "pesos" | "dolares" | "neto";
 }) {
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-3 rounded-xl px-3 py-2",
-        tone === "sky" &&
-          "bg-sky-50 text-sky-900 dark:bg-sky-950/40 dark:text-sky-100",
-        tone === "strong" &&
-          "bg-zinc-100 font-semibold text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50",
-        tone === "default" && "text-zinc-700 dark:text-zinc-200",
+        "flex items-center justify-between gap-3 rounded-xl px-3 py-2.5",
+        tone === "pesos" && "bg-sky-500 text-white shadow-sm shadow-sky-500/25",
+        tone === "dolares" &&
+          "bg-emerald-600 text-white shadow-sm shadow-emerald-600/25",
+        tone === "neto" &&
+          "bg-gradient-to-r from-amber-500 to-yellow-500 text-amber-950 shadow-sm shadow-amber-500/30",
       )}
     >
-      <span className="text-xs font-semibold uppercase tracking-wide opacity-70">
+      <span className="text-xs font-semibold uppercase tracking-wide opacity-90">
         {label}
       </span>
       <span className="text-sm font-bold tabular-nums tracking-tight">{value}</span>
@@ -558,24 +556,17 @@ function MonthDetail({
   const rateLabel = formatUsdRateLabel(month.usdRate);
 
   return (
-    <section
-      className={cn(
-        "overflow-hidden rounded-2xl border backdrop-blur",
-        isGrand
-          ? "border-emerald-400/70 bg-white/80 shadow-lg shadow-emerald-600/10 dark:border-emerald-500/50 dark:bg-zinc-950/70 dark:shadow-emerald-900/20"
-          : "border-zinc-200/90 bg-white/80 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/60",
-      )}
-    >
-      <div className="space-y-1.5 border-b border-zinc-100 px-3 py-3 dark:border-zinc-800 sm:px-4">
-        <TotalRow label="Pesos" value={formatArs(month.totalArs)} />
-        <TotalRow label="Dólares" value={formatUsd(month.totalUsd)} tone="sky" />
-        <TotalRow label="Neto" value={formatArs(combined)} tone="strong" />
-        <p className="px-1 text-[10px] leading-snug text-zinc-400">
+    <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+      <div className="space-y-1.5 border-b border-[var(--border)] px-3 py-3 sm:px-4">
+        <TotalRow label="Pesos" value={formatArs(month.totalArs)} tone="pesos" />
+        <TotalRow label="Dólares" value={formatUsd(month.totalUsd)} tone="dolares" />
+        <TotalRow label="Neto" value={formatArs(combined)} tone="neto" />
+        <p className="px-1 text-[10px] leading-snug text-[var(--muted-fg)]">
           Neto = pesos + dólares convertidos al TC del mes
         </p>
       </div>
 
-      <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+      <div className="divide-y divide-[var(--border)]">
         {month.categories.map((c) => {
           const open = expanded.has(c.slug);
           const list = txsByCat.get(c.slug) ?? [];
@@ -586,12 +577,12 @@ function MonthDetail({
               <button
                 type="button"
                 onClick={() => onToggle(c.slug)}
-                className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left transition hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20"
+                className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left transition hover:bg-[var(--surface-muted)]"
               >
                 <span className="flex min-w-0 flex-1 items-center gap-3">
                   <ChevronDown
                     className={cn(
-                      "h-4 w-4 shrink-0 text-zinc-400 transition",
+                      "h-4 w-4 shrink-0 text-[var(--muted-fg)] transition",
                       open && "rotate-180",
                     )}
                   />
@@ -600,7 +591,7 @@ function MonthDetail({
                     style={{ backgroundColor: colorForCategory(c.slug) }}
                   />
                   <span className="min-w-0 truncate font-medium">{c.name}</span>
-                  <span className="shrink-0 text-xs text-zinc-500">{c.count}×</span>
+                  <span className="shrink-0 text-xs text-[var(--muted-fg)]">{c.count}×</span>
                 </span>
                 <span className="ml-auto text-right">
                   <span className="block text-sm font-semibold tabular-nums">
@@ -609,27 +600,27 @@ function MonthDetail({
                 </span>
                 <span className="w-full space-y-0.5 pl-9 text-xs">
                   {c.amountArs > 0 && (
-                    <span className="mr-3 inline-flex items-center gap-1 text-zinc-600 dark:text-zinc-300">
-                      <span className="font-semibold text-zinc-500">Pesos:</span>
+                    <span className="mr-3 inline-flex items-center gap-1 rounded-md bg-sky-500/15 px-1.5 py-0.5 text-sky-800 dark:text-sky-200">
+                      <span className="font-semibold">Pesos</span>
                       {formatArs(c.amountArs)}
                     </span>
                   )}
                   {c.amountUsd > 0 && (
-                    <span className="mr-3 inline-flex items-center gap-1 text-sky-700 dark:text-sky-300">
-                      <span className="font-semibold">Dólares:</span>
+                    <span className="mr-3 inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-emerald-800 dark:text-emerald-200">
+                      <span className="font-semibold">Dólares</span>
                       {formatUsd(c.amountUsd)}
                     </span>
                   )}
-                  <span className="text-zinc-400">{c.pct.toFixed(1)}% del mes</span>
+                  <span className="text-[var(--muted-fg)]">{c.pct.toFixed(1)}% del mes</span>
                 </span>
               </button>
 
               {open && (
-                <div className="border-t border-zinc-100 bg-zinc-50/80 px-2 py-2 dark:border-zinc-800 dark:bg-zinc-950/50 sm:px-4">
+                <div className="border-t border-[var(--border)] bg-[var(--surface-muted)]/60 px-2 py-2 sm:px-4">
                   {txsLoading && list.length === 0 ? (
-                    <p className="px-2 py-2 text-xs text-zinc-500">Cargando gastos…</p>
+                    <p className="px-2 py-2 text-xs text-[var(--muted-fg)]">Cargando gastos…</p>
                   ) : list.length === 0 ? (
-                    <p className="px-2 py-2 text-xs text-zinc-500">
+                    <p className="px-2 py-2 text-xs text-[var(--muted-fg)]">
                       No hay gastos listados en esta categoría.
                     </p>
                   ) : (
@@ -652,13 +643,13 @@ function MonthDetail({
         })}
       </div>
 
-      <div className="border-t border-zinc-100 px-4 py-3 text-center dark:border-zinc-800">
-        <p className="text-xs text-zinc-500">
+      <div className="border-t border-[var(--border)] px-4 py-3 text-center">
+        <p className="text-xs text-[var(--muted-fg)]">
           {month.totalCount} movimiento{month.totalCount === 1 ? "" : "s"}
           {isGrand ? " en total" : ""}
         </p>
         {rateLabel && (
-          <p className="mt-1 text-[11px] text-zinc-400">{rateLabel}</p>
+          <p className="mt-1 text-[11px] text-[var(--muted-fg)]">{rateLabel}</p>
         )}
       </div>
     </section>
