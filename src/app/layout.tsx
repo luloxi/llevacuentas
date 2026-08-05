@@ -25,21 +25,33 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "LlevaCuentas",
-    // black-translucent lets the dark app chrome run under the status bar
     statusBarStyle: "black-translucent",
   },
 };
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f4f4f5" },
-    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+    { media: "(prefers-color-scheme: light)", color: "#f7f6f3" },
+    { media: "(prefers-color-scheme: dark)", color: "#121110" },
   ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
 };
+
+const themeBootScript = `
+(function(){
+  try {
+    var t = localStorage.getItem('lc-theme');
+    var dark = t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var root = document.documentElement;
+    root.classList.toggle('dark', dark);
+    root.classList.toggle('light', !dark);
+    root.style.colorScheme = dark ? 'dark' : 'light';
+  } catch (e) {}
+})();
+`;
 
 export default function RootLayout({
   children,
@@ -50,7 +62,11 @@ export default function RootLayout({
     <html
       lang="es-AR"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
       </body>
