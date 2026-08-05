@@ -1,33 +1,20 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import { usePathname, useRouter } from "next/navigation";
-
-/** Main bottom-nav order (mobile section swipe). */
-const SECTIONS = [
-  "/dashboard",
-  "/consumos",
-  "/deuda",
-  "/compartido",
-] as const;
-
-type Section = (typeof SECTIONS)[number];
-
-function sectionFromPath(pathname: string): Section | null {
-  for (const s of SECTIONS) {
-    if (pathname === s || pathname.startsWith(`${s}/`)) return s;
-  }
-  return null;
-}
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  SWIPE_PATH,
+  resolveSwipeIndex,
+  stepToHref,
+} from "@/lib/swipe-path";
 
 /**
- * Wraps page content so a clear horizontal swipe moves between
- * Inicio → Gastos → Deuda → Hogar (and back).
- * Nested tab swipes call stopPropagation when they handle the gesture;
- * at tab edges, the event reaches this wrapper and changes section.
+ * One continuous horizontal swipe across the whole app:
+ * Inicio → Lista → Resumen → Gráficos → Evolución → Pagos → Hogar → Gráficos hogar
  */
 export function SectionSwipe({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const startX = useRef(0);
   const startY = useRef(0);
@@ -50,22 +37,21 @@ export function SectionSwipe({ children }: { children: React.ReactNode }) {
 
       const dx = t.clientX - startX.current;
       const dy = t.clientY - startY.current;
-      // Slightly higher threshold than in-tab swipe so intentional section changes
-      if (Math.abs(dx) < 72) return;
-      if (Math.abs(dx) < Math.abs(dy) * 1.2) return;
+      if (Math.abs(dx) < 56) return;
+      if (Math.abs(dx) < Math.abs(dy) * 1.15) return;
 
-      const current = sectionFromPath(pathname);
-      if (!current) return;
-      const idx = SECTIONS.indexOf(current);
+      const tab = searchParams.get("tab");
+      const idx = resolveSwipeIndex(pathname, tab);
       if (idx < 0) return;
 
-      if (dx < 0 && idx < SECTIONS.length - 1) {
-        router.push(SECTIONS[idx + 1]!);
-      } else if (dx > 0 && idx > 0) {
-        router.push(SECTIONS[idx - 1]!);
-      }
+      // Finger left → next step; finger right → previous step
+      const nextIdx = dx < 0 ? idx + 1 : idx - 1;
+      if (nextIdx < 0 || nextIdx >= SWIPE_PATH.length) return;
+
+      const step = SWIPE_PATH[nextIdx]!;
+      router.push(stepToHref(step));
     },
-    [pathname, router],
+    [pathname, searchParams, router],
   );
 
   return (
