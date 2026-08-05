@@ -1,23 +1,23 @@
 /**
  * Continuous mobile swipe order:
- * Inicio → Lista → Resumen → Gráficos → Evolución → Pagos → Vista hogar → Gráficos hogar
+ * Inicio → Lista → Resumen → Gráficos → Vista hogar → Gráficos hogar → Evolución → Pagos
  */
 
 export type SwipeStep =
   | { href: "/dashboard" }
   | { href: "/consumos"; tab: "lista" | "resumen" | "charts" }
-  | { href: "/deuda"; tab: "evolucion" | "pagos" }
-  | { href: "/compartido"; tab: "vista" | "charts" };
+  | { href: "/compartido"; tab: "vista" | "charts" }
+  | { href: "/deuda"; tab: "evolucion" | "pagos" };
 
 export const SWIPE_PATH: readonly SwipeStep[] = [
   { href: "/dashboard" },
   { href: "/consumos", tab: "lista" },
   { href: "/consumos", tab: "resumen" },
   { href: "/consumos", tab: "charts" },
-  { href: "/deuda", tab: "evolucion" },
-  { href: "/deuda", tab: "pagos" },
   { href: "/compartido", tab: "vista" },
   { href: "/compartido", tab: "charts" },
+  { href: "/deuda", tab: "evolucion" },
+  { href: "/deuda", tab: "pagos" },
 ] as const;
 
 export function stepToHref(step: SwipeStep): string {
@@ -43,18 +43,18 @@ export function resolveSwipeIndex(
     return idx >= 0 ? idx : 1;
   }
 
-  if (path === "/deuda" || path.startsWith("/deuda/")) {
-    const t = tab === "pagos" ? "pagos" : "evolucion";
-    const idx = SWIPE_PATH.findIndex(
-      (s) => s.href === "/deuda" && "tab" in s && s.tab === t,
-    );
-    return idx >= 0 ? idx : 4;
-  }
-
   if (path === "/compartido" || path.startsWith("/compartido/")) {
     const t = tab === "charts" ? "charts" : "vista";
     const idx = SWIPE_PATH.findIndex(
       (s) => s.href === "/compartido" && "tab" in s && s.tab === t,
+    );
+    return idx >= 0 ? idx : 4;
+  }
+
+  if (path === "/deuda" || path.startsWith("/deuda/")) {
+    const t = tab === "pagos" ? "pagos" : "evolucion";
+    const idx = SWIPE_PATH.findIndex(
+      (s) => s.href === "/deuda" && "tab" in s && s.tab === t,
     );
     return idx >= 0 ? idx : 6;
   }
