@@ -5,6 +5,8 @@ import { useCallback, useRef } from "react";
 /**
  * Horizontal swipe to cycle a discrete tab index.
  * Ignores mostly-vertical gestures so lists still scroll.
+ * When a tab change happens, stops propagation so parent section-swipe doesn't also fire.
+ * When already at the edge of the tab list, does NOT stop propagation — parent can change section.
  */
 export function useSwipeTabs<T extends string>({
   tabs,
@@ -38,15 +40,19 @@ export function useSwipeTabs<T extends string>({
       const dx = t.clientX - startX.current;
       const dy = t.clientY - startY.current;
       if (Math.abs(dx) < threshold) return;
-      if (Math.abs(dx) < Math.abs(dy) * 1.2) return; // vertical scroll
+      if (Math.abs(dx) < Math.abs(dy) * 1.15) return; // vertical scroll
 
       const idx = tabs.indexOf(value);
       if (idx < 0) return;
+
       if (dx < 0 && idx < tabs.length - 1) {
         onChange(tabs[idx + 1]!);
+        e.stopPropagation();
       } else if (dx > 0 && idx > 0) {
         onChange(tabs[idx - 1]!);
+        e.stopPropagation();
       }
+      // At edge: let event bubble to section swipe
     },
     [tabs, value, onChange, threshold],
   );
