@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { LayoutList, LineChart, List } from "lucide-react";
 import { TransactionsTable } from "@/components/transactions-table";
 import { MesAMesView } from "@/components/mes-a-mes";
@@ -8,14 +9,26 @@ import { PageStack, SegmentedControl, Toast } from "@/components/ui";
 
 type Tab = "lista" | "resumen" | "charts";
 
+function tabFromParam(raw: string | null): Tab {
+  if (raw === "resumen" || raw === "charts" || raw === "lista") return raw;
+  return "lista";
+}
+
 /**
  * Gastos hosts the expense list plus the former Análisis resumen/charts.
  * Add expense and card import live in the central + modal.
  */
 export function ConsumosWorkspace() {
-  const [tab, setTab] = useState<Tab>("lista");
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() =>
+    tabFromParam(searchParams.get("tab")),
+  );
   const [tableKey, setTableKey] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTab(tabFromParam(searchParams.get("tab")));
+  }, [searchParams]);
 
   useEffect(() => {
     function onCreated() {
