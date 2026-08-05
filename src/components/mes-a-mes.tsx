@@ -63,7 +63,7 @@ function formatUsdRateLabel(rate: UsdRate | undefined): string | null {
   if (!rate || !(rate.buy > 0)) return null;
   const [y, mo, d] = rate.asOf.split("-");
   const dateLabel = d && mo && y ? `${d}/${mo}/${y}` : rate.asOf;
-  return `TC compra ${dateLabel}: ${formatArs(rate.buy)}`;
+  return `Tipo de cambio compra ${dateLabel}: ${formatArs(rate.buy)} por dólar`;
 }
 
 type ChartData = {
@@ -438,7 +438,7 @@ export function MesAMesView() {
         <MonthDetail
           month={grand}
           title="Resumen de gastos"
-          subtitle={`${months.length} ${months.length === 1 ? "mes" : "meses"} · ${grand.totalCount} movimientos · tocá una categoría para ver y recategorizar · USD al TC compra fin de cada mes`}
+          subtitle={`${months.length} ${months.length === 1 ? "mes" : "meses"} · ${grand.totalCount} movimientos · tocá una categoría para ver y recategorizar`}
           variant="grand"
           canPrev={false}
           canNext={false}
@@ -494,8 +494,7 @@ function ChartsPanel({ chart }: { chart: ChartData | null }) {
           Gasto total por mes
         </h3>
         <p className="mb-3 text-xs text-zinc-500">
-          Evolución en pesos (incluye USD convertidos al TC compra de fin de
-          mes).
+          En pesos (los dólares se convierten al tipo de cambio de fin de mes).
         </p>
         <TotalSpendChart totals={chart.totals} />
       </Surface>
@@ -504,8 +503,7 @@ function ChartsPanel({ chart }: { chart: ChartData | null }) {
           Por categoría
         </h3>
         <p className="mb-3 text-xs text-zinc-500">
-          Tocá una categoría para mostrarla u ocultarla. Pasá el mouse sobre el
-          gráfico para ver montos.
+          Tocá una categoría para mostrarla u ocultarla.
         </p>
         <CategoryLinesChart
           periods={chart.periods}
@@ -588,26 +586,34 @@ function MonthDetail({
             </p>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl border border-zinc-200/80 bg-white/80 px-3 py-2 text-right text-sm shadow-sm dark:border-zinc-700 dark:bg-zinc-900/80">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-              Total pesos
-            </p>
-            <div
-              className={cn(
-                "font-bold tabular-nums tracking-tight",
-                isGrand
-                  ? "text-xl text-emerald-800 dark:text-emerald-200"
-                  : "text-base",
-              )}
-            >
-              {formatArs(monthTotalArs(month))}
+        <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-1.5 sm:flex-row">
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-right shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                Total en pesos
+              </p>
+              <p
+                className={cn(
+                  "font-bold tabular-nums tracking-tight text-zinc-900 dark:text-zinc-50",
+                  isGrand ? "text-lg" : "text-base",
+                )}
+              >
+                {formatArs(monthTotalArs(month))}
+              </p>
+              <p className="mt-0.5 text-[10px] text-zinc-400">
+                (pesos + dólares convertidos)
+              </p>
             </div>
-            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-              Total dólares
-            </p>
-            <div className="tabular-nums text-zinc-600 dark:text-zinc-300">
-              {formatUsd(month.totalUsd)}
+            <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-right shadow-sm dark:border-sky-900 dark:bg-sky-950/50">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                Solo dólares
+              </p>
+              <p className="text-base font-bold tabular-nums text-sky-900 dark:text-sky-100">
+                {formatUsd(month.totalUsd)}
+              </p>
+              <p className="mt-0.5 text-[10px] text-sky-600/80 dark:text-sky-400">
+                sin convertir
+              </p>
             </div>
           </div>
           {showNav && (
@@ -664,15 +670,28 @@ function MonthDetail({
                     {c.count}×
                   </span>
                 </span>
-                <span className="ml-auto text-right text-sm tabular-nums font-semibold">
-                  {combined > 0 ? formatArs(combined) : "—"}
+                <span className="ml-auto text-right">
+                  <span className="block text-sm font-semibold tabular-nums">
+                    {combined > 0 ? formatArs(combined) : "—"}
+                  </span>
+                  <span className="block text-[10px] text-zinc-400">
+                    equiv. en pesos
+                  </span>
                 </span>
-                <span className="w-full pl-9 text-xs tabular-nums text-zinc-500">
-                  {c.amountArs > 0 ? formatArs(c.amountArs) : "— $"}
-                  {" · "}
-                  {c.amountUsd > 0 ? formatUsd(c.amountUsd) : "— USD"}
-                  {" · "}
-                  {c.pct.toFixed(1)}%
+                <span className="w-full space-y-0.5 pl-9 text-xs">
+                  {c.amountArs > 0 && (
+                    <span className="mr-3 inline-flex items-center gap-1 text-zinc-600 dark:text-zinc-300">
+                      <span className="font-semibold text-zinc-500">Pesos:</span>
+                      {formatArs(c.amountArs)}
+                    </span>
+                  )}
+                  {c.amountUsd > 0 && (
+                    <span className="mr-3 inline-flex items-center gap-1 text-sky-700 dark:text-sky-300">
+                      <span className="font-semibold">Dólares:</span>
+                      {formatUsd(c.amountUsd)}
+                    </span>
+                  )}
+                  <span className="text-zinc-400">{c.pct.toFixed(1)}% del mes</span>
                 </span>
               </button>
 
