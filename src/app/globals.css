@@ -16,7 +16,6 @@ html.light {
   --input-fg: #1c1b19;
   --option-bg: #ffffff;
   --option-fg: #1c1b19;
-  /* Soft sage — restrained, not neon */
   --brand: #3d7a6a;
   --brand-soft: #e8f2ef;
   --brand-fg: #2f5f52;
@@ -44,7 +43,6 @@ html.dark {
   --muted-fg: #9a968c;
 }
 
-/* Fallback when script hasn't run yet: respect system preference */
 @media (prefers-color-scheme: dark) {
   html:not(.light):not(.dark) {
     --background: #121110;
@@ -126,7 +124,6 @@ textarea::placeholder {
   color: color-mix(in srgb, var(--input-fg) 42%, transparent);
 }
 
-/* Calm shell — no loud gradients */
 .app-shell {
   position: relative;
   isolation: isolate;
@@ -290,7 +287,6 @@ textarea::placeholder {
   }
 }
 
-/* Surfaces: flat, quiet */
 .lc-card {
   border-radius: 0.875rem;
   border: 1px solid var(--border);
@@ -388,20 +384,25 @@ html.dark .lc-btn-primary {
   color: var(--foreground);
 }
 
+/* Edge-to-edge internal tabs */
 .lc-seg {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
   border-radius: 0.75rem;
   border: 1px solid var(--border);
-  background: var(--surface-muted);
-  padding: 0.15rem;
+  background: var(--surface);
+  padding: 0;
+  overflow: hidden;
 }
 
 .lc-seg-item {
   display: inline-flex;
+  flex: 1 1 0;
   align-items: center;
+  justify-content: center;
   gap: 0.35rem;
-  border-radius: 0.55rem;
-  padding: 0.4rem 0.75rem;
+  border-radius: 0;
+  padding: 0.65rem 0.5rem;
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--muted-fg);
@@ -410,14 +411,41 @@ html.dark .lc-btn-primary {
     color 0.15s ease;
 }
 
+.lc-seg-item-divide {
+  border-right: 1px solid var(--border);
+}
+
 .lc-seg-item:hover:not([data-active="true"]) {
   color: var(--foreground);
+  background: var(--surface-muted);
 }
 
 .lc-seg-item[data-active="true"] {
-  background: var(--surface);
+  background: var(--brand-soft);
   color: var(--brand-fg);
-  box-shadow: 0 1px 2px rgb(var(--shadow-color) / 0.06);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+/* Ticket row — quiet left accent */
+.lc-ticket {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--brand);
+  background: color-mix(in srgb, var(--brand-soft) 45%, var(--surface));
+}
+
+.lc-ticket-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--border));
+  background: var(--surface);
+  padding: 0.1rem 0.45rem;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand-fg);
 }
 
 .lc-toast {
@@ -486,4 +514,8 @@ html.dark .lc-toast-warn {
 
 .lc-table-wrap tbody tr:hover {
   background: color-mix(in srgb, var(--brand-soft) 55%, transparent);
+}
+
+.lc-table-wrap tbody tr.lc-ticket-row {
+  background: color-mix(in srgb, var(--brand-soft) 40%, transparent);
 }
