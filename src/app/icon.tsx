@@ -3,8 +3,9 @@ import { ImageResponse } from "next/og";
 export const size = { width: 512, height: 512 };
 export const contentType = "image/png";
 
-/** Paper outline + $ — no colored background. */
+/** Android / PWA icon — black background, yellow paper outline + $ (Binance/Fiwind style). */
 export default function Icon() {
+  const yellow = "#F0B90B";
   return new ImageResponse(
     (
       <div
@@ -14,40 +15,41 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "transparent",
+          background: "#000000",
         }}
       >
+        {/* Safe zone for adaptive/maskable icons (~80%) */}
         <div
           style={{
-            width: 340,
-            height: 400,
+            width: 300,
+            height: 360,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            border: "28px solid #2f5f52",
-            borderRadius: 36,
+            border: `26px solid ${yellow}`,
+            borderRadius: 32,
             background: "transparent",
             position: "relative",
           }}
         >
-          {/* Folded corner suggestion */}
+          {/* Folded corner */}
           <div
             style={{
               position: "absolute",
-              top: -28,
-              right: -28,
-              width: 72,
-              height: 72,
-              borderBottom: "28px solid #2f5f52",
-              borderLeft: "28px solid #2f5f52",
+              top: -26,
+              right: -26,
+              width: 64,
+              height: 64,
+              borderBottom: `26px solid ${yellow}`,
+              borderLeft: `26px solid ${yellow}`,
               borderBottomLeftRadius: 8,
             }}
           />
           <div
             style={{
-              fontSize: 180,
+              fontSize: 160,
               fontWeight: 700,
-              color: "#2f5f52",
+              color: yellow,
               lineHeight: 1,
               fontFamily: "system-ui, sans-serif",
             }}

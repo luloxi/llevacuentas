@@ -3,8 +3,9 @@ import { ImageResponse } from "next/og";
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 
-/** Apple touch icon — paper outline + $ only, no colored background. */
+/** Apple touch icon — black bg + yellow paper outline for home screen consistency. */
 export default function AppleIcon() {
+  const yellow = "#F0B90B";
   return new ImageResponse(
     (
       <div
@@ -14,26 +15,26 @@ export default function AppleIcon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "transparent",
+          background: "#000000",
         }}
       >
         <div
           style={{
-            width: 120,
-            height: 140,
+            width: 108,
+            height: 128,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            border: "10px solid #2f5f52",
-            borderRadius: 14,
+            border: `9px solid ${yellow}`,
+            borderRadius: 12,
             background: "transparent",
           }}
         >
           <div
             style={{
-              fontSize: 64,
+              fontSize: 56,
               fontWeight: 700,
-              color: "#2f5f52",
+              color: yellow,
               lineHeight: 1,
               fontFamily: "system-ui, sans-serif",
             }}
