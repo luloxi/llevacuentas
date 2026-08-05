@@ -25,15 +25,20 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "LlevaCuentas",
-    statusBarStyle: "default",
+    // black-translucent lets the dark app chrome run under the status bar
+    statusBarStyle: "black-translucent",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#059669",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f4f5" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
