@@ -24,6 +24,7 @@ import {
   Link2,
   Minus,
   UserPlus,
+  Users,
   X,
 } from "lucide-react";
 
@@ -217,14 +218,17 @@ export function CompartidoView() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <h1 className="min-w-0 truncate text-lg font-bold tracking-tight">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+          <Users className="h-4 w-4" strokeWidth={1.75} />
+        </span>
+        <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">
           {householdName || "Hogar"}
         </h1>
         {inviteCode && (
           <button
             type="button"
             onClick={() => setInviteOpen(true)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800 transition hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-200 dark:hover:bg-violet-950"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-violet-300/80 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-800 transition hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950/50 dark:text-violet-200"
           >
             <UserPlus className="h-3.5 w-3.5" />
             Invitar
@@ -254,16 +258,17 @@ export function CompartidoView() {
             </select>
           </div>
 
-          <div className="rounded-2xl border border-zinc-200/90 bg-white/80 p-5 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-950/60">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-700/80 dark:text-violet-400/80">
-              {period === "all" ? "Todos los meses" : formatPeriodLabel(period)}
+          {/* Hero indicator — violet like Home */}
+          <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-b from-violet-50 to-white p-5 text-center shadow-sm dark:border-violet-900/50 dark:from-violet-950/40 dark:to-[var(--surface)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-700 dark:text-violet-300">
+              Hogar · {period === "all" ? "Todos" : formatPeriodLabel(period)}
             </p>
-            <p className="mt-1 text-4xl font-bold tabular-nums tracking-tight text-zinc-900 dark:text-zinc-50">
+            <p className="mt-1 text-4xl font-semibold tabular-nums tracking-tight text-violet-950 dark:text-violet-50">
               {formatArs(total)}
             </p>
             {period !== "all" && (
               <div className="relative mx-auto mt-3 max-w-[240px]">
-                <div className="h-2.5 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800">
+                <div className="h-1.5 overflow-hidden rounded-full bg-violet-100 dark:bg-violet-950">
                   <div
                     className={cn(
                       "h-full rounded-full transition-all duration-700",
@@ -274,16 +279,16 @@ export function CompartidoView() {
                     style={{ width: `${Math.min(100, barPct)}%` }}
                   />
                 </div>
-                <div className="mt-1.5 flex items-center justify-center gap-2 text-sm text-zinc-500">
+                <div className="mt-1.5 flex items-center justify-center gap-2 text-[11px] text-violet-700/70 dark:text-violet-300/70">
                   {prevPeriod && (
                     <span className="tabular-nums">
-                      {formatPeriodShort(prevPeriod)} · {formatArs(prevTotalArs)}
+                      vs {formatPeriodShort(prevPeriod)} · {formatArs(prevTotalArs)}
                     </span>
                   )}
                   {delta != null && (
                     <span
                       className={cn(
-                        "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium",
+                        "inline-flex items-center gap-0.5 font-medium",
                         deltaColor,
                       )}
                     >
@@ -295,26 +300,26 @@ export function CompartidoView() {
               </div>
             )}
             {expenseCount > 0 && (
-              <p className="mt-2 text-xs text-zinc-400">
+              <p className="mt-2 text-xs text-violet-600/60 dark:text-violet-400/60">
                 {expenseCount} gasto{expenseCount === 1 ? "" : "s"} compartido
                 {expenseCount === 1 ? "" : "s"}
               </p>
             )}
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/60">
-            <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+          <div className="overflow-hidden rounded-2xl border border-violet-200/60 bg-[var(--surface)] dark:border-violet-900/40">
+            <div className="border-b border-violet-100 px-4 py-3 dark:border-violet-900/40">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600/80 dark:text-violet-400/80">
                 Por categoría
               </p>
             </div>
             {categories.length === 0 ? (
-              <p className="p-6 text-center text-sm text-zinc-500">
+              <p className="p-6 text-center text-sm text-[var(--muted-fg)]">
                 No hay gastos marcados como <strong>Hogar</strong> en este período.
                 En Gastos cambiá el tipo a “Hogar”.
               </p>
             ) : (
-              <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+              <ul className="divide-y divide-violet-100/80 dark:divide-violet-900/30">
                 {categories.map((c) => {
                   const open = expanded.has(c.slug);
                   const list = expenses.filter((e) => e.categorySlug === c.slug);
@@ -324,11 +329,11 @@ export function CompartidoView() {
                       <button
                         type="button"
                         onClick={() => toggleCat(c.slug)}
-                        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-violet-50/40 dark:hover:bg-violet-950/20"
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-violet-50/50 dark:hover:bg-violet-950/25"
                       >
                         <ChevronDown
                           className={cn(
-                            "h-4 w-4 shrink-0 text-zinc-400 transition",
+                            "h-4 w-4 shrink-0 text-violet-400 transition",
                             open && "rotate-180",
                           )}
                         />
@@ -342,16 +347,16 @@ export function CompartidoView() {
                           <span className="block truncate text-sm font-medium">
                             {c.name}
                           </span>
-                          <span className="text-xs text-zinc-500">
+                          <span className="text-xs text-[var(--muted-fg)]">
                             {c.count}× · {c.pct.toFixed(0)}%
                           </span>
                         </span>
-                        <span className="shrink-0 text-sm font-semibold tabular-nums">
+                        <span className="shrink-0 text-sm font-semibold tabular-nums text-violet-950 dark:text-violet-100">
                           {formatArs(c.total)}
                         </span>
                       </button>
                       {open && (
-                        <ul className="space-y-1.5 bg-zinc-50/80 px-3 py-2 dark:bg-zinc-950/50">
+                        <ul className="space-y-1.5 bg-violet-50/40 px-3 py-2 dark:bg-violet-950/20">
                           {list.map((e) => {
                             const ticketShown = ticketOpen.has(e.id);
                             const hasItems = e.receiptItems?.length > 0;
@@ -359,10 +364,10 @@ export function CompartidoView() {
                               <li
                                 key={e.id}
                                 className={cn(
-                                  "rounded-xl border bg-white dark:bg-zinc-900",
+                                  "rounded-xl border bg-[var(--surface)]",
                                   e.hasTicket
-                                    ? "border-violet-200 dark:border-violet-900"
-                                    : "border-zinc-100 dark:border-zinc-800",
+                                    ? "border-violet-300 dark:border-violet-800"
+                                    : "border-violet-100 dark:border-violet-900/40",
                                 )}
                               >
                                 <div className="flex items-start justify-between gap-2 px-3 py-2">
@@ -375,7 +380,7 @@ export function CompartidoView() {
                                         </span>
                                       )}
                                     </p>
-                                    <p className="mt-0.5 text-xs text-zinc-500">
+                                    <p className="mt-0.5 text-xs text-[var(--muted-fg)]">
                                       {formatDateAr(e.date)} ·{" "}
                                       {firstName(e.paidByName)}
                                     </p>
@@ -387,7 +392,7 @@ export function CompartidoView() {
                                       </p>
                                     )}
                                     {e.amountUsd != null && e.amountUsd > 0 && (
-                                      <p className="text-xs tabular-nums text-sky-700 dark:text-sky-300">
+                                      <p className="text-xs tabular-nums text-emerald-700 dark:text-emerald-300">
                                         {formatUsd(e.amountUsd)}
                                       </p>
                                     )}
@@ -416,23 +421,23 @@ export function CompartidoView() {
                                         : `Ver ${e.receiptItems.length} ítems`}
                                     </button>
                                     {ticketShown && (
-                                      <ul className="space-y-1.5 border-t border-violet-100 bg-violet-50/40 px-3 py-2 dark:border-violet-900 dark:bg-violet-950/20">
+                                      <ul className="space-y-1.5 border-t border-violet-100 bg-violet-50/50 px-3 py-2 dark:border-violet-900 dark:bg-violet-950/30">
                                         {e.receiptItems.map((it) => (
                                           <li
                                             key={it.id}
                                             className="flex items-start justify-between gap-2 text-sm"
                                           >
                                             <div className="min-w-0">
-                                              <p className="leading-snug text-zinc-800 dark:text-zinc-100">
+                                              <p className="leading-snug">
                                                 {it.name}
                                               </p>
                                               {it.productCategory && (
-                                                <p className="text-[11px] text-zinc-500">
+                                                <p className="text-[11px] text-[var(--muted-fg)]">
                                                   {it.productCategory}
                                                 </p>
                                               )}
                                             </div>
-                                            <span className="shrink-0 tabular-nums text-zinc-600 dark:text-zinc-300">
+                                            <span className="shrink-0 tabular-nums text-[var(--muted-fg)]">
                                               {it.quantity && it.quantity !== 1
                                                 ? `${it.quantity}× `
                                                 : ""}
@@ -457,8 +462,8 @@ export function CompartidoView() {
           </div>
 
           {members.some((m) => m.paidArs > 0) && (
-            <div className="rounded-2xl border border-zinc-200/90 bg-white/80 p-4 dark:border-zinc-800 dark:bg-zinc-950/60">
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+            <div className="rounded-2xl border border-violet-200/60 bg-[var(--surface)] p-4 dark:border-violet-900/40">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600/80 dark:text-violet-400/80">
                 Quién pagó
               </p>
               <ul className="space-y-3">
@@ -470,15 +475,15 @@ export function CompartidoView() {
                       <div className="mb-1.5 flex items-baseline justify-between gap-2">
                         <span className="font-medium">{firstName(m.name)}</span>
                         <span className="tabular-nums">
-                          <span className="font-semibold">
+                          <span className="font-semibold text-violet-950 dark:text-violet-100">
                             {formatArs(m.paidArs)}
                           </span>
-                          <span className="ml-1.5 text-xs text-zinc-400">
+                          <span className="ml-1.5 text-xs text-[var(--muted-fg)]">
                             {m.pct.toFixed(0)}% del total
                           </span>
                         </span>
                       </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                      <div className="h-1.5 overflow-hidden rounded-full bg-violet-100 dark:bg-violet-950">
                         <div
                           className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-400"
                           style={{
@@ -506,7 +511,7 @@ export function CompartidoView() {
             aria-label="Cerrar"
             onClick={() => setInviteOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="relative z-10 w-full max-w-sm overflow-hidden rounded-2xl border border-violet-200 bg-white p-5 shadow-2xl dark:border-violet-900 dark:bg-zinc-950">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600 dark:text-violet-400">
@@ -526,7 +531,7 @@ export function CompartidoView() {
             </div>
 
             <div className="mt-4 space-y-3">
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="rounded-xl border border-violet-100 bg-violet-50/50 p-3 dark:border-violet-900 dark:bg-violet-950/30">
                 <p className="text-xs font-medium text-zinc-500">Código</p>
                 <p className="mt-1 font-mono text-xl font-bold tracking-widest">
                   {inviteCode}
@@ -542,7 +547,7 @@ export function CompartidoView() {
               </div>
 
               {inviteLink && (
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
+                <div className="rounded-xl border border-violet-100 bg-violet-50/50 p-3 dark:border-violet-900 dark:bg-violet-950/30">
                   <p className="text-xs font-medium text-zinc-500">Link</p>
                   <p className="mt-1 break-all text-xs text-zinc-600 dark:text-zinc-300">
                     {inviteLink}
