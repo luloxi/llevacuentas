@@ -12,9 +12,8 @@ export const MAX_HOUSEHOLD_MEMBERS = 12;
 export async function ensureCategoriesSeeded() {
   await ensureSchema();
   const db = getDb();
-  const existing = await db.select().from(schema.categories).limit(1);
-  if (existing.length > 0) return;
 
+  // Upsert system categories so new ones (alquiler, luz, etc.) appear on existing DBs
   for (const cat of CATEGORY_SEEDS) {
     const [row] = await db
       .insert(schema.categories)
