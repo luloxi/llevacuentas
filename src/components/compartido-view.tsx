@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { formatArs, formatUsd } from "@/lib/utils";
+import { useEffect, useState } from "react";
+import {
+  formatArs,
+  formatUsd,
+  formatDateAr,
+  currentPeriodAr,
+  cn,
+} from "@/lib/utils";
 import { formatPeriodLabel } from "@/lib/period-label";
-import { colorForCategory } from "@/lib/category-colors";
 import {
   LoadingBlock,
   PageStack,
@@ -14,36 +19,44 @@ import { Copy, Users } from "lucide-react";
 
 type Member = { userId: string; name: string; paidArs: number };
 
-type MonthCat = {
-  slug: string;
+type Balance = {
+  userId: string;
   name: string;
-  amountArs: number;
-  amountUsd: number;
-  amountArsCombined: number;
-  count: number;
-  pct: number;
+  paidArs: number;
+  fairShare: number;
+  delta: number;
 };
 
-type MonthBlock = {
-  period: string;
-  totalArs: number;
-  totalUsd: number;
-  totalArsCombined: number;
-  totalCount: number;
-  usdRate: { buy: number; asOf: string } | null;
-  categories: MonthCat[];
+type Expense = {
+  id: string;
+  date: string;
+  description: string;
+  amountArs: number | null;
+  amountUsd: number | null;
+  amountCombined: number;
+  categoryName: string;
+  categorySlug: string;
+  paidByUserId: string | null;
+  paidByName: string;
 };
+
+function firstName(name: string) {
+  const n = name.trim();
+  return n ? (n.split(/\s+/)[0] ?? n) : "Sin nombre";
+}
 
 export function CompartidoView() {
-  const [months, setMonths] = useState<MonthBlock[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [periods, setPeriods] = useState<string[]>([]);
-  const [period, setPeriod] = useState("all");
+  const [period, setPeriod] = useState(currentPeriodAr);
   const [members, setMembers] = useState<Member[]>([]);
+  const [balances, setBalances] = useState<Balance[]>([]);
   const [inviteCode, setInviteCode] = useState("");
   const [summary, setSummary] = useState<{
     totalArsCombined: number;
     fairSharePerMember: number;
     memberCount: number;
+    expenseCount: number;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,18 +71,27 @@ export function CompartidoView() {
         const q =
           period && period !== "all"
             ? `?period=${encodeURIComponent(period)}`
-            : "";
+            : period === "all"
+              ? "?period=all"
+              : "";
         const res = await fetch(`/api/stats/compartido${q}`, {
           credentials: "include",
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Error");
         if (cancelled) return;
-        setMonths(data.months ?? []);
+        setExpenses(data.expenses ?? []);
         setPeriods(data.periods ?? []);
         setMembers(data.members ?? []);
+        setBalances(data.balances ?? []);
         setInviteCode(data.inviteCode ?? "");
         setSummary(data.summary ?? null);
+
+        // If current month has no shared data yet, still keep it selected
+        const loaded: string[] = data.periods ?? [];
+        if (period !== "all" && period && !loaded.includes(period) && loaded.length) {
+          // keep current period empty state — user can switch
+        }
       } catch (e) {
         if (!cancelled)
           setError(e instanceof Error ? e.message : "Error de red");
@@ -82,34 +104,6 @@ export function CompartidoView() {
     };
   }, [period]);
 
-  const grandCats = useMemo(() => {
-    const map = new Map<
-      string,
-      { slug: string; name: string; amount: number; count: number }
-    >();
-    for (const m of months) {
-      for (const c of m.categories) {
-        const cur = map.get(c.slug) ?? {
-          slug: c.slug,
-          name: c.name,
-          amount: 0,
-          count: 0,
-        };
-        cur.amount += c.amountArsCombined;
-        cur.count += c.count;
-        cur.name = c.name;
-        map.set(c.slug, cur);
-      }
-    }
-    const total = [...map.values()].reduce((s, c) => s + c.amount, 0);
-    return [...map.values()]
-      .map((c) => ({
-        ...c,
-        pct: total > 0 ? (c.amount / total) * 100 : 0,
-      }))
-      .sort((a, b) => b.amount - a.amount);
-  }, [months]);
-
   async function copyInvite() {
     try {
       await navigator.clipboard.writeText(inviteCode);
@@ -120,8 +114,8 @@ export function CompartidoView() {
     }
   }
 
-  if (loading && months.length === 0) {
-    return <LoadingBlock label="Cargando gastos compartidos…" />;
+  if (loading && expenses.length === 0 && !summary) {
+    return <LoadingBlock label="Cargando gastos del hogar…" />;
   }
   if (error) {
     return (
@@ -131,6 +125,9 @@ export function CompartidoView() {
     );
   }
 
+  const periodLabel =
+    period === "all" ? "todos los meses" : formatPeriodLabel(period);
+
   return (
     <PageStack>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -139,8 +136,8 @@ export function CompartidoView() {
             <Users className="h-4 w-4" />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight">Hogar compartido</h1>
-            <p className="text-xs text-zinc-500">Presupuesto entre miembros</p>
+            <h1 className="text-lg font-bold tracking-tight">Hogar</h1>
+            <p className="text-xs text-zinc-500">Gastos compartidos · quién pagó</p>
           </div>
         </div>
         <select
@@ -154,23 +151,25 @@ export function CompartidoView() {
               {formatPeriodLabel(p)}
             </option>
           ))}
+          {/* Ensure current month appears even with no data yet */}
+          {period !== "all" && !periods.includes(period) && (
+            <option value={period}>{formatPeriodLabel(period)}</option>
+          )}
         </select>
       </div>
 
       {summary && (
         <div className="grid gap-3 sm:grid-cols-3">
           <StatTile
-            label="Total compartido"
+            label="Total hogar"
             value={formatArs(summary.totalArsCombined)}
-            hint={
-              period === "all" ? "todos los meses" : formatPeriodLabel(period)
-            }
+            hint={`${summary.expenseCount} gasto${summary.expenseCount === 1 ? "" : "s"} · ${periodLabel}`}
             tone="violet"
           />
           <StatTile
-            label="Por persona (partes iguales)"
+            label="Por persona"
             value={formatArs(summary.fairSharePerMember)}
-            hint={`${summary.memberCount} ${summary.memberCount === 1 ? "miembro" : "miembros"}`}
+            hint={`${summary.memberCount} ${summary.memberCount === 1 ? "miembro" : "miembros"} · partes iguales`}
           />
           <div className="rounded-2xl border border-zinc-200/90 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/60">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
@@ -185,48 +184,57 @@ export function CompartidoView() {
               <Copy className="h-3.5 w-3.5 text-zinc-400" />
             </button>
             <p className="mt-1 text-xs text-zinc-500">
-              {copied ? "¡Copiado!" : "Tocá para copiar el código"}
+              {copied ? "¡Copiado!" : "Tocá para copiar"}
             </p>
           </div>
         </div>
       )}
 
-      <p className="rounded-xl border border-zinc-200/80 bg-white/60 px-3 py-2 text-xs leading-relaxed text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/40">
-        Solo gastos marcados como <strong>compartidos</strong> (súper, hogar,
-        etc.). Sirve para armar el presupuesto del hogar. No muestra deudas
-        entre personas.
-      </p>
-
-      {/* Who paid shared — contribution, not debt */}
-      {members.length > 0 && (
+      {/* Balance: only who paid how much */}
+      {balances.length > 0 && (
         <Surface>
-          <h2 className="text-sm font-semibold tracking-tight">
-            Quién registró / pagó
-          </h2>
+          <h2 className="text-sm font-semibold tracking-tight">Balance</h2>
           <p className="mt-0.5 text-xs text-zinc-500">
-            Aporte de cada miembro en gastos compartidos (informativo).
+            Cuánto puso cada uno en {periodLabel}.
           </p>
           <ul className="mt-3 space-y-3">
-            {members.map((m) => {
+            {balances.map((m) => {
               const pct =
                 summary && summary.totalArsCombined > 0
                   ? (m.paidArs / summary.totalArsCombined) * 100
                   : 0;
+              const over = m.delta > 1;
+              const under = m.delta < -1;
               return (
                 <li key={m.userId} className="text-sm">
-                  <div className="mb-1.5 flex justify-between gap-2">
-                    <span className="font-medium">{m.name}</span>
-                    <span className="tabular-nums text-zinc-600">
-                      {formatArs(m.paidArs)}
+                  <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="font-medium">{firstName(m.name)}</span>
+                    <span className="tabular-nums">
+                      <span className="font-semibold text-zinc-800 dark:text-zinc-100">
+                        {formatArs(m.paidArs)}
+                      </span>
                       <span className="ml-1 text-xs text-zinc-400">
                         ({pct.toFixed(0)}%)
                       </span>
+                      {(over || under) && summary && summary.memberCount > 1 && (
+                        <span
+                          className={cn(
+                            "ml-2 text-xs font-medium",
+                            over
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-amber-600 dark:text-amber-400",
+                          )}
+                        >
+                          {over ? "+" : ""}
+                          {formatArs(m.delta)} vs parte
+                        </span>
+                      )}
                     </span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-400 transition-all duration-500"
-                      style={{ width: `${Math.min(pct, 100)}%` }}
+                      style={{ width: `${Math.min(Math.max(pct, 0), 100)}%` }}
                     />
                   </div>
                 </li>
@@ -236,124 +244,58 @@ export function CompartidoView() {
         </Surface>
       )}
 
-      {/* Category breakdown */}
-      <section className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white/80 shadow-sm backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/60">
-        <div className="border-b border-zinc-100 bg-gradient-to-r from-violet-50/80 to-transparent px-4 py-3 dark:border-zinc-800 dark:from-violet-950/30">
-          <h2 className="font-semibold tracking-tight">
-            {period === "all"
-              ? "Por categoría (todos los meses)"
-              : `Por categoría · ${formatPeriodLabel(period)}`}
+      {/* Expense list — like home, with who paid */}
+      <section className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white/80 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/60">
+        <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
+          <h2 className="text-sm font-semibold tracking-tight">
+            Gastos del hogar
           </h2>
+          <p className="text-xs text-zinc-500">{periodLabel}</p>
         </div>
-        {grandCats.length === 0 ? (
-          <p className="p-4 text-sm text-zinc-500">
-            No hay gastos compartidos en este período. En Consumos marcá gastos
-            como “compartido”.
+
+        {expenses.length === 0 ? (
+          <p className="p-6 text-center text-sm text-zinc-500">
+            No hay gastos marcados como <strong>Hogar</strong> en este período.
+            En Gastos cambiá el tipo a “Hogar”.
           </p>
         ) : (
-          <table className="min-w-full text-sm">
-            <thead className="text-xs uppercase text-zinc-500">
-              <tr>
-                <th className="px-4 py-2 text-left">Categoría</th>
-                <th className="px-4 py-2 text-right">Total $</th>
-                <th className="px-4 py-2 text-right">Cant.</th>
-                <th className="px-4 py-2 text-right">%</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {grandCats.map((c) => (
-                <tr key={c.slug}>
-                  <td className="px-4 py-2.5 font-medium">
-                    <span className="inline-flex items-center gap-2">
-                      <span
-                        className="h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: colorForCategory(c.slug) }}
-                      />
-                      {c.name}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums font-semibold">
-                    {formatArs(c.amount)}
-                  </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-zinc-500">
-                    {c.count}
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                        <div
-                          className="h-full rounded-full bg-violet-500"
-                          style={{
-                            width: `${Math.max(c.pct > 0 ? 2 : 0, Math.min(c.pct, 100))}%`,
-                          }}
-                        />
-                      </div>
-                      <span className="w-12 tabular-nums text-zinc-600">
-                        {c.pct.toFixed(1)}%
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {expenses.map((e) => (
+              <li
+                key={e.id}
+                className="flex items-start justify-between gap-3 px-4 py-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">
+                    {e.description}
+                  </p>
+                  <p className="mt-0.5 text-xs text-zinc-500">
+                    {formatDateAr(e.date)}
+                    {e.categoryName ? ` · ${e.categoryName}` : ""}
+                  </p>
+                  <p className="mt-1 inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-800 dark:bg-violet-950/60 dark:text-violet-200">
+                    {firstName(e.paidByName)}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-semibold tabular-nums">
+                    {e.amountArs != null
+                      ? formatArs(e.amountArs)
+                      : e.amountUsd != null
+                        ? formatUsd(e.amountUsd)
+                        : formatArs(e.amountCombined)}
+                  </p>
+                  {e.amountArs != null && e.amountUsd != null && (
+                    <p className="text-xs tabular-nums text-zinc-500">
+                      {formatUsd(e.amountUsd)}
+                    </p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
-
-      {/* Per-month cards when viewing all */}
-      {period === "all" && months.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
-            Detalle por mes
-          </p>
-          {months.map((m) => (
-            <details
-              key={m.period}
-              className="group overflow-hidden rounded-2xl border border-zinc-200/90 bg-white/80 shadow-sm open:shadow-md dark:border-zinc-800 dark:bg-zinc-950/60"
-            >
-              <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 transition hover:bg-violet-50/50 dark:hover:bg-violet-950/20">
-                <span className="font-medium capitalize">
-                  {formatPeriodLabel(m.period)}
-                </span>
-                <span className="tabular-nums text-sm font-semibold">
-                  {formatArs(m.totalArsCombined)}
-                  {m.totalUsd > 0 && (
-                    <span className="ml-2 text-xs font-normal text-zinc-500">
-                      {formatUsd(m.totalUsd)}
-                    </span>
-                  )}
-                </span>
-              </summary>
-              <div className="border-t border-zinc-100 px-2 pb-3 dark:border-zinc-800">
-                <ul className="space-y-1 pt-2">
-                  {m.categories.map((c) => (
-                    <li
-                      key={c.slug}
-                      className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{
-                            backgroundColor: colorForCategory(c.slug),
-                          }}
-                        />
-                        {c.name}
-                        <span className="text-xs text-zinc-400">
-                          ×{c.count}
-                        </span>
-                      </span>
-                      <span className="tabular-nums font-medium">
-                        {formatArs(c.amountArsCombined)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </details>
-          ))}
-        </div>
-      )}
     </PageStack>
   );
 }
