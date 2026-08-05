@@ -361,15 +361,18 @@ export function DashboardHome({
         </Link>
       )}
 
-      {/* 3. Shared total */}
+      {/* 3. Hogar */}
       <Link
         href="/compartido"
         className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
-        aria-label={`Gastos compartidos ${formatArs(sharedTotalArs)}`}
+        aria-label={`Hogar ${formatArs(sharedTotalArs)}`}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
+              Hogar
+            </p>
+            <p className="mt-0.5 text-lg font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
               {formatArs(sharedTotalArs)}
             </p>
             <VsPrevMeter
@@ -382,7 +385,7 @@ export function DashboardHome({
         </div>
       </Link>
 
-      {/* 4. Debt balance */}
+      {/* 4. Deuda */}
       <Link
         href="/deuda"
         className="group flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
@@ -393,9 +396,12 @@ export function DashboardHome({
         }
       >
         <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
+            Deuda
+          </p>
           <p
             className={cn(
-              "text-lg font-semibold tabular-nums tracking-tight",
+              "mt-0.5 text-lg font-semibold tabular-nums tracking-tight",
               debtSettled
                 ? "text-[var(--brand-fg)]"
                 : "text-red-800 dark:text-red-200",
