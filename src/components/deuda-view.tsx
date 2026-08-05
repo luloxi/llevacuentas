@@ -6,7 +6,6 @@ import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
 import {
   LoadingBlock,
   SegmentedControl,
-  StatTile,
   Surface,
 } from "@/components/ui";
 
@@ -205,6 +204,44 @@ function DebtChart({ months }: { months: MonthRow[] }) {
   );
 }
 
+function MiniStat({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "brand" | "danger";
+}) {
+  return (
+    <div
+      className={cn(
+        "min-w-0 flex-1 rounded-xl border px-2.5 py-2 text-center",
+        tone === "danger" &&
+          "border-red-200/80 bg-red-50/80 dark:border-red-900/50 dark:bg-red-950/30",
+        tone === "brand" &&
+          "border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/50 dark:bg-emerald-950/30",
+        tone === "neutral" &&
+          "border-zinc-200/90 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/60",
+      )}
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+        {label}
+      </p>
+      <p
+        className={cn(
+          "mt-0.5 text-sm font-bold tabular-nums tracking-tight sm:text-base",
+          tone === "danger" && "text-red-800 dark:text-red-200",
+          tone === "brand" && "text-emerald-900 dark:text-emerald-100",
+          tone === "neutral" && "text-zinc-900 dark:text-zinc-50",
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
 export function DeudaView() {
   const [months, setMonths] = useState<MonthRow[]>([]);
   const [chartMonths, setChartMonths] = useState<MonthRow[]>([]);
@@ -254,66 +291,48 @@ export function DeudaView() {
   const settled = summary?.settled || (summary?.currentBalanceArs ?? 0) <= 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <SegmentedControl
+          value={tab}
+          onChange={setTab}
+          options={[
+            { id: "evolucion", label: "Evolución" },
+            { id: "pagos", label: "Pagos" },
+          ]}
+        />
+      </div>
+
       {summary && (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <StatTile
-            label={settled ? "Estado" : "Deuda estimada actual"}
-            value={settled ? "Saldada" : formatArs(Math.max(summary.currentBalanceArs, 0))}
-            hint={
+        <div className="flex gap-2">
+          <MiniStat
+            label={settled ? "Estado" : "Deuda"}
+            value={
               settled
-                ? "Sin saldo pendiente según tus movimientos"
-                : summary.currentBalanceUsd !== 0
-                  ? `+ ${formatUsd(Math.abs(summary.currentBalanceUsd))} en USD`
-                  : undefined
+                ? "Saldada"
+                : formatArs(Math.max(summary.currentBalanceArs, 0))
             }
             tone={settled ? "brand" : "danger"}
           />
-          <StatTile
-            label="Total pagado"
+          <MiniStat
+            label="Pagado"
             value={formatArs(summary.totalPaidArs)}
-            hint={
-              summary.totalPaidUsd > 0
-                ? `+ ${formatUsd(summary.totalPaidUsd)} en USD`
-                : undefined
-            }
             tone="brand"
           />
-          <StatTile
-            label="Pico de deuda"
+          <MiniStat
+            label="Pico"
             value={formatArs(summary.peakBalanceArs)}
-            hint={`en ${summary.monthCount} meses con datos`}
           />
         </div>
       )}
 
-      {settled && (
-        <p className="rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-3 py-2 text-xs leading-relaxed text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100">
-          Cuenta en cero con tus datos importados. Si cancelaste la tarjeta,
-          este panel queda como historial de cuánto pagaste y el pico que llegó
-          a tener la deuda.
-        </p>
-      )}
-
-      <p className="rounded-xl border border-zinc-200/80 bg-white/60 px-3 py-2 text-xs leading-relaxed text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/40">
-        <strong className="font-semibold text-zinc-600 dark:text-zinc-300">Solo vos ves esto.</strong>{" "}
-        Estimación con tus cargos y pagos importados (no incluye gastos de otros
-        del hogar ni lo marcado como Hogar). USD al TC compra de fin de mes. Si
-        faltan meses o algún “SU PAGO”, el número puede desfasarse. La deuda no
-        baja de $0.
+      <p className="text-[11px] leading-snug text-zinc-500">
+        Solo vos ves esto · cargos y pagos tuyos (sin Hogar ni otros). USD al TC
+        de fin de mes.
       </p>
 
-      <SegmentedControl
-        value={tab}
-        onChange={setTab}
-        options={[
-          { id: "evolucion", label: "Evolución" },
-          { id: "pagos", label: "Pagos" },
-        ]}
-      />
-
       {tab === "evolucion" ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <Surface>
             <h2 className="mb-2 text-sm font-semibold tracking-tight">
               Deuda mes a mes
