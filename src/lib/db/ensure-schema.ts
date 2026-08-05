@@ -142,6 +142,25 @@ export async function ensureSchema() {
         product_category text
       )
     `,
+    sql`
+      CREATE TABLE IF NOT EXISTS savings_assets (
+        id text PRIMARY KEY,
+        user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        household_id text NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+        kind text NOT NULL,
+        label text NOT NULL,
+        address text,
+        amount_ars numeric(16,2),
+        amount_usd numeric(16,2),
+        last_balance_usd numeric(16,2),
+        last_synced_at timestamp,
+        sync_error text,
+        created_at timestamp DEFAULT now() NOT NULL,
+        updated_at timestamp DEFAULT now() NOT NULL
+      )
+    `,
+    sql`CREATE INDEX IF NOT EXISTS savings_user_idx ON savings_assets(user_id)`,
+    sql`CREATE INDEX IF NOT EXISTS savings_household_idx ON savings_assets(household_id)`,
   ];
 
   for (const statement of statements) {
