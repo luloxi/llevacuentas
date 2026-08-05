@@ -74,41 +74,44 @@ export async function GET() {
       const p = r.date.slice(0, 7);
       const ars = r.amountArs != null ? Math.abs(Number(r.amountArs)) : 0;
       const usd = r.amountUsd != null ? Math.abs(Number(r.amountUsd)) : 0;
+      const desc = r.descriptionNormalized ?? "";
       const b = bucket(p);
 
-      // Currency reclassifications (pesificación / deuda USD→ARS): not new spend nor cash payment
-      if (isBankAccountingEntry(r.descriptionNormalized)) {
+      // Currency reclassifications: not new spend nor cash payment
+      if (isBankAccountingEntry(desc)) {
         continue;
       }
 
-      if (r.isPayment) {
-        const cardPay = isCardPaymentEntry(r.descriptionNormalized);
-        if (cardPay) {
-          b.paymentsArs += ars;
-          b.paymentsUsd += usd;
-          b.paymentCount += 1;
-          paymentList.push({
-            id: r.id,
-            date: r.date,
-            description: r.descriptionNormalized,
-            amountArs: r.amountArs != null ? Number(r.amountArs) : null,
-            amountUsd: r.amountUsd != null ? Number(r.amountUsd) : null,
-            kind: "payment",
-          });
-        } else {
-          // Refunds / credits also lower the balance
-          b.creditsArs += ars;
-          b.creditsUsd += usd;
-          b.creditCount += 1;
-          paymentList.push({
-            id: r.id,
-            date: r.date,
-            description: r.descriptionNormalized,
-            amountArs: r.amountArs != null ? Number(r.amountArs) : null,
-            amountUsd: r.amountUsd != null ? Number(r.amountUsd) : null,
-            kind: "credit",
-          });
-        }
+      // Prefer description patterns even if isPayment flag was wrong on import
+      const looksLikePayment = isCardPaymentEntry(desc);
+      const isPayFlag = Boolean(r.isPayment);
+      const isCreditFlag = Boolean(r.isCredit);
+
+      if (looksLikePayment || (isPayFlag && !isCreditFlag)) {
+        b.paymentsArs += ars;
+        b.paymentsUsd += usd;
+        b.paymentCount += 1;
+        paymentList.push({
+          id: r.id,
+          date: r.date,
+          description: desc,
+          amountArs: r.amountArs != null ? Number(r.amountArs) : null,
+          amountUsd: r.amountUsd != null ? Number(r.amountUsd) : null,
+          kind: "payment",
+        });
+      } else if (isPayFlag || isCreditFlag) {
+        // Refunds / credits also lower the balance
+        b.creditsArs += ars;
+        b.creditsUsd += usd;
+        b.creditCount += 1;
+        paymentList.push({
+          id: r.id,
+          date: r.date,
+          description: desc,
+          amountArs: r.amountArs != null ? Number(r.amountArs) : null,
+          amountUsd: r.amountUsd != null ? Number(r.amountUsd) : null,
+          kind: "credit",
+        });
       } else {
         b.chargesArs += ars;
         b.chargesUsd += usd;
@@ -116,12 +119,13 @@ export async function GET() {
       }
     }
 
-    const periods = [...byPeriod.keys()].sort(); // oldest → newest for running balance
+    const periods = [...byPeriod.keys()].sort(); // oldest → newest
     const rates = await getMonthEndBuyRates(periods);
 
     let balanceArs = 0;
     let balanceUsd = 0;
     let peakArs = 0;
+    let monthsPaidInFull = 0;
 
     const months = periods.map((p) => {
       const b = byPeriod.get(p)!;
@@ -137,6 +141,13 @@ export async function GET() {
 
       balanceArs += net;
       balanceUsd += b.chargesUsd - b.paymentsUsd - b.creditsUsd;
+
+      // Credit cards: overpaying / paying in full → debt cannot go below 0
+      // (residual credit is not tracked as negative debt in this estimate)
+      if (balanceArs < 0) balanceArs = 0;
+      if (balanceUsd < 0) balanceUsd = 0;
+
+      if (balanceArs === 0 && reductions > 0) monthsPaidInFull += 1;
       if (balanceArs > peakArs) peakArs = balanceArs;
 
       return {
@@ -173,19 +184,28 @@ export async function GET() {
     const totalChargesArs = months.reduce((s, m) => s + m.chargesArs, 0);
     const totalChargesUsd = months.reduce((s, m) => s + m.chargesUsd, 0);
 
+    // Tiny residual from FX rounding: treat as settled
+    const settledThreshold = 50; // ARS
+    const currentBalanceArs =
+      balanceArs < settledThreshold ? 0 : balanceArs;
+    const currentBalanceUsd =
+      currentBalanceArs === 0 ? 0 : balanceUsd;
+
     return NextResponse.json({
       months: [...months].reverse(), // newest first for UI
       chartMonths: months, // oldest → newest for charts
       payments: paymentList,
       summary: {
-        currentBalanceArs: balanceArs,
-        currentBalanceUsd: balanceUsd,
+        currentBalanceArs,
+        currentBalanceUsd,
         peakBalanceArs: peakArs,
         totalPaidArs,
         totalPaidUsd,
         totalChargesArs,
         totalChargesUsd,
         monthCount: months.length,
+        monthsPaidInFull,
+        settled: currentBalanceArs === 0 && months.length > 0,
       },
     });
   } catch (e) {
