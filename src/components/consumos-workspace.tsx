@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   FileSpreadsheet,
   List,
@@ -23,6 +23,8 @@ type Member = { userId: string; name: string };
 
 type Tab = "gastos" | "importar";
 
+const OPEN_FLAG = "lc_open_add_expense";
+
 async function readErrorMessage(res: Response): Promise<string> {
   const text = await res.text();
   if (!text) {
@@ -42,7 +44,6 @@ async function readErrorMessage(res: Response): Promise<string> {
 }
 
 export function ConsumosWorkspace() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("gastos");
   const [addOpen, setAddOpen] = useState(false);
@@ -74,13 +75,42 @@ export function ConsumosWorkspace() {
     void loadMeta();
   }, [loadMeta]);
 
+  // Open modal from deep link / FAB without remounting (no router.replace)
   useEffect(() => {
+    let shouldOpen = false;
+
+    try {
+      if (sessionStorage.getItem(OPEN_FLAG) === "1") {
+        sessionStorage.removeItem(OPEN_FLAG);
+        shouldOpen = true;
+      }
+    } catch {
+      // private mode etc.
+    }
+
     if (searchParams.get("scan") === "1") {
+      shouldOpen = true;
+      // Soft-clear query without Next navigation (avoids Suspense remount)
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", "/consumos");
+      }
+    }
+
+    if (shouldOpen) {
       setTab("gastos");
       setAddOpen(true);
-      router.replace("/consumos", { scroll: false });
     }
-  }, [searchParams, router]);
+  }, [searchParams]);
+
+  // Listen for open requests while already on this page
+  useEffect(() => {
+    function onOpen() {
+      setTab("gastos");
+      setAddOpen(true);
+    }
+    window.addEventListener("lc:open-add-expense", onOpen);
+    return () => window.removeEventListener("lc:open-add-expense", onOpen);
+  }, []);
 
   useEffect(() => {
     if (!toast) return;

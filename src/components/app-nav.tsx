@@ -22,6 +22,21 @@ const links = [
   { href: "/compartido", label: "Hogar", icon: Users },
 ];
 
+const OPEN_FLAG = "lc_open_add_expense";
+
+function openAddExpense(pathname: string, router: ReturnType<typeof useRouter>) {
+  if (pathname.startsWith("/consumos")) {
+    window.dispatchEvent(new Event("lc:open-add-expense"));
+    return;
+  }
+  try {
+    sessionStorage.setItem(OPEN_FLAG, "1");
+  } catch {
+    // ignore
+  }
+  router.push("/consumos");
+}
+
 export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -78,13 +93,14 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
                 </Link>
               );
             })}
-            <Link
-              href="/consumos?scan=1"
+            <button
+              type="button"
+              onClick={() => openAddExpense(pathname, router)}
               className="ml-1 flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold text-white shadow-md shadow-violet-600/25 transition hover:bg-violet-700"
             >
               <Plus className="h-4 w-4" strokeWidth={2.5} />
               Agregar
-            </Link>
+            </button>
             <button
               type="button"
               onClick={() => void logout()}
@@ -109,13 +125,14 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
           })}
 
           <div className="relative flex flex-col items-center">
-            <Link
-              href="/consumos?scan=1"
+            <button
+              type="button"
+              onClick={() => openAddExpense(pathname, router)}
               className="absolute -top-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-b from-violet-500 to-violet-700 text-white shadow-lg shadow-violet-600/40 ring-4 ring-white transition active:scale-95 dark:ring-zinc-950"
               aria-label="Agregar gasto"
             >
               <Plus className="h-7 w-7" strokeWidth={2.5} />
-            </Link>
+            </button>
             <span className="mt-10 text-[10px] font-medium text-violet-600 dark:text-violet-400">
               Agregar
             </span>
