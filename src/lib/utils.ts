@@ -5,6 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Pesos argentinos — always with $ and es-AR separators */
 export function formatArs(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "—";
   return new Intl.NumberFormat("es-AR", {
@@ -14,13 +15,17 @@ export function formatArs(value: number | null | undefined): string {
   }).format(value);
 }
 
+/**
+ * Dólares — never bare "$" alone (confusable with pesos).
+ * Shows "USD 24,00" so it's obvious on mobile.
+ */
 export function formatUsd(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
+  const n = new Intl.NumberFormat("es-AR", {
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+  return `USD ${n}`;
 }
 
 /**
