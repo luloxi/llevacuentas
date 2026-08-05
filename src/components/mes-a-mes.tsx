@@ -45,12 +45,9 @@ type MonthCat = {
 
 type MonthBlock = {
   period: string;
-  /** Native ARS only */
   totalArs: number;
   totalUsd: number;
-  /** USD → ARS at month-end buy rate */
   totalArsFromUsd?: number;
-  /** Final total in pesos (ARS + USD convertidos) */
   totalArsCombined?: number;
   totalCount: number;
   usdRate?: UsdRate;
@@ -66,6 +63,13 @@ function formatUsdRateLabel(rate: UsdRate | undefined): string | null {
   const [y, mo, d] = rate.asOf.split("-");
   const dateLabel = d && mo && y ? `${d}/${mo}/${y}` : rate.asOf;
   return `TC compra ${dateLabel}: ${formatArs(rate.buy)}`;
+}
+
+function currentPeriod(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
 }
 
 type ChartData = {
@@ -161,8 +165,8 @@ function aggregateMonths(months: MonthBlock[]): MonthBlock {
 
 export function MesAMesView() {
   const [mainTab, setMainTab] = useState<MainTab>("resumen");
-  /** "all" or YYYY-MM */
-  const [filterPeriod, setFilterPeriod] = useState<string>("all");
+  /** "all" or YYYY-MM — default is current calendar month */
+  const [filterPeriod, setFilterPeriod] = useState<string>(currentPeriod);
   const [periods, setPeriods] = useState<string[]>([]);
   const [months, setMonths] = useState<MonthBlock[]>([]);
   const [chart, setChart] = useState<ChartData | null>(null);
@@ -174,6 +178,7 @@ export function MesAMesView() {
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [periodReady, setPeriodReady] = useState(false);
 
   const loadStats = useCallback(async () => {
     setLoading(true);
@@ -187,10 +192,21 @@ export function MesAMesView() {
         setError(data.error || "Error al cargar el análisis");
         return;
       }
-      setPeriods(data.periods ?? []);
+      const loadedPeriods: string[] = data.periods ?? [];
+      setPeriods(loadedPeriods);
       setMonths(data.months ?? []);
       setChart(data.chart ?? null);
       setCategories(data.categories ?? []);
+
+      // Prefer current month; else most recent period with data
+      setFilterPeriod((prev) => {
+        if (prev !== "all" && loadedPeriods.includes(prev)) return prev;
+        const now = currentPeriod();
+        if (loadedPeriods.includes(now)) return now;
+        if (loadedPeriods.length > 0) return loadedPeriods[0]!;
+        return now;
+      });
+      setPeriodReady(true);
     } catch {
       setError("Error de red");
     } finally {
@@ -208,10 +224,9 @@ export function MesAMesView() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  // Load transactions for expand + recategorize (one month or all)
   useEffect(() => {
-    if (mainTab !== "resumen") {
-      setTxs([]);
+    if (mainTab !== "resumen" || !periodReady) {
+      if (mainTab !== "resumen") setTxs([]);
       return;
     }
     let cancelled = false;
@@ -246,7 +261,7 @@ export function MesAMesView() {
     return () => {
       cancelled = true;
     };
-  }, [mainTab, filterPeriod]);
+  }, [mainTab, filterPeriod, periodReady]);
 
   const grand = useMemo(() => aggregateMonths(months), [months]);
 
@@ -400,12 +415,12 @@ export function MesAMesView() {
             onChange={(e) => setFilterPeriod(e.target.value)}
             className="lc-input"
           >
-            <option value="all">Todos los meses</option>
             {periods.map((p) => (
               <option key={p} value={p}>
                 {formatPeriodLabel(p)}
               </option>
             ))}
+            <option value="all">Todos los meses</option>
           </select>
         )}
       </div>
@@ -461,7 +476,10 @@ export function MesAMesView() {
           onChangeCategory={changeCategory}
         />
       ) : (
-        <p className="text-sm text-zinc-500">Sin datos para este mes.</p>
+        <p className="text-sm text-zinc-500">
+          Sin movimientos en {formatPeriodLabel(filterPeriod)}. Elegí otro mes o
+          "Todos los meses".
+        </p>
       )}
     </PageStack>
   );
@@ -670,7 +688,6 @@ function MonthDetail({
                 <span className="hidden text-right text-sm tabular-nums text-zinc-600 sm:block">
                   {c.amountUsd > 0 ? formatUsd(c.amountUsd) : "—"}
                 </span>
-                {/* Mobile: show ARS + USD under the name */}
                 <span className="w-full pl-9 text-xs tabular-nums text-zinc-500 sm:hidden">
                   {c.amountArs > 0 ? formatArs(c.amountArs) : "— $"}
                   {" · "}
