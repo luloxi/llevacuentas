@@ -12,6 +12,22 @@ import {
   isCardPaymentEntry,
 } from "@/lib/bbva/bank-entries";
 
+/**
+ * Debt is personal: only this user's card activity.
+ * Never mix another member's charges/payments or pure household (shared) spend.
+ */
+function isPrivateToUser(
+  r: {
+    ownership: string | null;
+    paidByUserId: string | null;
+  },
+  userId: string,
+): boolean {
+  if (r.paidByUserId) return r.paidByUserId === userId;
+  // Legacy rows without assignee: only count as mine if marked personal
+  return r.ownership === "personal" || r.ownership == null;
+}
+
 export async function GET() {
   const authResult = await requireApiUser();
   if ("error" in authResult) return authResult.error;
@@ -20,10 +36,13 @@ export async function GET() {
   try {
     const ctx = await requireHousehold(sessionUser.id);
     const db = getDb();
-    const rows = await db
+    const allRows = await db
       .select()
       .from(schema.transactions)
       .where(eq(schema.transactions.householdId, ctx.household.id));
+
+    // Strict privacy: this member's ledger only
+    const rows = allRows.filter((r) => isPrivateToUser(r, sessionUser.id));
 
     type Bucket = {
       period: string;
@@ -77,12 +96,8 @@ export async function GET() {
       const desc = r.descriptionNormalized ?? "";
       const b = bucket(p);
 
-      // Currency reclassifications: not new spend nor cash payment
-      if (isBankAccountingEntry(desc)) {
-        continue;
-      }
+      if (isBankAccountingEntry(desc)) continue;
 
-      // Prefer description patterns even if isPayment flag was wrong on import
       const looksLikePayment = isCardPaymentEntry(desc);
       const isPayFlag = Boolean(r.isPayment);
       const isCreditFlag = Boolean(r.isCredit);
@@ -100,7 +115,6 @@ export async function GET() {
           kind: "payment",
         });
       } else if (isPayFlag || isCreditFlag) {
-        // Refunds / credits also lower the balance
         b.creditsArs += ars;
         b.creditsUsd += usd;
         b.creditCount += 1;
@@ -113,13 +127,15 @@ export async function GET() {
           kind: "credit",
         });
       } else {
+        // Shared household expenses are not personal card debt
+        if (r.ownership === "shared") continue;
         b.chargesArs += ars;
         b.chargesUsd += usd;
         b.chargeCount += 1;
       }
     }
 
-    const periods = [...byPeriod.keys()].sort(); // oldest → newest
+    const periods = [...byPeriod.keys()].sort();
     const rates = await getMonthEndBuyRates(periods);
 
     let balanceArs = 0;
@@ -142,8 +158,6 @@ export async function GET() {
       balanceArs += net;
       balanceUsd += b.chargesUsd - b.paymentsUsd - b.creditsUsd;
 
-      // Credit cards: overpaying / paying in full → debt cannot go below 0
-      // (residual credit is not tracked as negative debt in this estimate)
       if (balanceArs < 0) balanceArs = 0;
       if (balanceUsd < 0) balanceUsd = 0;
 
@@ -184,16 +198,15 @@ export async function GET() {
     const totalChargesArs = months.reduce((s, m) => s + m.chargesArs, 0);
     const totalChargesUsd = months.reduce((s, m) => s + m.chargesUsd, 0);
 
-    // Tiny residual from FX rounding: treat as settled
-    const settledThreshold = 50; // ARS
+    const settledThreshold = 50;
     const currentBalanceArs =
       balanceArs < settledThreshold ? 0 : balanceArs;
     const currentBalanceUsd =
       currentBalanceArs === 0 ? 0 : balanceUsd;
 
     return NextResponse.json({
-      months: [...months].reverse(), // newest first for UI
-      chartMonths: months, // oldest → newest for charts
+      months: [...months].reverse(),
+      chartMonths: months,
       payments: paymentList,
       summary: {
         currentBalanceArs,
@@ -206,6 +219,7 @@ export async function GET() {
         monthCount: months.length,
         monthsPaidInFull,
         settled: currentBalanceArs === 0 && months.length > 0,
+        private: true,
       },
     });
   } catch (e) {
