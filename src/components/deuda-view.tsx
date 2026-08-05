@@ -242,6 +242,75 @@ function MiniStat({
   );
 }
 
+function MonthCard({ m }: { m: MonthRow }) {
+  return (
+    <li className="rounded-2xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-semibold capitalize tracking-tight">
+            {formatPeriodLabel(m.period)}
+          </p>
+          <p className="text-[11px] text-zinc-400">
+            {m.chargeCount} cargos · {m.paymentCount} pagos
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+            Cierre
+          </p>
+          <p className="text-base font-bold tabular-nums">
+            {formatArs(Math.max(m.balanceArs, 0))}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-xl bg-amber-50 px-2 py-1.5 dark:bg-amber-950/30">
+          <p className="text-[10px] font-medium uppercase text-amber-700/80 dark:text-amber-300/80">
+            Cargos
+          </p>
+          <p className="text-xs font-semibold tabular-nums text-amber-900 dark:text-amber-100">
+            {formatArs(m.chargesCombined)}
+          </p>
+        </div>
+        <div className="rounded-xl bg-emerald-50 px-2 py-1.5 dark:bg-emerald-950/30">
+          <p className="text-[10px] font-medium uppercase text-emerald-700/80 dark:text-emerald-300/80">
+            Pagos
+          </p>
+          <p className="text-xs font-semibold tabular-nums text-emerald-900 dark:text-emerald-100">
+            {formatArs(m.paymentsCombined)}
+          </p>
+        </div>
+        <div
+          className={cn(
+            "rounded-xl px-2 py-1.5",
+            m.net > 0
+              ? "bg-red-50 dark:bg-red-950/30"
+              : m.net < 0
+                ? "bg-emerald-50 dark:bg-emerald-950/30"
+                : "bg-zinc-50 dark:bg-zinc-900",
+          )}
+        >
+          <p className="text-[10px] font-medium uppercase text-zinc-500">Neto</p>
+          <p
+            className={cn(
+              "text-xs font-semibold tabular-nums",
+              m.net > 0
+                ? "text-red-700 dark:text-red-300"
+                : m.net < 0
+                  ? "text-emerald-700 dark:text-emerald-300"
+                  : "text-zinc-600",
+            )}
+          >
+            {m.net > 0 ? "+" : ""}
+            {formatArs(m.net)}
+          </p>
+        </div>
+      </div>
+    </li>
+  );
+}
+
 export function DeudaView() {
   const [months, setMonths] = useState<MonthRow[]>([]);
   const [chartMonths, setChartMonths] = useState<MonthRow[]>([]);
@@ -289,6 +358,7 @@ export function DeudaView() {
 
   const onlyPayments = payments.filter((p) => p.kind === "payment");
   const settled = summary?.settled || (summary?.currentBalanceArs ?? 0) <= 0;
+  const paymentRows = onlyPayments.length ? onlyPayments : payments;
 
   return (
     <div className="space-y-3">
@@ -340,7 +410,20 @@ export function DeudaView() {
             <DebtChart months={chartMonths} />
           </Surface>
 
-          <div className="lc-table-wrap">
+          {/* Mobile: stacked cards — no horizontal scroll */}
+          <ul className="space-y-2 md:hidden">
+            {months.map((m) => (
+              <MonthCard key={m.period} m={m} />
+            ))}
+            {months.length === 0 && (
+              <li className="rounded-2xl border border-dashed border-zinc-200 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-800">
+                Todavía no hay meses con datos.
+              </li>
+            )}
+          </ul>
+
+          {/* Desktop table */}
+          <div className="lc-table-wrap hidden md:block">
             <table>
               <thead>
                 <tr>
@@ -362,19 +445,9 @@ export function DeudaView() {
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-amber-800 dark:text-amber-200">
                       {formatArs(m.chargesCombined)}
-                      {m.chargesUsd > 0 && (
-                        <div className="text-[10px] text-zinc-400">
-                          incl. {formatUsd(m.chargesUsd)}
-                        </div>
-                      )}
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700 dark:text-emerald-300">
                       {formatArs(m.paymentsCombined)}
-                      {m.paymentsUsd > 0 && (
-                        <div className="text-[10px] text-zinc-400">
-                          incl. {formatUsd(m.paymentsUsd)}
-                        </div>
-                      )}
                     </td>
                     <td
                       className={cn(
@@ -399,24 +472,23 @@ export function DeudaView() {
           </div>
         </div>
       ) : (
-        <div className="lc-table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th className="px-3 py-2.5 text-left">Fecha</th>
-                <th className="px-3 py-2.5 text-left">Descripción</th>
-                <th className="px-3 py-2.5 text-left">Tipo</th>
-                <th className="px-3 py-2.5 text-right">Monto</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {(onlyPayments.length ? onlyPayments : payments).map((p) => (
-                <tr key={p.id}>
-                  <td className="whitespace-nowrap px-3 py-2 text-zinc-600">
-                    {formatDateAr(p.date)}
-                  </td>
-                  <td className="px-3 py-2 font-medium">{p.description}</td>
-                  <td className="px-3 py-2">
+        <>
+          <ul className="space-y-2 md:hidden">
+            {paymentRows.map((p) => (
+              <li
+                key={p.id}
+                className="rounded-2xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-snug">
+                      {p.description}
+                    </p>
+                    <p className="mt-0.5 text-xs text-zinc-500">
+                      {formatDateAr(p.date)}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
                     <span
                       className={cn(
                         "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
@@ -427,29 +499,76 @@ export function DeudaView() {
                     >
                       {p.kind === "payment" ? "Pago" : "Crédito"}
                     </span>
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums font-medium text-emerald-700 dark:text-emerald-300">
-                    {p.amountArs != null
-                      ? formatArs(Math.abs(p.amountArs))
-                      : p.amountUsd != null
-                        ? formatUsd(Math.abs(p.amountUsd))
-                        : "—"}
-                  </td>
-                </tr>
-              ))}
-              {payments.length === 0 && (
+                    <p className="mt-1 text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
+                      {p.amountArs != null
+                        ? formatArs(Math.abs(p.amountArs))
+                        : p.amountUsd != null
+                          ? formatUsd(Math.abs(p.amountUsd))
+                          : "—"}
+                    </p>
+                  </div>
+                </div>
+              </li>
+            ))}
+            {paymentRows.length === 0 && (
+              <li className="rounded-2xl border border-dashed border-zinc-200 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-800">
+                Todavía no hay pagos en tus resúmenes importados.
+              </li>
+            )}
+          </ul>
+
+          <div className="lc-table-wrap hidden md:block">
+            <table>
+              <thead>
                 <tr>
-                  <td
-                    colSpan={4}
-                    className="px-3 py-8 text-center text-zinc-500"
-                  >
-                    Todavía no hay pagos en tus resúmenes importados.
-                  </td>
+                  <th className="px-3 py-2.5 text-left">Fecha</th>
+                  <th className="px-3 py-2.5 text-left">Descripción</th>
+                  <th className="px-3 py-2.5 text-left">Tipo</th>
+                  <th className="px-3 py-2.5 text-right">Monto</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                {paymentRows.map((p) => (
+                  <tr key={p.id}>
+                    <td className="whitespace-nowrap px-3 py-2 text-zinc-600">
+                      {formatDateAr(p.date)}
+                    </td>
+                    <td className="px-3 py-2 font-medium">{p.description}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
+                          p.kind === "payment"
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                            : "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
+                        )}
+                      >
+                        {p.kind === "payment" ? "Pago" : "Crédito"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums font-medium text-emerald-700 dark:text-emerald-300">
+                      {p.amountArs != null
+                        ? formatArs(Math.abs(p.amountArs))
+                        : p.amountUsd != null
+                          ? formatUsd(Math.abs(p.amountUsd))
+                          : "—"}
+                    </td>
+                  </tr>
+                ))}
+                {paymentRows.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="px-3 py-8 text-center text-zinc-500"
+                    >
+                      Todavía no hay pagos en tus resúmenes importados.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );
