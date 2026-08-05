@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 import { cn, formatArs, formatUsd, formatDateAr } from "@/lib/utils";
 import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
 import {
@@ -51,6 +52,24 @@ type Summary = {
 };
 
 type DebtTab = "evolucion" | "pagos";
+
+const SHOW_DEBT_KEY = "lc:home-show-debt";
+
+function loadShowDebt(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const raw = window.localStorage.getItem(SHOW_DEBT_KEY);
+    if (raw === null) return true;
+    return raw !== "0" && raw !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function saveShowDebt(show: boolean) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(SHOW_DEBT_KEY, show ? "1" : "0");
+}
 
 function tabFromParam(raw: string | null): DebtTab {
   return raw === "pagos" ? "pagos" : "evolucion";
@@ -330,6 +349,11 @@ export function DeudaView() {
   const [tab, setTab] = useState<DebtTab>(() =>
     tabFromParam(searchParams.get("tab")),
   );
+  const [showOnHome, setShowOnHome] = useState(true);
+
+  useEffect(() => {
+    setShowOnHome(loadShowDebt());
+  }, []);
 
   useEffect(() => {
     setTab(tabFromParam(searchParams.get("tab")));
@@ -342,6 +366,12 @@ export function DeudaView() {
     },
     [router],
   );
+
+  function toggleShowOnHome() {
+    const next = !showOnHome;
+    setShowOnHome(next);
+    saveShowDebt(next);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -385,7 +415,35 @@ export function DeudaView() {
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={toggleShowOnHome}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-medium transition",
+            showOnHome
+              ? "border-[var(--border)] bg-[var(--surface)] text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+              : "border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400",
+          )}
+          title={
+            showOnHome
+              ? "Ocultar la tarjeta de deuda del inicio"
+              : "Mostrar la tarjeta de deuda en el inicio"
+          }
+        >
+          {showOnHome ? (
+            <>
+              <EyeOff className="h-3.5 w-3.5" strokeWidth={1.75} />
+              Ocultar del inicio
+            </>
+          ) : (
+            <>
+              <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />
+              Mostrar en inicio
+            </>
+          )}
+        </button>
+
         <SegmentedControl
           value={tab}
           onChange={onTab}

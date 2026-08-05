@@ -7,8 +7,6 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ChevronRight,
-  Eye,
-  EyeOff,
   Minus,
   Moon,
   Sun,
@@ -64,11 +62,6 @@ function loadShowDebt(): boolean {
   } catch {
     return true;
   }
-}
-
-function saveShowDebt(show: boolean) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(SHOW_DEBT_KEY, show ? "1" : "0");
 }
 
 function formatRate(n: number) {
@@ -362,11 +355,6 @@ export function DashboardHome({
 
   const visibleServices = householdServices.filter((s) => !skipped.has(s.slug));
 
-  function toggleDebt(next: boolean) {
-    setShowDebt(next);
-    saveShowDebt(next);
-  }
-
   return (
     <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
@@ -501,53 +489,33 @@ export function DashboardHome({
         </div>
       </Link>
 
-      {showDebt ? (
-        <div className="relative">
-          <Link
-            href="/deuda"
-            className="group flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 pr-12 transition active:scale-[0.99]"
-            aria-label={
-              debtSettled
-                ? "Deuda saldada"
-                : `Deuda ${formatArs(debtBalanceArs)}`
-            }
-          >
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
-                Deuda
-              </p>
-              <p
-                className={cn(
-                  "mt-0.5 text-lg font-semibold tabular-nums tracking-tight",
-                  debtSettled
-                    ? "text-[var(--brand-fg)]"
-                    : "text-red-800 dark:text-red-200",
-                )}
-              >
-                {debtSettled ? "Saldada" : formatArs(debtBalanceArs)}
-              </p>
-            </div>
-            <TapHint />
-          </Link>
-          <button
-            type="button"
-            onClick={() => toggleDebt(false)}
-            className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full p-2 text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
-            aria-label="Ocultar deuda del inicio"
-            title="Ocultar deuda"
-          >
-            <EyeOff className="h-4 w-4" strokeWidth={1.75} />
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => toggleDebt(true)}
-          className="inline-flex items-center justify-center gap-1.5 self-center rounded-full px-3 py-1.5 text-[11px] font-medium text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+      {showDebt && (
+        <Link
+          href="/deuda"
+          className="group flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
+          aria-label={
+            debtSettled
+              ? "Deuda saldada"
+              : `Deuda ${formatArs(debtBalanceArs)}`
+          }
         >
-          <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />
-          Mostrar deuda
-        </button>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
+              Deuda
+            </p>
+            <p
+              className={cn(
+                "mt-0.5 text-lg font-semibold tabular-nums tracking-tight",
+                debtSettled
+                  ? "text-[var(--brand-fg)]"
+                  : "text-red-800 dark:text-red-200",
+              )}
+            >
+              {debtSettled ? "Saldada" : formatArs(debtBalanceArs)}
+            </p>
+          </div>
+          <TapHint />
+        </Link>
       )}
 
       <RatesStrip rates={liveRates} />
