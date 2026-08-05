@@ -6,6 +6,7 @@ import { ensureSchema } from "@/lib/db/ensure-schema";
 import { getUserHousehold } from "@/lib/household";
 import { getLiveRates } from "@/lib/fx/live-rates";
 import { refreshWalletUsd } from "@/lib/savings/balances";
+import { resolveEvmInput } from "@/lib/ens";
 
 function n(v: unknown): number {
   if (v == null) return 0;
@@ -32,8 +33,7 @@ function summarize(
 
   const totalUsd = totalUsdBanks + totalUsdCrypto;
   const rate = blueSell && blueSell > 0 ? blueSell : 0;
-  const netArs =
-    totalArs + (rate > 0 ? totalUsd * rate : 0);
+  const netArs = totalArs + (rate > 0 ? totalUsd * rate : 0);
 
   return {
     totalArs,
@@ -133,6 +133,7 @@ export async function POST(req: Request) {
       kind?: "evm" | "cardano" | "bank";
       label?: string;
       address?: string;
+      ens?: string | null;
       amountArs?: number | null;
       amountUsd?: number | null;
     };
@@ -142,7 +143,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Tipo inválido" }, { status: 400 });
     }
 
-    const label = (body.label || "").trim() || defaultLabel(kind);
+    let label = (body.label || "").trim() || defaultLabel(kind);
     const db = getDb();
 
     if (kind === "bank") {
@@ -162,12 +163,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ asset: row });
     }
 
-    const address = (body.address || "").trim();
-    if (!address) {
+    const raw = (body.address || "").trim();
+    if (!raw) {
       return NextResponse.json(
-        { error: "Falta la dirección de la wallet" },
+        { error: "Falta la dirección o ENS de la wallet" },
         { status: 400 },
       );
+    }
+
+    let address = raw;
+    let ens: string | null = body.ens ?? null;
+
+    if (kind === "evm") {
+      const resolved = await resolveEvmInput(raw);
+      if (!resolved.ok) {
+        return NextResponse.json({ error: resolved.error }, { status: 400 });
+      }
+      address = resolved.data.address;
+      ens = resolved.data.ens;
+      // Prefer ENS as friendly label when user left the default
+      if (
+        ens &&
+        (!body.label ||
+          body.label.trim() === "" ||
+          body.label.trim() === defaultLabel("evm"))
+      ) {
+        label = ens;
+      }
     }
 
     const sync = await refreshWalletUsd(kind, address);
@@ -185,7 +207,7 @@ export async function POST(req: Request) {
       })
       .returning();
 
-    return NextResponse.json({ asset: row });
+    return NextResponse.json({ asset: row, ens });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Error" },
@@ -248,7 +270,23 @@ export async function PATCH(req: Request) {
           body.amountUsd != null ? String(body.amountUsd) : null;
       }
     } else if (body.address) {
-      patch.address = body.address.trim();
+      let nextAddr = body.address.trim();
+      if (existing.kind === "evm") {
+        const resolved = await resolveEvmInput(nextAddr);
+        if (!resolved.ok) {
+          return NextResponse.json({ error: resolved.error }, { status: 400 });
+        }
+        nextAddr = resolved.data.address;
+        if (
+          resolved.data.ens &&
+          (body.label == null ||
+            !body.label.trim() ||
+            body.label.trim() === defaultLabel("evm"))
+        ) {
+          patch.label = resolved.data.ens;
+        }
+      }
+      patch.address = nextAddr;
     }
 
     if (
