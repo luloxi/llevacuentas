@@ -1,8 +1,8 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ChevronDown, ChevronLeft, ChevronRight, Download, RefreshCw, Search,
+  ChevronDown, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, Search,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { formatArs, formatUsd, formatDateAr, cn, currentPeriodAr, periodFromDateString } from "@/lib/utils";
@@ -90,12 +90,25 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!toast) return;
     const t = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [exportOpen]);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -116,7 +129,6 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
           ownership: t.ownership === "shared" ? "shared" as const : "personal" as const,
         }));
 
-      // Client-side safety: never show another month when a period is selected
       const filtered = period
         ? list.filter((t) => periodFromDateString(t.date) === period)
         : list;
@@ -266,6 +278,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
   function exportCsv() {
     const ws = XLSX.utils.json_to_sheet(toSheet(sorted, members));
     downloadBlob(`gastos-${period || "todos"}.csv`, new Blob([XLSX.utils.sheet_to_csv(ws)], { type: "text/csv;charset=utf-8" }));
+    setExportOpen(false);
   }
   function exportXls() {
     const ws = XLSX.utils.json_to_sheet(toSheet(sorted, members));
@@ -273,34 +286,94 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
     XLSX.utils.book_append_sheet(wb, ws, "Gastos");
     const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     downloadBlob(`gastos-${period || "todos"}.xlsx`, new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    setExportOpen(false);
   }
 
   return (
-    <div className="space-y-4">
-      <div className="lc-card flex flex-wrap items-center gap-2 p-2.5 sm:p-3">
-        <div className="relative min-w-[140px] flex-1 sm:max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar comercio…" className="lc-input w-full !pl-9" />
-        </div>
-        <select value={period} onChange={(e) => setPeriod(e.target.value)} className="lc-input">
+    <div className="space-y-3">
+      {/* Row 1: period + download | Sin categoría (opposite edge) */}
+      <div className="flex w-full items-center gap-2">
+        <select
+          value={period}
+          onChange={(e) => setPeriod(e.target.value)}
+          className="lc-input min-w-0 flex-1"
+        >
+          <option value="">Todos los meses</option>
           {periods.map((p) => (
             <option key={p} value={p}>{formatPeriodLabel(p)}</option>
           ))}
-          <option value="">Todos los períodos</option>
         </select>
-        <label className={cn("inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm", uncategorizedOnly ? "border-amber-500 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/40" : "border-zinc-200 dark:border-zinc-700")}>
-          <input type="checkbox" checked={uncategorizedOnly} onChange={(e) => setUncategorizedOnly(e.target.checked)} className="h-4 w-4 rounded" />
-          Sin cat.
-        </label>
-        <button type="button" onClick={() => void load()} className="lc-btn lc-btn-secondary">
-          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+
+        <div className="relative shrink-0" ref={exportRef}>
+          <button
+            type="button"
+            onClick={() => setExportOpen((o) => !o)}
+            disabled={!sorted.length}
+            className="lc-btn lc-btn-secondary !px-2.5 disabled:opacity-40"
+            aria-label="Descargar"
+            aria-expanded={exportOpen}
+          >
+            <Download className="h-4 w-4" />
+            <ChevronDown className={cn("h-3.5 w-3.5 transition", exportOpen && "rotate-180")} />
+          </button>
+          {exportOpen && (
+            <div className="absolute left-0 z-30 mt-1.5 w-64 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
+              <p className="border-b border-zinc-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:border-zinc-800">
+                Exportar listado filtrado
+              </p>
+              <button
+                type="button"
+                onClick={exportCsv}
+                className="flex w-full items-start gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 dark:hover:bg-zinc-900"
+              >
+                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" />
+                <span>
+                  <span className="block text-sm font-semibold">CSV</span>
+                  <span className="block text-xs text-zinc-500">
+                    Texto separado por comas. Ideal para Google Sheets o importar en otra app.
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={exportXls}
+                className="flex w-full items-start gap-3 border-t border-zinc-100 px-3 py-2.5 text-left transition hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+              >
+                <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                <span>
+                  <span className="block text-sm font-semibold">Excel (.xlsx)</span>
+                  <span className="block text-xs text-zinc-500">
+                    Planilla de Excel lista para abrir en Office o LibreOffice.
+                  </span>
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setUncategorizedOnly((v) => !v)}
+          className={cn(
+            "ml-auto shrink-0 rounded-xl border px-3 py-2 text-sm font-medium transition",
+            uncategorizedOnly
+              ? "border-amber-500 bg-amber-50 text-amber-900 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-100"
+              : "border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900",
+          )}
+        >
+          Sin categoría
         </button>
-        <button type="button" onClick={exportCsv} disabled={!sorted.length} className="lc-btn lc-btn-secondary !px-2.5" title="CSV">
-          <Download className="h-3.5 w-3.5" /> CSV
-        </button>
-        <button type="button" onClick={exportXls} disabled={!sorted.length} className="lc-btn lc-btn-secondary !px-2.5" title="Excel">
-          <Download className="h-3.5 w-3.5" /> XLS
-        </button>
+      </div>
+
+      {/* Row 2: full-width search */}
+      <div className="relative w-full">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar comercio…"
+          className="lc-input w-full !pl-9"
+        />
       </div>
 
       {error && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
@@ -311,7 +384,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
       ) : !sorted.length ? (
         <p className="rounded-2xl border border-dashed border-zinc-200 px-4 py-12 text-center text-sm text-zinc-500 dark:border-zinc-800">
           {period
-            ? `No hay gastos en ${formatPeriodLabel(period)}. Probá otro mes o "Todos los períodos".`
+            ? `No hay gastos en ${formatPeriodLabel(period)}. Probá otro mes o "Todos los meses".`
             : compactToolbar
               ? "No hay consumos. Usá Agregar o importá el resumen de la tarjeta."
               : "No hay consumos."}
