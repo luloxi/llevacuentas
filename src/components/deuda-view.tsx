@@ -46,6 +46,8 @@ type Summary = {
   totalChargesArs: number;
   totalChargesUsd: number;
   monthCount: number;
+  monthsPaidInFull?: number;
+  settled?: boolean;
 };
 
 const W = 720;
@@ -67,7 +69,9 @@ function DebtChart({ months }: { months: MonthRow[] }) {
 
   const max = useMemo(() => {
     const m = Math.max(
-      ...months.map((x) => Math.max(x.balanceArs, x.chargesCombined, x.paymentsCombined)),
+      ...months.map((x) =>
+        Math.max(x.balanceArs, x.chargesCombined, x.paymentsCombined),
+      ),
       0,
     );
     return niceMax(m);
@@ -83,7 +87,10 @@ function DebtChart({ months }: { months: MonthRow[] }) {
     PAD.top + chartH - (Math.max(v, 0) / max) * chartH;
 
   const balPath = months
-    .map((m, i) => `${i === 0 ? "M" : "L"} ${scaleX(i).toFixed(1)} ${scaleY(m.balanceArs).toFixed(1)}`)
+    .map(
+      (m, i) =>
+        `${i === 0 ? "M" : "L"} ${scaleX(i).toFixed(1)} ${scaleY(m.balanceArs).toFixed(1)}`,
+    )
     .join(" ");
 
   return (
@@ -116,7 +123,6 @@ function DebtChart({ months }: { months: MonthRow[] }) {
           );
         })}
 
-        {/* Payments as green bars (down) / charges as amber thin marks via balance line */}
         {months.map((m, i) => {
           const x = scaleX(i);
           const barW = Math.max(4, chartW / months.length / 3);
@@ -191,7 +197,7 @@ function DebtChart({ months }: { months: MonthRow[] }) {
           <p>Cargos: {formatArs(months[hover]!.chargesCombined)}</p>
           <p>Pagos: {formatArs(months[hover]!.paymentsCombined)}</p>
           <p className="font-medium">
-            Deuda al cierre: {formatArs(months[hover]!.balanceArs)}
+            Deuda al cierre: {formatArs(Math.max(months[hover]!.balanceArs, 0))}
           </p>
         </div>
       )}
@@ -245,20 +251,23 @@ export function DeudaView() {
   }
 
   const onlyPayments = payments.filter((p) => p.kind === "payment");
+  const settled = summary?.settled || (summary?.currentBalanceArs ?? 0) <= 0;
 
   return (
     <div className="space-y-4">
       {summary && (
         <div className="grid gap-3 sm:grid-cols-3">
           <StatTile
-            label="Deuda estimada actual"
-            value={formatArs(Math.max(summary.currentBalanceArs, 0))}
+            label={settled ? "Estado" : "Deuda estimada actual"}
+            value={settled ? "Saldada" : formatArs(Math.max(summary.currentBalanceArs, 0))}
             hint={
-              summary.currentBalanceUsd !== 0
-                ? `+ ${formatUsd(Math.abs(summary.currentBalanceUsd))} en USD`
-                : undefined
+              settled
+                ? "Sin saldo pendiente según los movimientos importados"
+                : summary.currentBalanceUsd !== 0
+                  ? `+ ${formatUsd(Math.abs(summary.currentBalanceUsd))} en USD`
+                  : undefined
             }
-            tone="danger"
+            tone={settled ? "brand" : "danger"}
           />
           <StatTile
             label="Total pagado"
@@ -278,10 +287,19 @@ export function DeudaView() {
         </div>
       )}
 
+      {settled && (
+        <p className="rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-3 py-2 text-xs leading-relaxed text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100">
+          Cuenta en cero con los datos importados. Si cancelaste la tarjeta,
+          este panel queda como historial de cuánto se pagó y el pico que llegó
+          a tener la deuda.
+        </p>
+      )}
+
       <p className="rounded-xl border border-zinc-200/80 bg-white/60 px-3 py-2 text-xs leading-relaxed text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/40">
-        La deuda se estima sumando cargos del resumen y restando pagos (y
-        créditos/devoluciones). USD se convierten al TC compra de fin de mes.
-        Es una aproximación a partir de los movimientos importados.
+        Estimación a partir de cargos menos pagos/créditos de los resúmenes
+        importados (USD al TC compra de fin de mes). Si faltan meses o algún
+        “SU PAGO”, el número puede desfasarse. La deuda no baja de $0 (pago de
+        más = saldada).
       </p>
 
       <SegmentedControl
