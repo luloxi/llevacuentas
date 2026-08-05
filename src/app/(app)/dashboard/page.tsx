@@ -11,6 +11,7 @@ import {
   getMonthEndBuyRates,
 } from "@/lib/fx/month-end-rates";
 import { currentPeriodAr, periodFromDateString } from "@/lib/utils";
+import { isVisibleToUser } from "@/lib/transactions";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -28,8 +29,6 @@ export default async function DashboardPage() {
 
   const period = currentPeriodAr();
   const [py, pm] = period.split("-").map(Number);
-  const prevDate = new Date(py!, pm! - 2, 1); // month is 1-based in period; Date month 0-based
-  // Safer prev period without Date TZ pitfalls:
   let prevY = py!;
   let prevM = pm! - 1;
   if (prevM < 1) {
@@ -37,12 +36,13 @@ export default async function DashboardPage() {
     prevY -= 1;
   }
   const prevPeriod = `${prevY}-${String(prevM).padStart(2, "0")}`;
-  void prevDate;
 
+  // My private + all shared (never others' private)
   const spendTxs = txs.filter(
     (t) =>
       !t.isPayment &&
-      !isBankAccountingEntry(t.descriptionNormalized ?? ""),
+      !isBankAccountingEntry(t.descriptionNormalized ?? "") &&
+      isVisibleToUser(t, user.id),
   );
 
   const monthTx = spendTxs.filter(
