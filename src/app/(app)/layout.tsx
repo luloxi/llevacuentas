@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { AppNav } from "@/components/app-nav";
 import { AddExpenseProvider } from "@/components/add-expense-provider";
 import { SectionSwipe } from "@/components/section-swipe";
@@ -18,7 +19,9 @@ export default async function AppLayout({
       <AddExpenseProvider>
         <AppNav isAdmin={isAdminEmail(user.email)} />
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-24 md:px-6 md:pb-10">
-          <SectionSwipe>{children}</SectionSwipe>
+          <Suspense fallback={null}>
+            <SectionSwipe>{children}</SectionSwipe>
+          </Suspense>
         </main>
       </AddExpenseProvider>
     </div>
