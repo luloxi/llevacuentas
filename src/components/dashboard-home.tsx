@@ -115,62 +115,77 @@ function SpendBurst({ active }: { active: boolean }) {
   );
 }
 
-/** Compact delta vs previous month — bar + % only */
-function MiniMeter({
+/**
+ * Bar vs previous month: shows how far we are into last month's total,
+ * the previous amount, and $ above/below.
+ */
+function VsPrevMeter({
   total,
   prevTotal,
+  prevPeriod,
   accent = "emerald",
 }: {
   total: number;
   prevTotal: number;
+  prevPeriod: string;
   accent?: "emerald" | "violet";
 }) {
-  const delta =
-    prevTotal > 0 ? ((total - prevTotal) / prevTotal) * 100 : null;
-  const DeltaIcon =
-    delta == null || Math.abs(delta) < 0.5
-      ? Minus
-      : delta > 0
-        ? ArrowUpRight
-        : ArrowDownRight;
-  const deltaColor =
-    delta == null || Math.abs(delta) < 0.5
+  if (prevTotal <= 0 && total <= 0) return null;
+
+  const diff = total - prevTotal;
+  const pct =
+    prevTotal > 0 ? (total / prevTotal) * 100 : total > 0 ? 100 : 0;
+  const barPct = Math.min(100, pct);
+  const over = pct > 100;
+
+  const barGrad = over
+    ? "bg-gradient-to-r from-amber-500 to-orange-500"
+    : accent === "violet"
+      ? "bg-gradient-to-r from-violet-500 to-fuchsia-400"
+      : "bg-gradient-to-r from-emerald-500 to-teal-400";
+
+  const DiffIcon =
+    Math.abs(diff) < 1 ? Minus : diff > 0 ? ArrowUpRight : ArrowDownRight;
+  const diffColor =
+    Math.abs(diff) < 1
       ? "text-zinc-400"
-      : delta > 0
+      : diff > 0
         ? "text-amber-600 dark:text-amber-400"
         : "text-emerald-600 dark:text-emerald-400";
-  const barPct =
-    prevTotal > 0
-      ? Math.min(120, (total / prevTotal) * 100)
-      : total > 0
-        ? 100
-        : 0;
-  const barGrad =
-    barPct >= 100
-      ? "bg-gradient-to-r from-amber-500 to-orange-500"
-      : accent === "violet"
-        ? "bg-gradient-to-r from-violet-500 to-fuchsia-400"
-        : "bg-gradient-to-r from-emerald-500 to-teal-400";
 
   return (
-    <div className="mt-2 flex items-center gap-2">
-      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800">
+    <div className="mt-2 space-y-1">
+      <div className="relative h-1.5 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800">
         <div
           className={cn("h-full rounded-full transition-all duration-700 ease-out", barGrad)}
-          style={{ width: `${Math.min(100, barPct)}%` }}
+          style={{ width: `${barPct}%` }}
         />
+        {/* tick at 100% of previous month when we overshoot visually already full */}
       </div>
-      {delta != null && (
-        <span
-          className={cn(
-            "inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium tabular-nums",
-            deltaColor,
-          )}
-        >
-          <DeltaIcon className="h-3 w-3" />
-          {Math.abs(delta).toFixed(0)}%
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[11px]">
+        <span className="text-zinc-500">
+          vs {formatPeriodShort(prevPeriod)}{" "}
+          <span className="tabular-nums font-medium text-zinc-600 dark:text-zinc-400">
+            {formatArs(prevTotal)}
+          </span>
         </span>
-      )}
+        {prevTotal > 0 && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 font-medium tabular-nums",
+              diffColor,
+            )}
+          >
+            <DiffIcon className="h-3 w-3" />
+            {diff > 0 ? "+" : ""}
+            {formatArs(diff)}
+            <span className="ml-0.5 text-zinc-400">
+              ({Math.abs(pct - 100).toFixed(0)}%
+              {diff > 0 ? " más" : diff < 0 ? " menos" : ""})
+            </span>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -246,21 +261,27 @@ export function DashboardHome({
 
   return (
     <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-3">
-      <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-        Hola, {firstName}
-      </p>
+      {/* Greeting + period same row */}
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          Hola, {firstName}
+        </p>
+        <p className="shrink-0 text-xs font-medium capitalize text-zinc-400">
+          {formatPeriodLabel(period)}
+        </p>
+      </div>
 
-      {/* 1. Total personal → lista */}
+      {/* 1. Tus gastos */}
       <Link
         href="/consumos?tab=lista"
-        className="group relative block rounded-2xl border border-emerald-200/60 bg-emerald-50/40 px-4 py-3.5 transition active:scale-[0.99] dark:border-emerald-900/40 dark:bg-emerald-950/25"
-        aria-label={`Tus gastos del mes, ${formatArs(Math.round(displayTotal))}`}
+        className="group relative block rounded-2xl border border-emerald-200/60 bg-emerald-50/40 px-4 py-3 transition active:scale-[0.99] dark:border-emerald-900/40 dark:bg-emerald-950/25"
+        aria-label={`Tus gastos, ${formatArs(Math.round(displayTotal))}`}
       >
         <SpendBurst active={burst} />
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1 text-left">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700/70 dark:text-emerald-400/70">
-              {formatPeriodLabel(period)}
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700/80 dark:text-emerald-400/80">
+              Tus gastos
             </p>
             <p
               className={cn(
@@ -272,16 +293,21 @@ export function DashboardHome({
             </p>
             {liveCount > 0 && (
               <p className="mt-0.5 text-[11px] tabular-nums text-zinc-400">
-                {liveCount} mov.
+                {liveCount} movimiento{liveCount === 1 ? "" : "s"}
               </p>
             )}
           </div>
           <TapHint />
         </div>
-        <MiniMeter total={liveTotal} prevTotal={prevTotalArs} accent="emerald" />
+        <VsPrevMeter
+          total={liveTotal}
+          prevTotal={prevTotalArs}
+          prevPeriod={prevPeriod}
+          accent="emerald"
+        />
       </Link>
 
-      {/* 2. Categorías → resumen */}
+      {/* 2. Por categoría */}
       {liveCats.length > 0 && (
         <Link
           href="/consumos?tab=resumen"
@@ -289,20 +315,9 @@ export function DashboardHome({
           aria-label="Gastos por categoría"
         >
           <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="flex -space-x-1.5">
-              {liveCats.slice(0, 4).map((c) => {
-                const color = colorForCategory(c.slug);
-                return (
-                  <span
-                    key={c.id}
-                    className="flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-white dark:ring-zinc-950"
-                    style={{ backgroundColor: `${color}22`, color }}
-                  >
-                    <CategoryIcon slug={c.slug} size={12} />
-                  </span>
-                );
-              })}
-            </div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+              Por categoría
+            </p>
             <TapHint />
           </div>
           <ul className="space-y-1.5">
@@ -311,9 +326,11 @@ export function DashboardHome({
               return (
                 <li key={c.id} className="flex items-center gap-2">
                   <span
-                    className="h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: color }}
-                  />
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg"
+                    style={{ backgroundColor: `${color}18`, color }}
+                  >
+                    <CategoryIcon slug={c.slug} size={12} />
+                  </span>
                   <span className="min-w-0 flex-1 truncate text-xs text-zinc-600 dark:text-zinc-300">
                     {c.name}
                   </span>
@@ -364,6 +381,16 @@ export function DashboardHome({
         <div className="min-w-0 flex-1">
           <p
             className={cn(
+              "text-[10px] font-semibold uppercase tracking-[0.14em]",
+              debtSettled
+                ? "text-emerald-700/80 dark:text-emerald-400/80"
+                : "text-red-700/80 dark:text-red-400/80",
+            )}
+          >
+            Deuda
+          </p>
+          <p
+            className={cn(
               "text-lg font-bold tabular-nums tracking-tight",
               debtSettled
                 ? "text-emerald-900 dark:text-emerald-100"
@@ -376,30 +403,37 @@ export function DashboardHome({
         <TapHint />
       </Link>
 
-      {/* 4. Hogar last */}
+      {/* 4. Hogar */}
       <Link
         href="/compartido"
-        className="group flex items-center gap-3 rounded-2xl border border-violet-200/60 bg-violet-50/40 px-3.5 py-3 transition active:scale-[0.99] dark:border-violet-900/40 dark:bg-violet-950/25"
+        className="group block rounded-2xl border border-violet-200/60 bg-violet-50/40 px-3.5 py-3 transition active:scale-[0.99] dark:border-violet-900/40 dark:bg-violet-950/25"
         aria-label={`Hogar ${formatArs(sharedTotalArs)}`}
       >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
-          <Users className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-lg font-bold tabular-nums tracking-tight text-violet-950 dark:text-violet-50">
-            {formatArs(sharedTotalArs)}
-          </p>
-          <MiniMeter
-            total={sharedTotalArs}
-            prevTotal={sharedPrevTotalArs}
-            accent="violet"
-          />
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
+            <Users className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-700/80 dark:text-violet-400/80">
+                  Hogar
+                </p>
+                <p className="text-lg font-bold tabular-nums tracking-tight text-violet-950 dark:text-violet-50">
+                  {formatArs(sharedTotalArs)}
+                </p>
+              </div>
+              <TapHint />
+            </div>
+            <VsPrevMeter
+              total={sharedTotalArs}
+              prevTotal={sharedPrevTotalArs}
+              prevPeriod={prevPeriod}
+              accent="violet"
+            />
+          </div>
         </div>
-        <TapHint />
       </Link>
-
-      {/* silent: prevPeriod still available if needed later */}
-      <span className="sr-only">vs {formatPeriodShort(prevPeriod)}</span>
     </div>
   );
 }
