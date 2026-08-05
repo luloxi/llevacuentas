@@ -9,7 +9,8 @@ import {
   cn,
 } from "@/lib/utils";
 import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
-import { LoadingBlock, PageStack } from "@/components/ui";
+import { LoadingBlock, PageStack, SegmentedControl } from "@/components/ui";
+import { HogarCharts } from "@/components/hogar-charts";
 import { CategoryIcon } from "@/lib/category-icons";
 import { colorForCategory } from "@/lib/category-colors";
 import {
@@ -18,6 +19,8 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  LayoutList,
+  LineChart,
   Link2,
   Minus,
   UserPlus,
@@ -68,6 +71,7 @@ function firstName(name: string) {
 }
 
 export function CompartidoView() {
+  const [viewTab, setViewTab] = useState<"vista" | "charts">("vista");
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<Cat[]>([]);
   const [periods, setPeriods] = useState<string[]>([]);
@@ -159,7 +163,7 @@ export function CompartidoView() {
     });
   }
 
-  if (loading && expenses.length === 0 && total === 0) {
+  if (loading && expenses.length === 0 && total === 0 && viewTab === "vista") {
     return <LoadingBlock label="Cargando hogar…" />;
   }
   if (error) {
@@ -193,7 +197,6 @@ export function CompartidoView() {
 
   return (
     <PageStack>
-      {/* Header: name + invite button */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <h1 className="truncate text-lg font-bold tracking-tight">
@@ -210,262 +213,286 @@ export function CompartidoView() {
             </button>
           )}
         </div>
-        <select
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-          className="lc-input"
-        >
-          <option value="all">Todos los meses</option>
-          {periods.map((p) => (
-            <option key={p} value={p}>
-              {formatPeriodLabel(p)}
-            </option>
-          ))}
-          {period !== "all" && !periods.includes(period) && (
-            <option value={period}>{formatPeriodLabel(period)}</option>
-          )}
-        </select>
+        <SegmentedControl
+          value={viewTab}
+          onChange={setViewTab}
+          options={[
+            {
+              id: "vista",
+              label: "Vista",
+              icon: <LayoutList className="h-3.5 w-3.5" />,
+            },
+            {
+              id: "charts",
+              label: "Gráficos",
+              icon: <LineChart className="h-3.5 w-3.5" />,
+            },
+          ]}
+        />
       </div>
 
-      {/* Counter + meter */}
-      <div className="rounded-2xl border border-zinc-200/90 bg-white/80 p-5 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-950/60">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-700/80 dark:text-violet-400/80">
-          {period === "all" ? "Todos los meses" : formatPeriodLabel(period)}
-        </p>
-        <p className="mt-1 text-4xl font-bold tabular-nums tracking-tight text-zinc-900 dark:text-zinc-50">
-          {formatArs(total)}
-        </p>
-        {period !== "all" && (
-          <div className="relative mx-auto mt-3 max-w-[240px]">
-            <div className="h-2.5 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all duration-700",
-                  barPct >= 100
-                    ? "bg-gradient-to-r from-amber-500 to-orange-500"
-                    : "bg-gradient-to-r from-violet-500 to-fuchsia-400",
-                )}
-                style={{ width: `${Math.min(100, barPct)}%` }}
-              />
-            </div>
-            <div className="mt-1.5 flex items-center justify-center gap-2 text-sm text-zinc-500">
-              {prevPeriod && (
-                <span className="tabular-nums">
-                  {formatPeriodShort(prevPeriod)} · {formatArs(prevTotalArs)}
-                </span>
-              )}
-              {delta != null && (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium",
-                    deltaColor,
-                  )}
-                >
-                  <DeltaIcon className="h-3.5 w-3.5" />
-                  {Math.abs(delta).toFixed(0)}%
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-        {expenseCount > 0 && (
-          <p className="mt-2 text-xs text-zinc-400">
-            {expenseCount} gasto{expenseCount === 1 ? "" : "s"} compartido
-            {expenseCount === 1 ? "" : "s"}
-          </p>
-        )}
-      </div>
-
-      {/* 1) Categories first */}
-      <div className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/60">
-        <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-            Por categoría
-          </p>
-        </div>
-        {categories.length === 0 ? (
-          <p className="p-6 text-center text-sm text-zinc-500">
-            No hay gastos marcados como <strong>Hogar</strong> en este período.
-            En Gastos cambiá el tipo a “Hogar”.
-          </p>
-        ) : (
-          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {categories.map((c) => {
-              const open = expanded.has(c.slug);
-              const list = expenses.filter((e) => e.categorySlug === c.slug);
-              const color = colorForCategory(c.slug);
-              return (
-                <li key={c.slug}>
-                  <button
-                    type="button"
-                    onClick={() => toggleCat(c.slug)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-violet-50/40 dark:hover:bg-violet-950/20"
-                  >
-                    <ChevronDown
-                      className={cn(
-                        "h-4 w-4 shrink-0 text-zinc-400 transition",
-                        open && "rotate-180",
-                      )}
-                    />
-                    <span
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-                      style={{ backgroundColor: `${color}18`, color }}
-                    >
-                      <CategoryIcon slug={c.slug} size={16} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">
-                        {c.name}
-                      </span>
-                      <span className="text-xs text-zinc-500">
-                        {c.count}× · {c.pct.toFixed(0)}%
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums">
-                      {formatArs(c.total)}
-                    </span>
-                  </button>
-                  {open && (
-                    <ul className="space-y-1.5 bg-zinc-50/80 px-3 py-2 dark:bg-zinc-950/50">
-                      {list.map((e) => {
-                        const ticketShown = ticketOpen.has(e.id);
-                        const hasItems = e.receiptItems?.length > 0;
-                        return (
-                          <li
-                            key={e.id}
-                            className={cn(
-                              "rounded-xl border bg-white dark:bg-zinc-900",
-                              e.hasTicket
-                                ? "border-violet-200 dark:border-violet-900"
-                                : "border-zinc-100 dark:border-zinc-800",
-                            )}
-                          >
-                            <div className="flex items-start justify-between gap-2 px-3 py-2">
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium leading-snug">
-                                  {e.description}
-                                  {e.hasTicket && (
-                                    <span className="ml-1.5 rounded-full bg-violet-600 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white">
-                                      Ticket
-                                    </span>
-                                  )}
-                                </p>
-                                <p className="mt-0.5 text-xs text-zinc-500">
-                                  {formatDateAr(e.date)} ·{" "}
-                                  {firstName(e.paidByName)}
-                                </p>
-                              </div>
-                              <div className="shrink-0 text-right">
-                                {e.amountArs != null && e.amountArs > 0 && (
-                                  <p className="text-sm font-semibold tabular-nums">
-                                    {formatArs(e.amountArs)}
-                                  </p>
-                                )}
-                                {e.amountUsd != null && e.amountUsd > 0 && (
-                                  <p className="text-xs tabular-nums text-sky-700 dark:text-sky-300">
-                                    {formatUsd(e.amountUsd)}
-                                  </p>
-                                )}
-                                {e.amountArs == null && e.amountUsd == null && (
-                                  <p className="text-sm tabular-nums">
-                                    {formatArs(e.amountCombined)}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                            {hasItems && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleTicket(e.id)}
-                                  className="flex w-full items-center justify-center gap-1 border-t border-violet-100 py-1.5 text-xs font-medium text-violet-700 dark:border-violet-900 dark:text-violet-300"
-                                >
-                                  {ticketShown ? (
-                                    <ChevronDown className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <ChevronRight className="h-3.5 w-3.5" />
-                                  )}
-                                  {ticketShown
-                                    ? "Ocultar ítems"
-                                    : `Ver ${e.receiptItems.length} ítems`}
-                                </button>
-                                {ticketShown && (
-                                  <ul className="space-y-1.5 border-t border-violet-100 bg-violet-50/40 px-3 py-2 dark:border-violet-900 dark:bg-violet-950/20">
-                                    {e.receiptItems.map((it) => (
-                                      <li
-                                        key={it.id}
-                                        className="flex items-start justify-between gap-2 text-sm"
-                                      >
-                                        <div className="min-w-0">
-                                          <p className="leading-snug text-zinc-800 dark:text-zinc-100">
-                                            {it.name}
-                                          </p>
-                                          {it.productCategory && (
-                                            <p className="text-[11px] text-zinc-500">
-                                              {it.productCategory}
-                                            </p>
-                                          )}
-                                        </div>
-                                        <span className="shrink-0 tabular-nums text-zinc-600 dark:text-zinc-300">
-                                          {it.quantity && it.quantity !== 1
-                                            ? `${it.quantity}× `
-                                            : ""}
-                                          {formatArs(it.lineTotal)}
-                                        </span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
-      {/* 2) Who paid — below categories */}
-      {members.some((m) => m.paidArs > 0) && (
-        <div className="rounded-2xl border border-zinc-200/90 bg-white/80 p-4 dark:border-zinc-800 dark:bg-zinc-950/60">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-            Quién pagó
-          </p>
-          <ul className="space-y-3">
-            {members
-              .filter((m) => m.paidArs > 0)
-              .sort((a, b) => b.paidArs - a.paidArs)
-              .map((m) => (
-                <li key={m.userId} className="text-sm">
-                  <div className="mb-1.5 flex items-baseline justify-between gap-2">
-                    <span className="font-medium">{firstName(m.name)}</span>
-                    <span className="tabular-nums">
-                      <span className="font-semibold">{formatArs(m.paidArs)}</span>
-                      <span className="ml-1.5 text-xs text-zinc-400">
-                        {m.pct.toFixed(0)}% del total
-                      </span>
-                    </span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-400"
-                      style={{
-                        width: `${Math.min(Math.max(m.pct, 0), 100)}%`,
-                      }}
-                    />
-                  </div>
-                </li>
+      {viewTab === "charts" ? (
+        <HogarCharts />
+      ) : (
+        <>
+          <div className="flex w-full items-center gap-2">
+            <select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              className="lc-input min-w-0 flex-1"
+            >
+              <option value="all">Todos los meses</option>
+              {periods.map((p) => (
+                <option key={p} value={p}>
+                  {formatPeriodLabel(p)}
+                </option>
               ))}
-          </ul>
-        </div>
+              {period !== "all" && !periods.includes(period) && (
+                <option value={period}>{formatPeriodLabel(period)}</option>
+              )}
+            </select>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-200/90 bg-white/80 p-5 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-950/60">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-700/80 dark:text-violet-400/80">
+              {period === "all" ? "Todos los meses" : formatPeriodLabel(period)}
+            </p>
+            <p className="mt-1 text-4xl font-bold tabular-nums tracking-tight text-zinc-900 dark:text-zinc-50">
+              {formatArs(total)}
+            </p>
+            {period !== "all" && (
+              <div className="relative mx-auto mt-3 max-w-[240px]">
+                <div className="h-2.5 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-700",
+                      barPct >= 100
+                        ? "bg-gradient-to-r from-amber-500 to-orange-500"
+                        : "bg-gradient-to-r from-violet-500 to-fuchsia-400",
+                    )}
+                    style={{ width: `${Math.min(100, barPct)}%` }}
+                  />
+                </div>
+                <div className="mt-1.5 flex items-center justify-center gap-2 text-sm text-zinc-500">
+                  {prevPeriod && (
+                    <span className="tabular-nums">
+                      {formatPeriodShort(prevPeriod)} · {formatArs(prevTotalArs)}
+                    </span>
+                  )}
+                  {delta != null && (
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium",
+                        deltaColor,
+                      )}
+                    >
+                      <DeltaIcon className="h-3.5 w-3.5" />
+                      {Math.abs(delta).toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            {expenseCount > 0 && (
+              <p className="mt-2 text-xs text-zinc-400">
+                {expenseCount} gasto{expenseCount === 1 ? "" : "s"} compartido
+                {expenseCount === 1 ? "" : "s"}
+              </p>
+            )}
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white/80 dark:border-zinc-800 dark:bg-zinc-950/60">
+            <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                Por categoría
+              </p>
+            </div>
+            {categories.length === 0 ? (
+              <p className="p-6 text-center text-sm text-zinc-500">
+                No hay gastos marcados como <strong>Hogar</strong> en este período.
+                En Gastos cambiá el tipo a “Hogar”.
+              </p>
+            ) : (
+              <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                {categories.map((c) => {
+                  const open = expanded.has(c.slug);
+                  const list = expenses.filter((e) => e.categorySlug === c.slug);
+                  const color = colorForCategory(c.slug);
+                  return (
+                    <li key={c.slug}>
+                      <button
+                        type="button"
+                        onClick={() => toggleCat(c.slug)}
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-violet-50/40 dark:hover:bg-violet-950/20"
+                      >
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 shrink-0 text-zinc-400 transition",
+                            open && "rotate-180",
+                          )}
+                        />
+                        <span
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                          style={{ backgroundColor: `${color}18`, color }}
+                        >
+                          <CategoryIcon slug={c.slug} size={16} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">
+                            {c.name}
+                          </span>
+                          <span className="text-xs text-zinc-500">
+                            {c.count}× · {c.pct.toFixed(0)}%
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-sm font-semibold tabular-nums">
+                          {formatArs(c.total)}
+                        </span>
+                      </button>
+                      {open && (
+                        <ul className="space-y-1.5 bg-zinc-50/80 px-3 py-2 dark:bg-zinc-950/50">
+                          {list.map((e) => {
+                            const ticketShown = ticketOpen.has(e.id);
+                            const hasItems = e.receiptItems?.length > 0;
+                            return (
+                              <li
+                                key={e.id}
+                                className={cn(
+                                  "rounded-xl border bg-white dark:bg-zinc-900",
+                                  e.hasTicket
+                                    ? "border-violet-200 dark:border-violet-900"
+                                    : "border-zinc-100 dark:border-zinc-800",
+                                )}
+                              >
+                                <div className="flex items-start justify-between gap-2 px-3 py-2">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium leading-snug">
+                                      {e.description}
+                                      {e.hasTicket && (
+                                        <span className="ml-1.5 rounded-full bg-violet-600 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white">
+                                          Ticket
+                                        </span>
+                                      )}
+                                    </p>
+                                    <p className="mt-0.5 text-xs text-zinc-500">
+                                      {formatDateAr(e.date)} ·{" "}
+                                      {firstName(e.paidByName)}
+                                    </p>
+                                  </div>
+                                  <div className="shrink-0 text-right">
+                                    {e.amountArs != null && e.amountArs > 0 && (
+                                      <p className="text-sm font-semibold tabular-nums">
+                                        {formatArs(e.amountArs)}
+                                      </p>
+                                    )}
+                                    {e.amountUsd != null && e.amountUsd > 0 && (
+                                      <p className="text-xs tabular-nums text-sky-700 dark:text-sky-300">
+                                        {formatUsd(e.amountUsd)}
+                                      </p>
+                                    )}
+                                    {e.amountArs == null &&
+                                      e.amountUsd == null && (
+                                        <p className="text-sm tabular-nums">
+                                          {formatArs(e.amountCombined)}
+                                        </p>
+                                      )}
+                                  </div>
+                                </div>
+                                {hasItems && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleTicket(e.id)}
+                                      className="flex w-full items-center justify-center gap-1 border-t border-violet-100 py-1.5 text-xs font-medium text-violet-700 dark:border-violet-900 dark:text-violet-300"
+                                    >
+                                      {ticketShown ? (
+                                        <ChevronDown className="h-3.5 w-3.5" />
+                                      ) : (
+                                        <ChevronRight className="h-3.5 w-3.5" />
+                                      )}
+                                      {ticketShown
+                                        ? "Ocultar ítems"
+                                        : `Ver ${e.receiptItems.length} ítems`}
+                                    </button>
+                                    {ticketShown && (
+                                      <ul className="space-y-1.5 border-t border-violet-100 bg-violet-50/40 px-3 py-2 dark:border-violet-900 dark:bg-violet-950/20">
+                                        {e.receiptItems.map((it) => (
+                                          <li
+                                            key={it.id}
+                                            className="flex items-start justify-between gap-2 text-sm"
+                                          >
+                                            <div className="min-w-0">
+                                              <p className="leading-snug text-zinc-800 dark:text-zinc-100">
+                                                {it.name}
+                                              </p>
+                                              {it.productCategory && (
+                                                <p className="text-[11px] text-zinc-500">
+                                                  {it.productCategory}
+                                                </p>
+                                              )}
+                                            </div>
+                                            <span className="shrink-0 tabular-nums text-zinc-600 dark:text-zinc-300">
+                                              {it.quantity && it.quantity !== 1
+                                                ? `${it.quantity}× `
+                                                : ""}
+                                              {formatArs(it.lineTotal)}
+                                            </span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {members.some((m) => m.paidArs > 0) && (
+            <div className="rounded-2xl border border-zinc-200/90 bg-white/80 p-4 dark:border-zinc-800 dark:bg-zinc-950/60">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                Quién pagó
+              </p>
+              <ul className="space-y-3">
+                {members
+                  .filter((m) => m.paidArs > 0)
+                  .sort((a, b) => b.paidArs - a.paidArs)
+                  .map((m) => (
+                    <li key={m.userId} className="text-sm">
+                      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                        <span className="font-medium">{firstName(m.name)}</span>
+                        <span className="tabular-nums">
+                          <span className="font-semibold">
+                            {formatArs(m.paidArs)}
+                          </span>
+                          <span className="ml-1.5 text-xs text-zinc-400">
+                            {m.pct.toFixed(0)}% del total
+                          </span>
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-400"
+                          style={{
+                            width: `${Math.min(Math.max(m.pct, 0), 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Invite modal */}
       {inviteOpen && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center p-4"
