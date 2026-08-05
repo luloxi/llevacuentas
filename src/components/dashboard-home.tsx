@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   List,
   PieChart,
@@ -21,6 +23,99 @@ type CategorySummary = {
   total: number;
   pct: number;
 };
+
+function easeOutCubic(t: number) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function useCountUp(target: number, durationMs = 700) {
+  const [value, setValue] = useState(target);
+  const fromRef = useRef(target);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const from = fromRef.current;
+    if (from === target) {
+      setValue(target);
+      return;
+    }
+    const start = performance.now();
+    const delta = target - from;
+
+    function tick(now: number) {
+      const t = Math.min(1, (now - start) / durationMs);
+      setValue(from + delta * easeOutCubic(t));
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        fromRef.current = target;
+        setValue(target);
+      }
+    }
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [target, durationMs]);
+
+  // Keep fromRef in sync when settling without animation jump on first mount
+  useEffect(() => {
+    fromRef.current = value;
+  }, [value]);
+
+  return value;
+}
+
+const BURST_COLORS = [
+  "#10b981",
+  "#34d399",
+  "#fbbf24",
+  "#f472b6",
+  "#60a5fa",
+  "#a78bfa",
+  "#fb7185",
+];
+
+function SpendBurst({ active }: { active: boolean }) {
+  if (!active) return null;
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-10 overflow-visible"
+      aria-hidden
+    >
+      {Array.from({ length: 14 }).map((_, i) => {
+        const angle = (i / 14) * Math.PI * 2 + (i % 3) * 0.2;
+        const dist = 48 + (i % 4) * 18;
+        const x = Math.cos(angle) * dist;
+        const y = Math.sin(angle) * dist - 10;
+        const size = 5 + (i % 4);
+        const color = BURST_COLORS[i % BURST_COLORS.length]!;
+        const delay = (i % 5) * 28;
+        return (
+          <span
+            key={i}
+            className="lc-burst-particle absolute left-1/2 top-1/2 rounded-full"
+            style={{
+              width: size,
+              height: size,
+              marginLeft: -size / 2,
+              marginTop: -size / 2,
+              background: color,
+              boxShadow: `0 0 8px ${color}`,
+              // CSS vars for keyframes
+              ["--bx" as string]: `${x}px`,
+              ["--by" as string]: `${y}px`,
+              animationDelay: `${delay}ms`,
+            }}
+          />
+        );
+      })}
+      <span className="lc-burst-ring absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
+      <span className="lc-burst-flash absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
+    </div>
+  );
+}
 
 export function DashboardHome({
   firstName,
@@ -43,8 +138,47 @@ export function DashboardHome({
   initialCategories?: unknown;
   initialMembers?: unknown;
 }) {
+  const router = useRouter();
+  const [liveTotal, setLiveTotal] = useState(totalArs);
+  const [liveCount, setLiveCount] = useState(monthTxCount);
+  const [liveCats, setLiveCats] = useState(categorySummary);
+  const [burst, setBurst] = useState(false);
+  const [pop, setPop] = useState(false);
+  const [barBoost, setBarBoost] = useState(false);
+
+  // Sync when server props refresh (router.refresh)
+  useEffect(() => {
+    setLiveTotal(totalArs);
+    setLiveCount(monthTxCount);
+    setLiveCats(categorySummary);
+  }, [totalArs, monthTxCount, categorySummary]);
+
+  const displayTotal = useCountUp(liveTotal, 750);
+
+  const triggerCelebrate = useCallback(() => {
+    setBurst(true);
+    setPop(true);
+    setBarBoost(true);
+    window.setTimeout(() => setBurst(false), 900);
+    window.setTimeout(() => setPop(false), 500);
+    window.setTimeout(() => setBarBoost(false), 900);
+  }, []);
+
+  useEffect(() => {
+    function onCreated() {
+      triggerCelebrate();
+      // Soft optimistic nudge: +1 mov until server data arrives
+      setLiveCount((c) => c + 1);
+      router.refresh();
+    }
+    window.addEventListener("lc:expense-created", onCreated);
+    return () => window.removeEventListener("lc:expense-created", onCreated);
+  }, [router, triggerCelebrate]);
+
   const delta =
-    prevTotalArs > 0 ? ((totalArs - prevTotalArs) / prevTotalArs) * 100 : null;
+    prevTotalArs > 0
+      ? ((liveTotal - prevTotalArs) / prevTotalArs) * 100
+      : null;
   const DeltaIcon =
     delta == null || Math.abs(delta) < 0.5
       ? Minus
@@ -60,8 +194,8 @@ export function DashboardHome({
 
   const barPct =
     prevTotalArs > 0
-      ? Math.min(100, (totalArs / prevTotalArs) * 100)
-      : totalArs > 0
+      ? Math.min(120, (liveTotal / prevTotalArs) * 100)
+      : liveTotal > 0
         ? 100
         : 0;
 
@@ -75,22 +209,30 @@ export function DashboardHome({
           {householdName}
         </p>
 
-        <div className="mt-6">
+        <div className="relative mt-6">
+          <SpendBurst active={burst} />
+
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700/80 dark:text-emerald-400/80">
             {formatPeriodLabel(period)}
           </p>
-          <p className="mt-1 text-4xl font-bold tabular-nums tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-5xl">
-            {formatArs(totalArs)}
+          <p
+            className={cn(
+              "mt-1 text-4xl font-bold tabular-nums tracking-tight text-zinc-900 transition-transform dark:text-zinc-50 sm:text-5xl",
+              pop && "lc-amount-pop",
+            )}
+          >
+            {formatArs(Math.round(displayTotal))}
           </p>
 
-          <div className="mx-auto mt-3 max-w-[220px]">
-            <div className="h-2 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800">
+          <div className="relative mx-auto mt-3 max-w-[220px]">
+            <div className="h-2.5 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-zinc-800">
               <div
                 className={cn(
-                  "h-full rounded-full transition-all duration-700",
-                  barPct > 100
+                  "h-full rounded-full transition-all duration-700 ease-out",
+                  barPct >= 100
                     ? "bg-gradient-to-r from-amber-500 to-orange-500"
                     : "bg-gradient-to-r from-emerald-500 to-teal-400",
+                  barBoost && "lc-bar-glow",
                 )}
                 style={{ width: `${Math.min(100, barPct)}%` }}
               />
@@ -104,6 +246,7 @@ export function DashboardHome({
                   className={cn(
                     "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium",
                     deltaColor,
+                    pop && "lc-amount-pop",
                   )}
                 >
                   <DeltaIcon className="h-3.5 w-3.5" />
@@ -113,9 +256,9 @@ export function DashboardHome({
             </div>
           </div>
 
-          {monthTxCount > 0 && (
+          {liveCount > 0 && (
             <p className="mt-1 text-xs text-zinc-400">
-              {monthTxCount} movimiento{monthTxCount === 1 ? "" : "s"}
+              {liveCount} movimiento{liveCount === 1 ? "" : "s"}
             </p>
           )}
         </div>
@@ -127,13 +270,13 @@ export function DashboardHome({
         <NavPill href="/compartido" icon={<Users className="h-5 w-5" />} label="Hogar" />
       </div>
 
-      {categorySummary.length > 0 && (
+      {liveCats.length > 0 && (
         <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/60">
           <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
             Este mes
           </p>
           <ul className="space-y-2.5">
-            {categorySummary.map((c) => {
+            {liveCats.map((c) => {
               const color = colorForCategory(c.slug);
               return (
                 <li key={c.id} className="flex items-center gap-3">
@@ -154,7 +297,7 @@ export function DashboardHome({
                     </div>
                     <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
                       <div
-                        className="h-full rounded-full"
+                        className="h-full rounded-full transition-all duration-500"
                         style={{
                           width: `${Math.min(100, c.pct)}%`,
                           backgroundColor: color,
