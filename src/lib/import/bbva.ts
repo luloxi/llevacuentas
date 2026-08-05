@@ -6,7 +6,6 @@ import {
 } from "@/lib/bbva/parse";
 import { matchCategory, categoryNameToSlug } from "@/lib/categorize/rules";
 import { matchCategoryWithLearning } from "@/lib/categorize/learn";
-import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
 import { getDb, schema } from "@/lib/db";
 import { getCategoryMap } from "@/lib/household";
 
@@ -52,10 +51,8 @@ export type ImportBbvaResult = {
   duplicatesInFile: number;
   alreadyExists: number;
   inserted: number;
-  /** alreadyExists + duplicatesInFile (compat) */
   skipped: number;
   learnedHits: number;
-  /** % of unique rows in file that already existed in DB (0–100) */
   overlapPct: number;
   fullyDuplicate: boolean;
   warning: string | null;
@@ -133,8 +130,6 @@ async function parseBbvaMovements(
   fileName: string,
 ): Promise<{ movements: BbvaMovement[]; source: string }> {
   if (looksLikePdf(buffer, fileName)) {
-    // Dynamic import keeps pdf-parse out of non-import API bundles
-    // (e.g. /api/transactions must not load DOMMatrix-dependent code).
     const { parseBbvaStatementPdf } = await import("@/lib/bbva/parse-pdf");
     const movements = await parseBbvaStatementPdf(buffer);
     return { movements, source: "bbva_pdf" };
@@ -145,12 +140,6 @@ async function parseBbvaMovements(
   };
 }
 
-/**
- * Import BBVA "Últimos movimientos" (Excel) or monthly "Resumen" PDF.
- * Dedupes by externalFingerprint (date + merchant + amounts + installment [+ cupón en PDF]):
- * - same expense on another day is kept
- * - re-uploading the same statement only inserts truly new rows and reports matches
- */
 export async function importBbvaFile(opts: {
   householdId: string;
   userId: string;
@@ -184,7 +173,6 @@ export async function importBbvaFile(opts: {
     };
   }
 
-  // Dedupe within the file itself (same row twice in one export)
   const seenInFile = new Set<string>();
   const uniqueMovements = [];
   let duplicatesInFile = 0;
@@ -200,7 +188,6 @@ export async function importBbvaFile(opts: {
   const db = getDb();
   const fingerprints = uniqueMovements.map((m) => m.fingerprint);
 
-  // 1) Exact fingerprint match (fast path)
   const existingRows =
     fingerprints.length > 0
       ? await db
@@ -216,8 +203,6 @@ export async function importBbvaFile(opts: {
 
   const existingFp = new Set(existingRows.map((r) => r.fp));
 
-  // 2) Logical match: same date + merchant + amounts + cuota
-  //    (covers re-imports after fingerprint algorithm changes)
   const dates = [...new Set(uniqueMovements.map((m) => m.date))];
   const existingLogical =
     dates.length > 0
@@ -252,7 +237,6 @@ export async function importBbvaFile(opts: {
     ),
   );
 
-  // Track logical keys we insert in this batch (same file, different fp)
   const insertedLogical = new Set<string>();
 
   const toInsert = uniqueMovements.filter((m) => {
@@ -315,10 +299,8 @@ export async function importBbvaFile(opts: {
       bySlug.get(catMatch.slug) ??
       bySlug.get("uncategorized");
 
-    const ownership =
-      m.isPayment || catMatch.kind !== "expense"
-        ? "personal"
-        : catMatch.defaultOwnership;
+    // Private to importer — share from Gastos (Personal → Hogar) if needed
+    const ownership = "personal" as const;
 
     try {
       await db.insert(schema.transactions).values({
@@ -340,7 +322,6 @@ export async function importBbvaFile(opts: {
       });
       inserted++;
     } catch {
-      // Race / unique index: treat as already exists
       insertFailed++;
     }
   }
@@ -377,7 +358,6 @@ export async function importTransparenciaConsumos(opts: {
   const db = getDb();
   const { bySlug } = await getCategoryMap();
 
-  // Dedupe within file + against existing fingerprints
   const seen = new Set<string>();
   const unique = [];
   let duplicatesInFile = 0;
@@ -445,8 +425,6 @@ export async function importTransparenciaConsumos(opts: {
   for (const r of toInsert) {
     const slug = categoryNameToSlug(r.categoryName);
     const category = bySlug.get(slug) ?? bySlug.get("uncategorized");
-    const catSeed = matchCategory(r.description);
-    const ownership = catSeed.defaultOwnership;
 
     try {
       await db.insert(schema.transactions).values({
@@ -460,7 +438,7 @@ export async function importTransparenciaConsumos(opts: {
         isPayment: false,
         isCredit: false,
         categoryId: category?.id,
-        ownership,
+        ownership: "personal",
         paidByUserId: opts.userId,
         externalFingerprint: r.fingerprint,
         source: "transparencia",
@@ -487,6 +465,3 @@ export async function importTransparenciaConsumos(opts: {
     fullyDuplicate: false,
   };
 }
-
-// listTransactions / updateTransaction live in @/lib/transactions
-// so Consumos API does not pull pdf-parse into the serverless bundle.
