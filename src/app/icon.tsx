@@ -3,7 +3,7 @@ import { ImageResponse } from "next/og";
 export const size = { width: 512, height: 512 };
 export const contentType = "image/png";
 
-/** Zen fintech mark: sage field + paper ledger + balance dot. */
+/** Paper outline + $ — no colored background. */
 export default function Icon() {
   return new ImageResponse(
     (
@@ -14,74 +14,46 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#3d7a6a",
-          borderRadius: 112,
+          background: "transparent",
         }}
       >
         <div
           style={{
+            width: 340,
+            height: 400,
             display: "flex",
-            flexDirection: "column",
+            alignItems: "center",
             justifyContent: "center",
-            gap: 18,
-            width: 280,
-            height: 240,
-            background: "#f7f6f3",
-            borderRadius: 40,
-            paddingLeft: 48,
-            paddingRight: 36,
+            border: "28px solid #2f5f52",
+            borderRadius: 36,
+            background: "transparent",
             position: "relative",
           }}
         >
-          {/* Left accent */}
+          {/* Folded corner suggestion */}
           <div
             style={{
               position: "absolute",
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: 18,
-              background: "#3d7a6a",
-              borderTopLeftRadius: 40,
-              borderBottomLeftRadius: 40,
+              top: -28,
+              right: -28,
+              width: 72,
+              height: 72,
+              borderBottom: "28px solid #2f5f52",
+              borderLeft: "28px solid #2f5f52",
+              borderBottomLeftRadius: 8,
             }}
           />
           <div
             style={{
-              height: 16,
-              width: "70%",
-              background: "#afc8c0",
-              borderRadius: 8,
+              fontSize: 180,
+              fontWeight: 700,
+              color: "#2f5f52",
+              lineHeight: 1,
+              fontFamily: "system-ui, sans-serif",
             }}
-          />
-          <div
-            style={{
-              height: 16,
-              width: "100%",
-              background: "#2f5f52",
-              borderRadius: 8,
-            }}
-          />
-          <div
-            style={{
-              height: 16,
-              width: "48%",
-              background: "#afc8c0",
-              borderRadius: 8,
-            }}
-          />
-          {/* Balance dot */}
-          <div
-            style={{
-              position: "absolute",
-              right: 28,
-              bottom: 28,
-              width: 28,
-              height: 28,
-              borderRadius: 999,
-              background: "#3d7a6a",
-            }}
-          />
+          >
+            $
+          </div>
         </div>
       </div>
     ),
