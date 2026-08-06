@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle } from "lucide-react";
+import { BANKS } from "@/lib/banks";
 
 export function ImportForm({
   compact = false,
@@ -11,6 +12,7 @@ export function ImportForm({
   onDone?: () => void;
 } = {}) {
   const [loading, setLoading] = useState(false);
+  const [bank, setBank] = useState("BBVA");
   const [result, setResult] = useState<{
     total: number;
     inserted: number;
@@ -57,6 +59,7 @@ export function ImportForm({
         const fd = new FormData();
         fd.set("file", file);
         fd.set("kind", "bbva");
+        fd.set("bank", bank);
         const res = await fetch("/api/import/bbva", {
           method: "POST",
           body: fd,
@@ -76,7 +79,7 @@ export function ImportForm({
         if (!res.ok) throw new Error(data?.error || `Error al importar ${file.name}`);
         if ((data?.total ?? 0) === 0) {
           throw new Error(
-            `No se leyeron movimientos de “${file.name}”. ¿Es un Excel de Últimos movimientos o un PDF de resumen BBVA?`,
+            `No se leyeron movimientos de “${file.name}”. Probá Excel de movimientos o PDF de resumen.`,
           );
         }
         total += data?.total ?? 0;
@@ -131,7 +134,7 @@ export function ImportForm({
           )}
           <div className={compact ? "text-left" : ""}>
             <h2 className={compact ? "text-sm font-semibold" : "text-lg font-semibold"}>
-              {compact ? "Importar banco (BBVA)" : "Subí el Excel de tu tarjeta"}
+              {compact ? "Importar resumen" : "Subí el resumen de la tarjeta"}
             </h2>
             <p
               className={
@@ -141,10 +144,24 @@ export function ImportForm({
               }
             >
               {compact
-                ? "Excel “Últimos movimientos” o PDF de resumen BBVA"
-                : "Excel de “Últimos movimientos” (.xls/.xlsx) o el PDF de resumen mensual que mandaba el banco. Los categorizamos al importar y no duplicamos lo ya cargado."}
+                ? "Excel o PDF del banco"
+                : "Excel de movimientos o PDF de resumen. Sin duplicados."}
             </p>
           </div>
+          <label className={`block w-full ${compact ? "text-left" : "text-left max-w-md"}`}>
+            <span className="mb-1 block text-xs font-medium text-zinc-500">Banco</span>
+            <select
+              value={bank}
+              onChange={(e) => setBank(e.target.value)}
+              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              {BANKS.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+          </label>
           <input
             name="file"
             type="file"
