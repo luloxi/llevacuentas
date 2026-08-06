@@ -28,7 +28,7 @@ export async function GET(req: Request) {
       searchParams.get("shared") === "1" ||
       searchParams.get("shared") === "true";
 
-    const [rows, { cats, byId }] = await Promise.all([
+    const [rows, mapAll, mapVisible] = await Promise.all([
       listTransactions(ctx.household.id, {
         period,
         categoryId,
@@ -37,8 +37,15 @@ export async function GET(req: Request) {
         viewerUserId: sessionUser.id,
         sharedOnly,
       }),
-      getCategoryMap(),
+      getCategoryMap({
+        householdId: ctx.household.id,
+        includeHidden: true,
+      }),
+      getCategoryMap({ householdId: ctx.household.id }),
     ]);
+
+    const { byId } = mapAll;
+    const cats = mapVisible.cats;
 
     const db = getDb();
     const txIds = rows.map((r) => r.id);
@@ -215,7 +222,10 @@ export async function POST(req: Request) {
         ? Math.abs(Number(body.amountUsd))
         : null;
 
-    const { byId, bySlug } = await getCategoryMap();
+    const { byId, bySlug } = await getCategoryMap({
+      householdId: ctx.household.id,
+      includeHidden: true,
+    });
     let categoryId =
       body.categoryId && byId.has(body.categoryId) ? body.categoryId : null;
     if (!categoryId && items.length > 0) {
