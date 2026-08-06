@@ -19,8 +19,12 @@ export const metadata: Metadata = {
     "Importá gastos de tarjeta, fotografiá tickets y compartí el balance con tu grupo.",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon", sizes: "512x512", type: "image/png" },
+    ],
     apple: [{ url: "/apple-icon", sizes: "180x180", type: "image/png" }],
+    shortcut: ["/favicon.svg"],
   },
   appleWebApp: {
     capable: true,
@@ -66,6 +70,9 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/icon" type="image/png" sizes="512x512" />
+        <link rel="apple-touch-icon" href="/apple-icon" sizes="180x180" />
       </head>
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
