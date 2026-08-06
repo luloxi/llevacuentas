@@ -55,9 +55,20 @@ export async function ensureSchema() {
         name text NOT NULL,
         kind text NOT NULL,
         default_ownership text NOT NULL DEFAULT 'personal',
-        is_system boolean NOT NULL DEFAULT true
+        is_system boolean NOT NULL DEFAULT true,
+        household_id text REFERENCES households(id) ON DELETE CASCADE
       )
     `,
+    sql`ALTER TABLE categories ADD COLUMN IF NOT EXISTS household_id text REFERENCES households(id) ON DELETE CASCADE`,
+    sql`
+      CREATE TABLE IF NOT EXISTS household_category_prefs (
+        household_id text NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+        category_id text NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+        hidden boolean NOT NULL DEFAULT true,
+        PRIMARY KEY (household_id, category_id)
+      )
+    `,
+    sql`CREATE INDEX IF NOT EXISTS hcp_household_idx ON household_category_prefs(household_id)`,
     sql`
       CREATE TABLE IF NOT EXISTS merchant_rules (
         id text PRIMARY KEY,

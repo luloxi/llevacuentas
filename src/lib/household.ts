@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 import { getDb, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
@@ -23,6 +23,7 @@ export async function ensureCategoriesSeeded() {
         kind: cat.kind,
         defaultOwnership: cat.defaultOwnership,
         isSystem: true,
+        householdId: null,
       })
       .onConflictDoNothing()
       .returning();
@@ -133,7 +134,6 @@ export async function leaveSoloHousehold(userId: string) {
       ),
     );
 
-  // Clean empty solo household (and its data cascades where configured)
   await db
     .delete(schema.households)
     .where(eq(schema.households.id, householdId));
@@ -150,7 +150,6 @@ export async function joinHousehold(userId: string, code: string) {
         "Ya pertenecés a un hogar compartido. Por ahora solo uno por usuario.",
       );
     }
-    // Solo space: leave it and join the invited one
     await leaveSoloHousehold(userId);
   }
 
@@ -187,10 +186,45 @@ export async function requireHousehold(userId: string) {
   return ctx;
 }
 
-export async function getCategoryMap() {
+/**
+ * Category map for the household.
+ * - System categories + custom of this household
+ * - Excludes hidden (for UI dropdowns) unless includeHidden
+ */
+export async function getCategoryMap(opts?: {
+  householdId?: string;
+  includeHidden?: boolean;
+}) {
   await ensureCategoriesSeeded();
   const db = getDb();
-  const cats = await db.select().from(schema.categories);
+
+  let cats = await db.select().from(schema.categories);
+
+  if (opts?.householdId) {
+    cats = cats.filter(
+      (c) => !c.householdId || c.householdId === opts.householdId,
+    );
+
+    if (!opts.includeHidden) {
+      const hiddenRows = await db
+        .select({ categoryId: schema.householdCategoryPrefs.categoryId })
+        .from(schema.householdCategoryPrefs)
+        .where(
+          and(
+            eq(schema.householdCategoryPrefs.householdId, opts.householdId),
+            eq(schema.householdCategoryPrefs.hidden, true),
+          ),
+        );
+      const hidden = new Set(hiddenRows.map((r) => r.categoryId));
+      cats = cats.filter(
+        (c) => c.slug === "uncategorized" || !hidden.has(c.id),
+      );
+    }
+  } else {
+    // Global map (imports / matching): system only + keep all for lookups by id
+    // Still return everything so byId works for historical txs
+  }
+
   const bySlug = new Map(cats.map((c) => [c.slug, c]));
   const byId = new Map(cats.map((c) => [c.id, c]));
   return { cats, bySlug, byId };
