@@ -74,6 +74,9 @@ const SECTION_LABELS: Record<HomeSectionId, string> = {
   cotizaciones: "Cotizaciones",
 };
 
+/** Full-width on desktop grid */
+const WIDE_SECTIONS = new Set<HomeSectionId>(["gastos", "cotizaciones"]);
+
 function loadSkippedServices(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
@@ -108,7 +111,6 @@ function loadOrder(): HomeSectionId[] {
 function loadHidden(): Set<HomeSectionId> {
   if (typeof window === "undefined") return new Set();
   try {
-    // Migrate old flags
     const legacyDebt = window.localStorage.getItem("lc:home-show-debt");
     const legacyHogar = window.localStorage.getItem("lc:home-show-hogar");
     const raw = window.localStorage.getItem(HOME_HIDDEN_KEY);
@@ -137,10 +139,7 @@ function saveOrder(order: HomeSectionId[]) {
 }
 
 function saveHidden(hidden: Set<HomeSectionId>) {
-  window.localStorage.setItem(
-    HOME_HIDDEN_KEY,
-    JSON.stringify([...hidden]),
-  );
+  window.localStorage.setItem(HOME_HIDDEN_KEY, JSON.stringify([...hidden]));
 }
 
 function formatRate(n: number) {
@@ -318,7 +317,9 @@ function ThemeToggle() {
       type="button"
       onClick={toggle}
       className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
-      aria-label={resolved === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
+      aria-label={
+        resolved === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"
+      }
       title={resolved === "dark" ? "Tema claro" : "Tema oscuro"}
     >
       {resolved === "dark" ? (
@@ -336,18 +337,18 @@ function RatesStrip({ rates }: { rates: LiveRate[] }) {
 
   return (
     <div
-      className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--border)]"
+      className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--border)] md:grid-cols-3"
       aria-label="Cotizaciones del dólar"
     >
       {visible.map((r) => (
         <div
           key={r.id}
-          className="flex flex-col items-center gap-0.5 bg-[var(--surface)] px-2 py-2.5 text-center"
+          className="flex flex-col items-center gap-0.5 bg-[var(--surface)] px-2 py-2.5 text-center md:py-3.5"
         >
           <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-fg)]">
             {r.label}
           </span>
-          <span className="text-base font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+          <span className="text-base font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-lg">
             ${formatRate(r.value!)}
           </span>
           {r.hint && (
@@ -396,7 +397,7 @@ function HomeLayoutEditor({
   }
 
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm md:col-span-2">
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-sm font-semibold tracking-tight">Inicio</p>
         <button
@@ -411,7 +412,7 @@ function HomeLayoutEditor({
       <p className="mb-2 text-[11px] text-[var(--muted-fg)]">
         Ordená y mostrá u ocultá las tarjetas del home.
       </p>
-      <ul className="space-y-1.5">
+      <ul className="space-y-1.5 md:grid md:grid-cols-2 md:gap-2 md:space-y-0">
         {order.map((id, i) => {
           const isHidden = hidden.has(id);
           return (
@@ -549,7 +550,10 @@ export function DashboardHome({
   const hasSavings =
     savingsArs > 0 || savingsUsd > 0 || savingsUsdc > 0 || savingsNetArs > 0;
 
-  function onLayoutChange(nextOrder: HomeSectionId[], nextHidden: Set<HomeSectionId>) {
+  function onLayoutChange(
+    nextOrder: HomeSectionId[],
+    nextHidden: Set<HomeSectionId>,
+  ) {
     setOrder(nextOrder);
     setHidden(nextHidden);
     saveOrder(nextOrder);
@@ -560,9 +564,8 @@ export function DashboardHome({
     const map: Record<HomeSectionId, React.ReactNode> = {
       gastos: (
         <Link
-          key="gastos"
           href="/consumos?tab=lista"
-          className="group relative block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5 transition active:scale-[0.99]"
+          className="group relative block h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5 transition active:scale-[0.99] md:px-6 md:py-5"
           aria-label={`Tus gastos, ${formatArs(Math.round(displayTotal))}`}
         >
           <SpendBurst active={burst} />
@@ -573,7 +576,7 @@ export function DashboardHome({
               </p>
               <p
                 className={cn(
-                  "mt-1 text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)]",
+                  "mt-1 text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-4xl",
                   pop && "lc-amount-pop",
                 )}
               >
@@ -592,9 +595,8 @@ export function DashboardHome({
       categorias:
         liveCats.length > 0 ? (
           <Link
-            key="categorias"
             href="/consumos?tab=resumen"
-            className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
+            className="group block h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99] md:px-5 md:py-4"
             aria-label="Gastos por categoría"
           >
             <div className="mb-2.5 flex items-center justify-between gap-2">
@@ -603,7 +605,7 @@ export function DashboardHome({
               </p>
               <TapHint />
             </div>
-            <ul className="space-y-2">
+            <ul className="space-y-2 md:space-y-2.5">
               {liveCats.map((c) => {
                 const color = colorForCategory(c.slug);
                 return (
@@ -614,13 +616,13 @@ export function DashboardHome({
                     >
                       <CategoryIcon slug={c.slug} size={13} />
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-xs text-[var(--foreground)]/80">
+                    <span className="min-w-0 flex-1 truncate text-xs text-[var(--foreground)]/80 md:text-sm">
                       {c.name}
                     </span>
-                    <span className="shrink-0 text-xs tabular-nums text-[var(--muted-fg)]">
+                    <span className="shrink-0 text-xs tabular-nums text-[var(--muted-fg)] md:text-sm">
                       {formatArs(c.total)}
                     </span>
-                    <div className="h-1 w-10 shrink-0 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+                    <div className="h-1 w-10 shrink-0 overflow-hidden rounded-full bg-[var(--surface-muted)] md:w-16">
                       <div
                         className="h-full rounded-full opacity-80"
                         style={{
@@ -637,9 +639,8 @@ export function DashboardHome({
         ) : null,
       ahorros: (
         <Link
-          key="ahorros"
           href="/ahorros"
-          className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3.5 transition active:scale-[0.99]"
+          className="group block h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3.5 transition active:scale-[0.99] md:px-5 md:py-4"
           aria-label="Ahorros"
         >
           <div className="mb-1 flex items-center justify-between gap-2">
@@ -651,7 +652,7 @@ export function DashboardHome({
           {hasSavings ? (
             <>
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <p className="text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+                <p className="text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-3xl">
                   {formatArs(Math.round(savingsNetArs))}
                 </p>
                 <p className="text-[11px] text-[var(--muted-fg)]">
@@ -688,9 +689,8 @@ export function DashboardHome({
       ),
       hogar: (
         <Link
-          key="hogar"
           href="/compartido"
-          className="group block rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
+          className="group block h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99] md:px-5 md:py-4"
           aria-label={`Hogar ${formatArs(sharedTotalArs)}`}
         >
           <div className="flex items-start justify-between gap-2">
@@ -698,7 +698,7 @@ export function DashboardHome({
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-fg)]">
                 Hogar
               </p>
-              <p className="mt-0.5 text-lg font-semibold tabular-nums tracking-tight text-[var(--foreground)]">
+              <p className="mt-0.5 text-lg font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-xl">
                 {formatArs(sharedTotalArs)}
               </p>
               {visibleServices.length > 0 && (
@@ -731,9 +731,8 @@ export function DashboardHome({
       ),
       deuda: (
         <Link
-          key="deuda"
           href="/deuda"
-          className="group flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99]"
+          className="group flex h-full items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99] md:px-5 md:py-4"
           aria-label={
             debtSettled
               ? "Deuda saldada"
@@ -746,7 +745,7 @@ export function DashboardHome({
             </p>
             <p
               className={cn(
-                "mt-0.5 text-lg font-semibold tabular-nums tracking-tight",
+                "mt-0.5 text-lg font-semibold tabular-nums tracking-tight md:text-xl",
                 debtSettled
                   ? "text-[var(--brand-fg)]"
                   : "text-red-800 dark:text-red-200",
@@ -758,12 +757,26 @@ export function DashboardHome({
           <TapHint />
         </Link>
       ),
-      cotizaciones: <RatesStrip key="cotizaciones" rates={liveRates} />,
+      cotizaciones: <RatesStrip rates={liveRates} />,
     };
 
     return order
       .filter((id) => !hidden.has(id))
-      .map((id) => map[id])
+      .map((id) => {
+        const node = map[id];
+        if (!node) return null;
+        return (
+          <div
+            key={id}
+            className={cn(
+              "min-w-0",
+              WIDE_SECTIONS.has(id) && "md:col-span-2",
+            )}
+          >
+            {node}
+          </div>
+        );
+      })
       .filter(Boolean);
   }, [
     order,
@@ -789,10 +802,10 @@ export function DashboardHome({
   ]);
 
   return (
-    <div className="animate-fade-up mx-auto flex max-w-lg flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
+    <div className="animate-fade-up mx-auto flex w-full max-w-lg flex-col gap-3 md:max-w-5xl md:gap-4">
+      <div className="flex items-center justify-between gap-3 md:mb-1">
         <div className="min-w-0">
-          <p className="text-sm text-[var(--muted-fg)]">
+          <p className="text-sm text-[var(--muted-fg)] md:text-base">
             Hola, {firstName}
           </p>
           <p className="text-xs font-medium capitalize text-[var(--muted-fg)]/80">
@@ -826,7 +839,9 @@ export function DashboardHome({
         onChange={onLayoutChange}
       />
 
-      {sections}
+      <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-stretch md:gap-4">
+        {sections}
+      </div>
     </div>
   );
 }
