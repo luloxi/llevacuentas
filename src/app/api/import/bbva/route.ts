@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { requireHousehold } from "@/lib/household";
+import { normalizeBank } from "@/lib/banks";
 import {
   importBbvaFile,
   importTransparenciaConsumos,
@@ -16,6 +17,7 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const file = form.get("file");
     const kind = String(form.get("kind") ?? "bbva");
+    const bank = normalizeBank(String(form.get("bank") ?? "")) ?? "BBVA";
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Falta el archivo" }, { status: 400 });
@@ -29,12 +31,14 @@ export async function POST(req: Request) {
             userId: sessionUser.id,
             fileName: file.name,
             buffer,
+            bank,
           })
         : await importBbvaFile({
             householdId: ctx.household.id,
             userId: sessionUser.id,
             fileName: file.name,
             buffer,
+            bank,
           });
 
     return NextResponse.json(result);
