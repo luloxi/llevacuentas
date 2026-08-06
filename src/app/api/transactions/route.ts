@@ -9,6 +9,7 @@ import {
   updateTransaction,
 } from "@/lib/transactions";
 import { getDb, schema } from "@/lib/db";
+import { normalizeBank } from "@/lib/banks";
 
 export async function GET(req: Request) {
   const authResult = await requireApiUser();
@@ -113,10 +114,10 @@ export async function GET(req: Request) {
           | "shared",
         paidByUserId: r.paidByUserId,
         source: r.source,
+        bank: r.bank ?? null,
         category: r.categoryId ? (byId.get(r.categoryId) ?? null) : null,
         hasTicket: Boolean(receipt) || r.source === "receipt",
         receipt,
-        /** Can the current user change ownership / details */
         canEdit:
           r.ownership === "shared" || r.paidByUserId === sessionUser.id,
       };
@@ -157,6 +158,7 @@ export async function POST(req: Request) {
       categoryId?: string | null;
       paidByUserId?: string | null;
       ownership?: "personal" | "shared";
+      bank?: string | null;
       items?: Array<{
         name: string;
         quantity?: number | null;
@@ -223,16 +225,16 @@ export async function POST(req: Request) {
       categoryId = bySlug.get("uncategorized")?.id ?? null;
     }
 
-    // Owner is always the current user for privacy; paidBy can note who paid in cash
     const paidBy =
       body.paidByUserId &&
       ctx.members.some((m) => m.userId === body.paidByUserId)
         ? body.paidByUserId
         : sessionUser.id;
 
-    // Default private (personal). Only explicit shared opens to the group.
     const ownership =
       body.ownership === "shared" ? "shared" : "personal";
+
+    const bank = normalizeBank(body.bank);
 
     const fp = createHash("sha256")
       .update(
@@ -259,6 +261,7 @@ export async function POST(req: Request) {
         paidByUserId: paidBy,
         externalFingerprint: fp,
         source: items.length > 0 ? "receipt" : "manual",
+        bank,
       })
       .returning();
 
@@ -337,7 +340,6 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "No encontrado" }, { status: 404 });
     }
 
-    // Privacy: cannot edit someone else's personal expense
     if (!isVisibleToUser(before, sessionUser.id)) {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     }
@@ -348,7 +350,6 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     }
 
-    // When marking personal, lock paidBy to current user so it stays private to them
     let nextOwnership = body.ownership as "personal" | "shared" | undefined;
     let nextPaidBy = body.paidByUserId as string | null | undefined;
     if (nextOwnership === "personal" && nextPaidBy == null) {
@@ -363,6 +364,10 @@ export async function PATCH(req: Request) {
       ownership: nextOwnership,
       paidByUserId: nextPaidBy !== undefined ? nextPaidBy : body.paidByUserId,
       splitPct: body.splitPct,
+      bank:
+        "bank" in body
+          ? normalizeBank(body.bank as string | null | undefined)
+          : undefined,
     });
 
     let learned = 0;
