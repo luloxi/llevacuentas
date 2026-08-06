@@ -145,7 +145,9 @@ export async function importBbvaFile(opts: {
   userId: string;
   fileName: string;
   buffer: Buffer;
+  bank?: string | null;
 }): Promise<ImportBbvaResult> {
+  const bank = opts.bank?.trim() || "BBVA";
   const { movements, source } = await parseBbvaMovements(
     opts.buffer,
     opts.fileName,
@@ -299,7 +301,6 @@ export async function importBbvaFile(opts: {
       bySlug.get(catMatch.slug) ??
       bySlug.get("uncategorized");
 
-    // Private to importer — share from Gastos (Personal → Hogar) if needed
     const ownership = "personal" as const;
 
     try {
@@ -319,6 +320,7 @@ export async function importBbvaFile(opts: {
         paidByUserId: opts.userId,
         externalFingerprint: m.fingerprint,
         source: txSource,
+        bank,
       });
       inserted++;
     } catch {
@@ -353,7 +355,9 @@ export async function importTransparenciaConsumos(opts: {
   userId: string;
   fileName: string;
   buffer: Buffer;
+  bank?: string | null;
 }) {
+  const bank = opts.bank?.trim() || null;
   const rows = parseTransparenciaConsumos(opts.buffer);
   const db = getDb();
   const { bySlug } = await getCategoryMap();
@@ -442,6 +446,7 @@ export async function importTransparenciaConsumos(opts: {
         paidByUserId: opts.userId,
         externalFingerprint: r.fingerprint,
         source: "transparencia",
+        bank,
       });
       inserted++;
     } catch {
