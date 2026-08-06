@@ -97,6 +97,7 @@ export async function ensureSchema() {
         split_pct integer NOT NULL DEFAULT 50,
         external_fingerprint text NOT NULL,
         source text NOT NULL DEFAULT 'bbva_import',
+        bank text,
         created_at timestamp DEFAULT now() NOT NULL,
         updated_at timestamp DEFAULT now() NOT NULL
       )
@@ -112,6 +113,11 @@ export async function ensureSchema() {
     sql`
       CREATE INDEX IF NOT EXISTS tx_household_cat_idx
         ON transactions(household_id, category_id)
+    `,
+    sql`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS bank text`,
+    sql`
+      CREATE INDEX IF NOT EXISTS tx_household_bank_idx
+        ON transactions(household_id, bank)
     `,
     sql`
       CREATE TABLE IF NOT EXISTS receipts (

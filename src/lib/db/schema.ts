@@ -126,6 +126,8 @@ export const transactions = pgTable(
     splitPct: integer("split_pct").notNull().default(50),
     externalFingerprint: text("external_fingerprint").notNull(),
     source: text("source").notNull().default("bbva_import"),
+    /** Banco o medio con el que se pagó / del que vino el resumen */
+    bank: text("bank"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
   },
@@ -133,6 +135,7 @@ export const transactions = pgTable(
     uniqueIndex("tx_household_fp_uidx").on(t.householdId, t.externalFingerprint),
     index("tx_household_date_idx").on(t.householdId, t.date),
     index("tx_household_cat_idx").on(t.householdId, t.categoryId),
+    index("tx_household_bank_idx").on(t.householdId, t.bank),
   ],
 );
 
