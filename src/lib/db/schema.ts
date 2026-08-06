@@ -67,7 +67,29 @@ export const categories = pgTable("categories", {
     .notNull()
     .default("personal"),
   isSystem: boolean("is_system").notNull().default(true),
+  /** null = categoría global del sistema; set = personalizada del hogar */
+  householdId: text("household_id").references(() => households.id, {
+    onDelete: "cascade",
+  }),
 });
+
+/** Preferencias por hogar: ocultar categorías del sistema sin borrarlas. */
+export const householdCategoryPrefs = pgTable(
+  "household_category_prefs",
+  {
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    categoryId: text("category_id")
+      .notNull()
+      .references(() => categories.id, { onDelete: "cascade" }),
+    hidden: boolean("hidden").notNull().default(true),
+  },
+  (t) => [
+    primaryKey({ columns: [t.householdId, t.categoryId] }),
+    index("hcp_household_idx").on(t.householdId),
+  ],
+);
 
 export const merchantRules = pgTable("merchant_rules", {
   id: text("id")
@@ -126,7 +148,6 @@ export const transactions = pgTable(
     splitPct: integer("split_pct").notNull().default(50),
     externalFingerprint: text("external_fingerprint").notNull(),
     source: text("source").notNull().default("bbva_import"),
-    /** Banco o medio con el que se pagó / del que vino el resumen */
     bank: text("bank"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
@@ -184,7 +205,6 @@ export const receiptItems = pgTable("receipt_items", {
   productCategory: text("product_category"),
 });
 
-/** Personal savings: EVM wallets, Cardano addresses, Argentine bank balances. */
 export const savingsAssets = pgTable(
   "savings_assets",
   {
@@ -199,12 +219,9 @@ export const savingsAssets = pgTable(
       .references(() => households.id, { onDelete: "cascade" }),
     kind: text("kind").$type<"evm" | "cardano" | "bank">().notNull(),
     label: text("label").notNull(),
-    /** Wallet address (EVM 0x… or Cardano addr1…) */
     address: text("address"),
-    /** Manual bank balances */
     amountArs: numeric("amount_ars", { precision: 16, scale: 2 }),
     amountUsd: numeric("amount_usd", { precision: 16, scale: 2 }),
-    /** Cached on-chain total in USD */
     lastBalanceUsd: numeric("last_balance_usd", { precision: 16, scale: 2 }),
     lastSyncedAt: timestamp("last_synced_at", { mode: "date" }),
     syncError: text("sync_error"),
