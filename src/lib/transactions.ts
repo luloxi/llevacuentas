@@ -91,6 +91,7 @@ export async function updateTransaction(
     ownership?: "personal" | "shared";
     paidByUserId?: string | null;
     splitPct?: number;
+    bank?: string | null;
   },
 ) {
   const db = getDb();
