@@ -1,4 +1,4 @@
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 import { getDb, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
@@ -206,23 +206,24 @@ export async function getCategoryMap(opts?: {
     );
 
     if (!opts.includeHidden) {
-      const hiddenRows = await db
-        .select({ categoryId: schema.householdCategoryPrefs.categoryId })
-        .from(schema.householdCategoryPrefs)
-        .where(
-          and(
-            eq(schema.householdCategoryPrefs.householdId, opts.householdId),
-            eq(schema.householdCategoryPrefs.hidden, true),
-          ),
+      try {
+        const hiddenRows = await db
+          .select({ categoryId: schema.householdCategoryPrefs.categoryId })
+          .from(schema.householdCategoryPrefs)
+          .where(
+            and(
+              eq(schema.householdCategoryPrefs.householdId, opts.householdId),
+              eq(schema.householdCategoryPrefs.hidden, true),
+            ),
+          );
+        const hidden = new Set(hiddenRows.map((r) => r.categoryId));
+        cats = cats.filter(
+          (c) => c.slug === "uncategorized" || !hidden.has(c.id),
         );
-      const hidden = new Set(hiddenRows.map((r) => r.categoryId));
-      cats = cats.filter(
-        (c) => c.slug === "uncategorized" || !hidden.has(c.id),
-      );
+      } catch {
+        // Prefs table may still be warming up — show all
+      }
     }
-  } else {
-    // Global map (imports / matching): system only + keep all for lookups by id
-    // Still return everything so byId works for historical txs
   }
 
   const bySlug = new Map(cats.map((c) => [c.slug, c]));
