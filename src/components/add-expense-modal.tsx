@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Camera,
   FileSpreadsheet,
+  ImagePlus,
   Loader2,
   PenLine,
   Plus,
@@ -74,11 +75,69 @@ async function readErrorMessage(res: Response): Promise<string> {
   return `Error ${res.status}`;
 }
 
+function isImageFile(file: File) {
+  return (
+    file.type.startsWith("image/") ||
+    /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(file.name)
+  );
+}
+
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
     <span className="mb-1.5 block text-[11px] font-medium tracking-wide text-[var(--muted-fg)]">
       {children}
     </span>
+  );
+}
+
+function ChoiceRow({
+  icon,
+  title,
+  hint,
+  onClick,
+  disabled,
+  primary = false,
+  busy = false,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  hint: string;
+  onClick: () => void;
+  disabled?: boolean;
+  primary?: boolean;
+  busy?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "group flex w-full items-center gap-3.5 rounded-2xl border px-3.5 py-3.5 text-left transition active:scale-[0.99] disabled:opacity-60",
+        primary
+          ? "border-[var(--brand)]/35 bg-[var(--brand-soft)] hover:border-[var(--brand)]/55"
+          : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-muted)]",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition",
+          primary
+            ? "bg-[var(--brand)] text-white dark:text-[#121110]"
+            : "bg-[var(--surface-muted)] text-[var(--foreground)] group-hover:bg-[var(--surface)]",
+        )}
+      >
+        {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-semibold tracking-tight text-[var(--foreground)]">
+          {title}
+        </span>
+        <span className="mt-0.5 block text-[12px] leading-snug text-[var(--muted-fg)]">
+          {hint}
+        </span>
+      </span>
+    </button>
   );
 }
 
@@ -161,7 +220,6 @@ export function AddExpenseModal({
     wasOpen.current = open;
   }, [open, categories, members, preset, viewerUserId]);
 
-  // When meta loads after open with a preset, fill missing fields.
   useEffect(() => {
     if (!open) return;
     if (preset?.categorySlug && categories.length > 0) {
@@ -222,9 +280,13 @@ export function AddExpenseModal({
     setError(null);
     setScanNote(null);
     try {
-      const compressed = await compressImageForUpload(file);
+      // PDF o imagen: imágenes se comprimen; PDF se manda tal cual
+      const payload = isImageFile(file)
+        ? await compressImageForUpload(file)
+        : file;
+
       const fd = new FormData();
-      fd.set("file", compressed);
+      fd.set("file", payload);
       fd.set("dryRun", "1");
       const res = await fetch("/api/receipts", {
         method: "POST",
@@ -263,14 +325,14 @@ export function AddExpenseModal({
             }),
           ),
         );
-        setScanNote(`Leímos ${ocrItems.length} ítems del ticket`);
+        setScanNote(`${ocrItems.length} ítems leídos`);
       } else {
-        setScanNote("Ticket leído — revisá y guardá");
+        setScanNote("Listo — revisá y guardá");
       }
       setFromScan(true);
       setMode("manual");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo leer el ticket");
+      setError(e instanceof Error ? e.message : "No se pudo leer el comprobante");
     } finally {
       setScanning(false);
     }
@@ -309,7 +371,7 @@ export function AddExpenseModal({
         };
         if ((data.total ?? 0) === 0) {
           throw new Error(
-            `No se leyeron movimientos de “${file.name}”. ¿Excel de Últimos movimientos o PDF de resumen BBVA?`,
+            `Sin movimientos en “${file.name}”. Probá Excel o PDF del resumen.`,
           );
         }
         total += data.total ?? 0;
@@ -320,9 +382,8 @@ export function AddExpenseModal({
 
       const note =
         files.length > 1
-          ? `${files.length} archivos · ${inserted} nuevos · ${already} ya estaban · ${total} filas`
-          : msgs[0] ||
-            `${inserted} nuevos · ${already} ya estaban · ${total} filas`;
+          ? `${files.length} archivos · ${inserted} nuevos · ${already} ya estaban`
+          : msgs[0] || `${inserted} nuevos · ${already} ya estaban`;
       setImportNote(note);
       window.dispatchEvent(new Event("lc:card-imported"));
       onCreated();
@@ -386,13 +447,13 @@ export function AddExpenseModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
     >
       <button
         type="button"
-        className="absolute inset-0 bg-[#121110]/55 backdrop-blur-[3px]"
+        className="absolute inset-0 bg-[#121110]/60 backdrop-blur-[4px]"
         aria-label="Cerrar"
         disabled={busy}
         onClick={() => {
@@ -400,50 +461,36 @@ export function AddExpenseModal({
         }}
       />
 
-      <div className="animate-fade-up relative z-10 flex max-h-[min(92vh,720px)] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_24px_64px_-24px_rgba(0,0,0,0.35)]">
-        <div className="shrink-0 border-b border-[var(--border)] px-5 pb-4 pt-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              {mode === "choose" ? (
-                <>
-                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--muted-fg)]">
-                    Nuevo
-                  </p>
-                  <h2 className="mt-1 text-xl font-semibold tracking-tight text-[var(--foreground)]">
-                    ¿Cómo lo cargás?
-                  </h2>
-                  <p className="mt-1 text-sm leading-relaxed text-[var(--muted-fg)]">
-                    Ticket, a mano o resumen de tarjeta.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--muted-fg)]">
-                    {fromScan ? "Desde el ticket" : "A mano"}
-                  </p>
-                  <h2 className="mt-1 text-lg font-semibold tracking-tight text-[var(--foreground)]">
-                    Completar gasto
-                  </h2>
-                </>
-              )}
-            </div>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onClose}
-              className="rounded-full p-2 text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
-            >
-              <X className="h-5 w-5" strokeWidth={1.75} />
-            </button>
-          </div>
+      <div className="animate-fade-up relative z-10 flex max-h-[min(92dvh,640px)] w-full max-w-md flex-col overflow-hidden rounded-t-3xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_24px_64px_-20px_rgba(0,0,0,0.45)] sm:rounded-3xl">
+        {/* Handle mobile */}
+        <div className="flex justify-center pt-2 sm:hidden" aria-hidden>
+          <span className="h-1 w-10 rounded-full bg-[var(--border-strong)]" />
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+        <div className="flex shrink-0 items-center justify-between gap-3 px-5 pb-2 pt-3 sm:pt-5">
+          <h2 className="text-base font-semibold tracking-tight text-[var(--foreground)]">
+            {mode === "choose"
+              ? "Agregar"
+              : fromScan
+                ? "Revisar"
+                : "A mano"}
+          </h2>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onClose}
+            className="rounded-full p-2 text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+          >
+            <X className="h-5 w-5" strokeWidth={1.75} />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-1">
+          {/* Galería / cámara / PDF — sin capture forzoso */}
           <input
             ref={scanRef}
             type="file"
-            accept="image/*"
-            capture="environment"
+            accept="image/*,application/pdf,.pdf"
             className="hidden"
             disabled={busy}
             onChange={(e) => {
@@ -467,83 +514,43 @@ export function AddExpenseModal({
           />
 
           {mode === "choose" && (
-            <div className="flex flex-col gap-2.5">
-              <button
-                type="button"
+            <div className="flex flex-col gap-2">
+              <ChoiceRow
+                primary
+                busy={scanning}
                 disabled={busy}
+                icon={<ImagePlus className="h-5 w-5" strokeWidth={1.85} />}
+                title={scanning ? "Leyendo…" : "Foto o PDF"}
+                hint="Ticket o comprobante · IA completa"
                 onClick={() => scanRef.current?.click()}
-                className="flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-4 text-left transition hover:border-[var(--brand)]/40 hover:bg-[var(--brand-soft)] active:scale-[0.99] disabled:opacity-60"
-              >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-white dark:text-[#121110]">
-                  {scanning ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <Camera className="h-5 w-5" strokeWidth={1.75} />
-                  )}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[15px] font-semibold tracking-tight text-[var(--foreground)]">
-                    {scanning ? "Leyendo ticket…" : "Escanear ticket"}
-                  </span>
-                  <span className="mt-0.5 block text-sm text-[var(--muted-fg)]">
-                    Foto y lo completamos por vos
-                  </span>
-                </span>
-              </button>
-
-              <button
-                type="button"
+              />
+              <ChoiceRow
                 disabled={busy}
+                icon={<PenLine className="h-5 w-5" strokeWidth={1.75} />}
+                title="A mano"
+                hint="Comercio y monto"
                 onClick={() => {
                   setFromScan(false);
                   setScanNote(null);
                   setMode("manual");
                 }}
-                className="flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-4 text-left transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)] active:scale-[0.99]"
-              >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--brand-fg)]">
-                  <PenLine className="h-5 w-5" strokeWidth={1.75} />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[15px] font-semibold tracking-tight text-[var(--foreground)]">
-                    Cargar a mano
-                  </span>
-                  <span className="mt-0.5 block text-sm text-[var(--muted-fg)]">
-                    Comercio, monto y listo
-                  </span>
-                </span>
-              </button>
-
-              <button
-                type="button"
+              />
+              <ChoiceRow
+                busy={importing}
                 disabled={busy}
+                icon={<FileSpreadsheet className="h-5 w-5" strokeWidth={1.75} />}
+                title={importing ? "Importando…" : "Resumen tarjeta"}
+                hint="Excel o PDF de cualquier banco"
                 onClick={() => cardRef.current?.click()}
-                className="flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-4 text-left transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)] active:scale-[0.99]"
-              >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--muted-fg)]">
-                  {importing ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <FileSpreadsheet className="h-5 w-5" strokeWidth={1.75} />
-                  )}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[15px] font-semibold tracking-tight text-[var(--foreground)]">
-                    {importing ? "Importando…" : "Importar tarjeta"}
-                  </span>
-                  <span className="mt-0.5 block text-sm text-[var(--muted-fg)]">
-                    Excel o PDF del resumen BBVA
-                  </span>
-                </span>
-              </button>
+              />
 
               {importNote && (
-                <p className="rounded-xl border border-[var(--border)] bg-[var(--brand-soft)] px-3 py-2.5 text-xs font-medium text-[var(--brand-fg)]">
+                <p className="mt-1 rounded-xl bg-[var(--brand-soft)] px-3 py-2 text-xs font-medium text-[var(--brand-fg)]">
                   {importNote}
                 </p>
               )}
               {error && (
-                <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+                <p className="mt-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
                   {error}
                 </p>
               )}
@@ -551,24 +558,25 @@ export function AddExpenseModal({
           )}
 
           {mode === "manual" && (
-            <div className="space-y-4">
+            <div className="space-y-3.5">
               {fromScan && scanNote && (
-                <div className="flex items-start justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--brand-soft)] px-3 py-2.5">
-                  <p className="text-xs font-medium leading-relaxed text-[var(--brand-fg)]">
+                <div className="flex items-center justify-between gap-2 rounded-xl bg-[var(--brand-soft)] px-3 py-2">
+                  <p className="text-xs font-medium text-[var(--brand-fg)]">
                     {scanNote}
                   </p>
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() => scanRef.current?.click()}
-                    className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold text-[var(--brand-fg)] hover:bg-[var(--surface)]"
+                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-[var(--brand-fg)] hover:bg-[var(--surface)]"
                   >
-                    {scanning ? "…" : "Otra foto"}
+                    <Camera className="h-3.5 w-3.5" />
+                    {scanning ? "…" : "Otra"}
                   </button>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <label className="block">
                   <FieldLabel>Fecha</FieldLabel>
                   <input
@@ -605,7 +613,7 @@ export function AddExpenseModal({
                 />
               </label>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <label className="block">
                   <FieldLabel>Pesos</FieldLabel>
                   <input
@@ -628,7 +636,7 @@ export function AddExpenseModal({
                 </label>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <label className="block">
                   <FieldLabel>Pagó</FieldLabel>
                   <select
@@ -667,14 +675,14 @@ export function AddExpenseModal({
                   })
                 }
                 className={cn(
-                  "flex w-full items-center justify-between rounded-xl border px-4 py-3 text-sm",
+                  "flex w-full items-center justify-between rounded-xl border px-3.5 py-2.5 text-sm",
                   complex
                     ? "border-[var(--brand)]/40 bg-[var(--brand-soft)]"
                     : "border-[var(--border)]",
                 )}
               >
                 <span className="font-medium text-[var(--foreground)]">
-                  Detalle por ítems
+                  Ítems
                 </span>
                 <span
                   className={cn(
@@ -692,7 +700,7 @@ export function AddExpenseModal({
               </button>
 
               {complex && (
-                <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/40 p-3">
+                <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/40 p-2.5">
                   {items.map((it, idx) => (
                     <div
                       key={it.key}
