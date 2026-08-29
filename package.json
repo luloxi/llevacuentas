@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "tsx --test src/lib/agent-token.test.ts src/lib/stats/month-expenses.test.ts src/lib/import/load-summary.test.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "test:parse": "tsx scripts/test-bbva-parse.ts",

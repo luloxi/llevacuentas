@@ -41,6 +41,40 @@ Abrí [http://localhost:3000](http://localhost:3000).
 
 En el dashboard de Vercel → Storage → create/connect Neon → copiá `DATABASE_URL`.
 
+## API para agentes (Cursor / Grok Bot)
+
+Los agentes no usan la cookie de la PWA. Un Bearer token llama las mismas operaciones de importar resumen y gastos del mes.
+
+### Secret
+
+En `.env.local` y en Vercel seteá **`AGENT_API_KEY`** (token largo, por ejemplo `openssl rand -hex 32`). No lo commitees.
+
+El token actúa como **lucianoolivabianco@gmail.com**. Hace falta haber iniciado sesión una vez en la app para que el usuario exista en la DB.
+
+Header en todas las llamadas: `Authorization: Bearer <AGENT_API_KEY>`
+
+### 1. Cargar un resumen (BBVA o Fiwind)
+
+`POST /api/agent/import` (multipart)
+
+- `file`: Excel o PDF de movimientos
+- `bank`: `BBVA` o `Fiwind` (u otro de la lista)
+- `kind`: `bbva` (default) o `transparencia`
+
+Equivalente: `POST /api/import/bbva` con el mismo header y form. El parser es el existente (`src/lib/import/bbva.ts`).
+
+### 2. Gastos del mes (números reales de la DB)
+
+`GET /api/agent/gastos-mes`
+
+Mes calendario en `America/Argentina/Buenos_Aires`. Otro mes: `?period=2026-07`.
+
+Respuesta: `totalArs`, `totalUsd`, `totalArsCombined`, `totalCount`, `categories[]` calculados desde `transactions`. Un mes vacío devuelve ceros — no hay totales inventados.
+
+También: `GET /api/stats/mes-a-mes?period=current` (payload más grande, el de la UI).
+
+Tests: `npm test`
+
 ## Scripts útiles
 
 ```bash
