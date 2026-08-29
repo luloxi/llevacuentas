@@ -1,6 +1,7 @@
 /** Bancos / medios de pago habituales en AR. */
 export const BANKS = [
   "BBVA",
+  "Fiwind",
   "Galicia",
   "Santander",
   "Macro",
