@@ -10,6 +10,7 @@ App web/PWA para llevar gastos de tarjeta **BBVA**, tickets de **supermercado** 
 - Gastos **personales o compartidos** (hogar de 2 personas) + balance de pareja.
 - Foto de **ticket de súper** → OCR → asocia al gasto bancario del día o lo crea.
 - Sección de **desglose por ítems** del ticket.
+- API autenticada para agentes (El Tano / Jurio): [docs/agent-api.md](docs/agent-api.md).
 
 ## Stack
 
@@ -40,6 +41,16 @@ Abrí [http://localhost:3000](http://localhost:3000).
 ### Neon en Vercel
 
 En el dashboard de Vercel → Storage → create/connect Neon → copiá `DATABASE_URL`.
+
+### Agentes (Cursor / Grok Bot)
+
+En Vercel (Production + Preview) agregá las variables de [docs/agent-api.md](docs/agent-api.md):
+`AGENT_API_TOKEN` (obligatorio), `AGENT_USER_ID` (recomendado), `AGENT_USER_EMAIL` (opcional).
+Mismo `AGENT_API_TOKEN` en el entorno del agente.
+
+```bash
+npm test
+```
 
 ## Scripts útiles
 
