@@ -9,6 +9,7 @@ import {
 } from "@/lib/fx/month-end-rates";
 import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
 import { isVisibleToUser } from "@/lib/transactions";
+import { currentPeriodAr } from "@/lib/utils";
 
 export async function GET(req: Request) {
   const authResult = await requireApiUser();
@@ -18,7 +19,10 @@ export async function GET(req: Request) {
   try {
     const ctx = await requireHousehold(sessionUser.id);
     const { searchParams } = new URL(req.url);
-    const periodParam = searchParams.get("period"); // YYYY-MM | "all" | null (latest)
+    let periodParam = searchParams.get("period"); // YYYY-MM | "all" | "current" | null (latest)
+    if (periodParam === "current" || periodParam === "mes") {
+      periodParam = currentPeriodAr();
+    }
 
     const db = getDb();
     const { byId, cats } = await getCategoryMap();
