@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { formatArs, formatUsd, cn } from "@/lib/utils";
-import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
+import { formatPeriodLabel, formatPeriodShort, isCurrentCalendarMonth } from "@/lib/period-label";
 import { CategoryIcon } from "@/lib/category-icons";
 import { colorForCategory } from "@/lib/category-colors";
 import { useTheme } from "@/components/theme-provider";
@@ -240,10 +240,12 @@ function VsPrevMeter({
   total,
   prevTotal,
   prevPeriod,
+  inProgressMonth,
 }: {
   total: number;
   prevTotal: number;
   prevPeriod: string;
+  inProgressMonth: boolean;
 }) {
   if (prevTotal <= 0 && total <= 0) return null;
 
@@ -264,17 +266,20 @@ function VsPrevMeter({
 
   return (
     <div className="mt-2.5 space-y-1.5">
-      <div className="relative h-1 overflow-hidden rounded-full bg-[var(--surface-muted)]">
-        <div
-          className={cn(
-            "h-full rounded-full transition-all duration-700 ease-out",
-            over ? "bg-amber-500/90" : "bg-[var(--brand)]",
-          )}
-          style={{ width: `${barPct}%` }}
-        />
-      </div>
+      {!inProgressMonth && (
+        <div className="relative h-1 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all duration-700 ease-out",
+              over ? "bg-amber-500/90" : "bg-[var(--brand)]",
+            )}
+            style={{ width: `${barPct}%` }}
+          />
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[11px]">
         <span className="text-[var(--muted-fg)]">
+          {inProgressMonth ? "mes en curso · " : ""}
           vs {formatPeriodShort(prevPeriod)}{" "}
           <span className="tabular-nums font-medium text-[var(--foreground)]/70">
             {formatArs(prevTotal)}
@@ -290,10 +295,12 @@ function VsPrevMeter({
             <DiffIcon className="h-3 w-3" />
             {diff > 0 ? "+" : ""}
             {formatArs(diff)}
-            <span className="ml-0.5 opacity-70">
-              ({Math.abs(pct - 100).toFixed(0)}%
-              {diff > 0 ? " más" : diff < 0 ? " menos" : ""})
-            </span>
+            {!inProgressMonth && (
+              <span className="ml-0.5 opacity-70">
+                ({Math.abs(pct - 100).toFixed(0)}%
+                {diff > 0 ? " más" : diff < 0 ? " menos" : ""})
+              </span>
+            )}
           </span>
         )}
       </div>
@@ -576,7 +583,7 @@ export function DashboardHome({
               </p>
               <p
                 className={cn(
-                  "mt-1 text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-4xl",
+                  "mt-1 text-4xl font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-5xl",
                   pop && "lc-amount-pop",
                 )}
               >
@@ -589,6 +596,7 @@ export function DashboardHome({
             total={liveTotal}
             prevTotal={prevTotalArs}
             prevPeriod={prevPeriod}
+            inProgressMonth={isCurrentCalendarMonth(period)}
           />
         </Link>
       ),
@@ -652,11 +660,11 @@ export function DashboardHome({
           {hasSavings ? (
             <>
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <p className="text-3xl font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-3xl">
+                <p className="text-4xl font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-5xl">
                   {formatArs(Math.round(savingsNetArs))}
                 </p>
                 <p className="text-[11px] text-[var(--muted-fg)]">
-                  neto en pesos
+                  neta en pesos
                 </p>
               </div>
               <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--muted-fg)]">
@@ -723,6 +731,7 @@ export function DashboardHome({
                 total={sharedTotalArs}
                 prevTotal={sharedPrevTotalArs}
                 prevPeriod={prevPeriod}
+                inProgressMonth={isCurrentCalendarMonth(period)}
               />
             </div>
             <TapHint />

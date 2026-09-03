@@ -19,3 +19,20 @@ export function formatPeriodShort(period: string): string {
     year: "2-digit",
   }).format(d);
 }
+
+/** YYYY-MM of today in America/Argentina/Buenos_Aires. */
+export function currentCalendarMonth(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(now);
+  const y = parts.find((x) => x.type === "year")?.value ?? "";
+  const m = parts.find((x) => x.type === "month")?.value ?? "";
+  return `${y}-${m}`;
+}
+
+/** True when period is the in-progress calendar month (not comparable to a full previous month). */
+export function isCurrentCalendarMonth(period: string, now = new Date()): boolean {
+  return period === currentCalendarMonth(now);
+}

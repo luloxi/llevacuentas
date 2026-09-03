@@ -15,7 +15,7 @@ export async function fetchEvmTotalUsd(address: string): Promise<{
 }> {
   const addr = address.trim().toLowerCase();
   if (!/^0x[a-f0-9]{40}$/.test(addr)) {
-    return { usd: null, error: "Dirección EVM inválida" };
+    return { usd: null };
   }
 
   const key =
@@ -24,59 +24,27 @@ export async function fetchEvmTotalUsd(address: string): Promise<{
     process.env.DEBANK_ACCESSKEY ||
     "";
 
-  try {
-    if (key) {
-      const res = await fetch(
-        `https://pro-openapi.debank.com/v1/user/total_balance?id=${encodeURIComponent(addr)}`,
-        {
-          headers: {
-            Accept: "application/json",
-            AccessKey: key,
-          },
-          next: { revalidate: 0 },
-        },
-      );
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        return {
-          usd: null,
-          error: `DeBank ${res.status}${text ? `: ${text.slice(0, 120)}` : ""}`,
-        };
-      }
-      const data = (await res.json()) as { total_usd_value?: number };
-      const usd = num(data.total_usd_value);
-      return { usd: usd ?? 0 };
-    }
+  // Sin clave no pegamos a la API pública (falla y ensucia la UI).
+  // El saldo EVM se carga a mano; DeBank es un link para chequear.
+  if (!key) return { usd: null };
 
+  try {
     const res = await fetch(
-      `https://api.debank.com/user/total_balance?id=${encodeURIComponent(addr)}`,
+      `https://pro-openapi.debank.com/v1/user/total_balance?id=${encodeURIComponent(addr)}`,
       {
         headers: {
           Accept: "application/json",
-          "User-Agent": "LlevaCuentas/1.0",
+          AccessKey: key,
         },
         next: { revalidate: 0 },
       },
     );
-    if (!res.ok) {
-      return {
-        usd: null,
-        error:
-          "DeBank sin acceso. Configurá DEBANK_ACCESS_KEY en Vercel o cargá el saldo manualmente.",
-      };
-    }
-    const data = (await res.json()) as {
-      data?: { total_usd_value?: number };
-      total_usd_value?: number;
-    };
-    const usd =
-      num(data.data?.total_usd_value) ?? num(data.total_usd_value);
+    if (!res.ok) return { usd: null };
+    const data = (await res.json()) as { total_usd_value?: number };
+    const usd = num(data.total_usd_value);
     return { usd: usd ?? 0 };
-  } catch (e) {
-    return {
-      usd: null,
-      error: e instanceof Error ? e.message : "Error consultando DeBank",
-    };
+  } catch {
+    return { usd: null };
   }
 }
 

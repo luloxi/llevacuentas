@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  ExternalLink,
   Landmark,
   Plus,
   RefreshCw,
@@ -39,6 +40,29 @@ type AddKind = "evm" | "cardano" | "bank" | null;
 
 function looksLikeEnsLabel(label: string) {
   return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(label.trim());
+}
+
+function debankProfileUrl(address: string | null | undefined): string | null {
+  if (!address) return null;
+  const addr = address.trim().toLowerCase();
+  if (!/^0x[a-f0-9]{40}$/.test(addr)) return null;
+  return `https://debank.com/profile/${addr}`;
+}
+
+function DebankLink({ address }: { address: string | null }) {
+  const href = debankProfileUrl(address);
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--brand-fg)] hover:underline"
+    >
+      ver en DeBank
+      <ExternalLink className="h-3 w-3" />
+    </a>
+  );
 }
 
 export function AhorrosView() {
@@ -119,8 +143,14 @@ export function AhorrosView() {
         ) {
           body.label = resolvedEvm.ens;
         }
+        if (amountUsd) {
+          body.amountUsd = Number(amountUsd.replace(",", "."));
+        }
       } else {
         body.address = address.trim();
+        if (amountUsd) {
+          body.amountUsd = Number(amountUsd.replace(",", "."));
+        }
       }
       const res = await fetch("/api/ahorros", {
         method: "POST",
@@ -145,6 +175,27 @@ export function AhorrosView() {
       const res = await fetch(`/api/ahorros?id=${encodeURIComponent(id)}`, {
         method: "DELETE",
         credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Error");
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    }
+  }
+
+  async function saveWalletUsd(id: string, usd: string) {
+    try {
+      const res = await fetch("/api/ahorros", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          id,
+          amountUsd: usd ? Number(usd.replace(",", ".")) : 0,
+        }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -273,7 +324,7 @@ export function AhorrosView() {
             {addKind === "bank"
               ? "Agregar banco"
               : addKind === "evm"
-                ? "Wallet EVM (DeBank)"
+                ? "Wallet EVM"
                 : "Wallet Cardano"}
           </p>
           <input
@@ -300,20 +351,42 @@ export function AhorrosView() {
               />
             </div>
           ) : addKind === "evm" ? (
-            <AddressInput
-              value={address}
-              onChange={setAddress}
-              onResolved={setResolvedEvm}
-              placeholder="0x… o nombre.eth"
-              disabled={saving}
-            />
+            <>
+              <AddressInput
+                value={address}
+                onChange={setAddress}
+                onResolved={setResolvedEvm}
+                placeholder="0x… o nombre.eth"
+                disabled={saving}
+              />
+              <DebankLink address={resolvedEvm?.address ?? null} />
+              <input
+                className="lc-input w-full"
+                inputMode="decimal"
+                placeholder="Saldo en USD (a mano)"
+                value={amountUsd}
+                onChange={(e) => setAmountUsd(e.target.value)}
+              />
+              <p className="text-[11px] text-[var(--muted-fg)]">
+                Cargá el saldo vos. El link abre esa wallet en DeBank para chequear.
+              </p>
+            </>
           ) : (
-            <input
-              className="lc-input w-full font-mono text-sm"
-              placeholder="addr1…"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
+            <>
+              <input
+                className="lc-input w-full font-mono text-sm"
+                placeholder="addr1…"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+              />
+              <input
+                className="lc-input w-full"
+                inputMode="decimal"
+                placeholder="Saldo en USD (a mano)"
+                value={amountUsd}
+                onChange={(e) => setAmountUsd(e.target.value)}
+              />
+            </>
           )}
           <div className="flex gap-2">
             <button
@@ -340,53 +413,19 @@ export function AhorrosView() {
           Wallets
         </h2>
         {wallets.length === 0 ? (
-          <Empty>Agregá una wallet EVM o Cardano para monitorear el saldo.</Empty>
+          <Empty>
+            Agregá una wallet y cargá el saldo a mano. Si es EVM te dejo el
+            link a esa wallet en DeBank para chequear.
+          </Empty>
         ) : (
           <ul className="space-y-2">
             {wallets.map((a) => (
-              <li
+              <WalletRow
                 key={a.id}
-                className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 space-y-1.5">
-                    <p className="text-sm font-medium">{a.label}</p>
-                    {a.kind === "evm" && a.address ? (
-                      <AddressDisplay
-                        address={a.address}
-                        ens={
-                          looksLikeEnsLabel(a.label) ? a.label : null
-                        }
-                      />
-                    ) : (
-                      <p className="font-mono text-[11px] text-[var(--muted-fg)]">
-                        {a.kind.toUpperCase()}
-                        {a.address
-                          ? ` · ${a.address.slice(0, 10)}…${a.address.slice(-6)}`
-                          : ""}
-                      </p>
-                    )}
-                    {a.syncError && (
-                      <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                        {a.syncError}
-                      </p>
-                    )}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold tabular-nums">
-                      {formatUsd(a.lastBalanceUsd ?? 0)}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => void remove(a.id)}
-                      className="mt-1 inline-flex text-[var(--muted-fg)] hover:text-red-600"
-                      aria-label="Eliminar"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </li>
+                asset={a}
+                onSave={saveWalletUsd}
+                onRemove={() => void remove(a.id)}
+              />
             ))}
           </ul>
         )}
@@ -442,6 +481,84 @@ function Empty({ children }: { children: React.ReactNode }) {
     <p className="rounded-2xl border border-dashed border-[var(--border)] px-4 py-6 text-center text-sm text-[var(--muted-fg)]">
       {children}
     </p>
+  );
+}
+
+
+function WalletRow({
+  asset,
+  onSave,
+  onRemove,
+}: {
+  asset: Asset;
+  onSave: (id: string, usd: string) => Promise<void>;
+  onRemove: () => void;
+}) {
+  const [usd, setUsd] = useState(String(asset.lastBalanceUsd ?? ""));
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setUsd(String(asset.lastBalanceUsd ?? ""));
+    setDirty(false);
+  }, [asset.lastBalanceUsd, asset.id]);
+
+  return (
+    <li className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="min-w-0 space-y-1.5">
+          <p className="text-sm font-medium">{asset.label}</p>
+          {asset.kind === "evm" && asset.address ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <AddressDisplay
+                address={asset.address}
+                ens={looksLikeEnsLabel(asset.label) ? asset.label : null}
+              />
+              <DebankLink address={asset.address} />
+            </div>
+          ) : (
+            <p className="font-mono text-[11px] text-[var(--muted-fg)]">
+              {asset.kind.toUpperCase()}
+              {asset.address
+                ? ` · ${asset.address.slice(0, 10)}…${asset.address.slice(-6)}`
+                : ""}
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-[var(--muted-fg)] hover:text-red-600"
+          aria-label="Eliminar"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div>
+        <p className="mb-1 text-[10px] font-semibold uppercase text-[var(--muted-fg)]">
+          Dólares
+        </p>
+        <input
+          className="lc-input w-full"
+          inputMode="decimal"
+          value={usd}
+          onChange={(e) => {
+            setUsd(e.target.value);
+            setDirty(true);
+          }}
+        />
+      </div>
+      {dirty && (
+        <button
+          type="button"
+          className="lc-btn lc-btn-primary mt-2 w-full !py-1.5 text-xs"
+          onClick={() =>
+            void onSave(asset.id, usd).then(() => setDirty(false))
+          }
+        >
+          Guardar cambios
+        </button>
+      )}
+    </li>
   );
 }
 

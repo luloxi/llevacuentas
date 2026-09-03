@@ -68,18 +68,16 @@ export async function GET(req: Request) {
 
     if (shouldRefresh) {
       for (const row of rows) {
-        if (row.kind === "bank" || !row.address) continue;
-        const result = await refreshWalletUsd(
-          row.kind as "evm" | "cardano",
-          row.address,
-        );
+        // EVM: saldo a mano. No pegar a DeBank ni guardar errores en la UI.
+        if (row.kind !== "cardano" || !row.address) continue;
+        const result = await refreshWalletUsd("cardano", row.address);
         await db
           .update(schema.savingsAssets)
           .set({
             lastBalanceUsd:
               result.usd != null ? String(result.usd) : row.lastBalanceUsd,
             lastSyncedAt: new Date(),
-            syncError: result.error ?? null,
+            syncError: null,
             updatedAt: new Date(),
           })
           .where(eq(schema.savingsAssets.id, row.id));
@@ -105,7 +103,7 @@ export async function GET(req: Request) {
         lastBalanceUsd:
           r.lastBalanceUsd != null ? n(r.lastBalanceUsd) : null,
         lastSyncedAt: r.lastSyncedAt?.toISOString() ?? null,
-        syncError: r.syncError,
+        syncError: null,
       })),
       summary,
     });
@@ -192,7 +190,12 @@ export async function POST(req: Request) {
       }
     }
 
-    const sync = await refreshWalletUsd(kind, address);
+    let lastBalanceUsd: string | null =
+      body.amountUsd != null ? String(body.amountUsd) : null;
+    if (kind === "cardano" && lastBalanceUsd == null) {
+      const sync = await refreshWalletUsd("cardano", address);
+      if (sync.usd != null) lastBalanceUsd = String(sync.usd);
+    }
     const [row] = await db
       .insert(schema.savingsAssets)
       .values({
@@ -201,9 +204,9 @@ export async function POST(req: Request) {
         kind,
         label,
         address,
-        lastBalanceUsd: sync.usd != null ? String(sync.usd) : null,
-        lastSyncedAt: new Date(),
-        syncError: sync.error ?? null,
+        lastBalanceUsd,
+        lastSyncedAt: lastBalanceUsd != null ? new Date() : null,
+        syncError: null,
       })
       .returning();
 
@@ -269,7 +272,13 @@ export async function PATCH(req: Request) {
         patch.amountUsd =
           body.amountUsd != null ? String(body.amountUsd) : null;
       }
-    } else if (body.address) {
+    } else if (body.amountUsd !== undefined) {
+      patch.lastBalanceUsd =
+        body.amountUsd != null ? String(body.amountUsd) : null;
+      patch.lastSyncedAt = new Date();
+      patch.syncError = null;
+    }
+    if (existing.kind !== "bank" && body.address) {
       let nextAddr = body.address.trim();
       if (existing.kind === "evm") {
         const resolved = await resolveEvmInput(nextAddr);
@@ -291,18 +300,14 @@ export async function PATCH(req: Request) {
 
     if (
       body.refresh &&
-      existing.kind !== "bank" &&
+      existing.kind === "cardano" &&
       (patch.address || existing.address)
     ) {
       const addr = (patch.address as string) || existing.address!;
-      const sync = await refreshWalletUsd(
-        existing.kind as "evm" | "cardano",
-        addr,
-      );
-      patch.lastBalanceUsd =
-        sync.usd != null ? String(sync.usd) : existing.lastBalanceUsd;
+      const sync = await refreshWalletUsd("cardano", addr);
+      if (sync.usd != null) patch.lastBalanceUsd = String(sync.usd);
       patch.lastSyncedAt = new Date();
-      patch.syncError = sync.error ?? null;
+      patch.syncError = null;
     }
 
     const [row] = await db
