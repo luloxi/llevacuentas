@@ -66,7 +66,7 @@ const DEFAULT_ORDER: HomeSectionId[] = [
 ];
 
 const SECTION_LABELS: Record<HomeSectionId, string> = {
-  gastos: "Tus gastos",
+  gastos: "Neta del mes",
   categorias: "Por categoría",
   ahorros: "Ahorros",
   hogar: "Hogar",
@@ -572,22 +572,25 @@ export function DashboardHome({
       gastos: (
         <Link
           href="/consumos?tab=lista"
-          className="group relative block h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5 transition active:scale-[0.99] md:px-6 md:py-5"
-          aria-label={`Tus gastos, ${formatArs(Math.round(displayTotal))}`}
+          className="group relative block h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-5 py-5 transition active:scale-[0.99] md:px-7 md:py-7"
+          aria-label={`Neta del mes, ${formatArs(Math.round(displayTotal))}`}
         >
           <SpendBurst active={burst} />
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--brand-fg)]">
-                Tus gastos
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--brand-fg)]">
+                Neta del mes
               </p>
               <p
                 className={cn(
-                  "mt-1 text-4xl font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-5xl",
+                  "mt-1 text-5xl font-semibold leading-none tabular-nums tracking-tight text-[var(--foreground)] md:text-7xl",
                   pop && "lc-amount-pop",
                 )}
               >
                 {formatArs(Math.round(displayTotal))}
+              </p>
+              <p className="mt-2 text-[11px] text-[var(--muted-fg)]">
+                pesos + dólares al TC del mes
               </p>
             </div>
             <TapHint />
@@ -660,11 +663,11 @@ export function DashboardHome({
           {hasSavings ? (
             <>
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <p className="text-4xl font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-5xl">
+                <p className="text-2xl font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-3xl">
                   {formatArs(Math.round(savingsNetArs))}
                 </p>
                 <p className="text-[11px] text-[var(--muted-fg)]">
-                  neta en pesos
+                  en pesos
                 </p>
               </div>
               <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--muted-fg)]">
