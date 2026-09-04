@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, Search, SlidersHorizontal, X,
 } from "lucide-react";
 import * as XLSX from "xlsx";
-import { formatArs, formatUsd, formatDateAr, cn, currentPeriodAr, periodFromDateString } from "@/lib/utils";
+import { formatArs, cn, currentPeriodAr, periodFromDateString } from "@/lib/utils";
 import { formatPeriodLabel } from "@/lib/period-label";
 import { LoadingBlock, Toast } from "@/components/ui";
 
@@ -247,6 +247,9 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
       if ("ownership" in body) {
         next.ownership = body.ownership === "shared" ? "shared" : "personal";
       }
+      if ("date" in body && typeof body.date === "string") next.date = body.date;
+      if ("amountArs" in body) next.amountArs = body.amountArs as number | null;
+      if ("amountUsd" in body) next.amountUsd = body.amountUsd as number | null;
       return next;
     }));
 
@@ -556,11 +559,58 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
                         <span className="truncate text-sm font-semibold">{r.descriptionNormalized}</span>
                         {isTicket && <span className="rounded-full bg-violet-600 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white dark:bg-violet-300 dark:text-violet-950">Ticket</span>}
                       </div>
-                      <p className="mt-0.5 text-xs text-zinc-500">{formatDateAr(r.date)}{r.installment ? ` · cuota ${r.installment}` : ""}</p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
+                        <input
+                          type="date"
+                          defaultValue={r.date}
+                          disabled={savingId === r.id}
+                          onBlur={(e) => {
+                            const v = e.target.value;
+                            if (v && v !== r.date) void patch(r.id, { date: v });
+                          }}
+                          className="lc-input !w-auto !px-1.5 !py-0.5 text-xs"
+                          aria-label="Fecha"
+                        />
+                        {r.installment ? <span>· cuota {r.installment}</span> : null}
+                      </div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-sm font-semibold tabular-nums">{formatArs(r.amountArs)}</p>
-                      {r.amountUsd != null && <p className="text-xs tabular-nums text-zinc-500">{formatUsd(r.amountUsd)}</p>}
+                    <div className="shrink-0 space-y-1 text-right">
+                      <label className="flex items-center justify-end gap-1">
+                        <span className="text-[10px] font-medium text-zinc-400">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          inputMode="decimal"
+                          defaultValue={r.amountArs ?? ""}
+                          disabled={savingId === r.id}
+                          onBlur={(e) => {
+                            const raw = e.target.value.trim();
+                            const next = raw === "" ? null : Number(raw);
+                            if (raw !== "" && Number.isNaN(next as number)) return;
+                            if (next !== r.amountArs) void patch(r.id, { amountArs: next });
+                          }}
+                          className="lc-input w-[7.5rem] !px-1.5 !py-0.5 text-right text-sm font-semibold tabular-nums"
+                          aria-label="Monto en pesos"
+                        />
+                      </label>
+                      <label className="flex items-center justify-end gap-1">
+                        <span className="text-[10px] font-medium text-zinc-400">USD</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          inputMode="decimal"
+                          defaultValue={r.amountUsd ?? ""}
+                          disabled={savingId === r.id}
+                          onBlur={(e) => {
+                            const raw = e.target.value.trim();
+                            const next = raw === "" ? null : Number(raw);
+                            if (raw !== "" && Number.isNaN(next as number)) return;
+                            if (next !== r.amountUsd) void patch(r.id, { amountUsd: next });
+                          }}
+                          className="lc-input w-[7.5rem] !px-1.5 !py-0.5 text-right text-xs tabular-nums text-zinc-600"
+                          aria-label="Monto en dólares"
+                        />
+                      </label>
                     </div>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2">
@@ -648,14 +698,58 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
                             </button>
                           )}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-zinc-600">{formatDateAr(r.date)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-zinc-600">
+                          <input
+                            type="date"
+                            defaultValue={r.date}
+                            disabled={savingId === r.id}
+                            onBlur={(e) => {
+                              const v = e.target.value;
+                              if (v && v !== r.date) void patch(r.id, { date: v });
+                            }}
+                            className="lc-input !w-auto !px-1.5 !py-1 text-xs"
+                            aria-label="Fecha"
+                          />
+                        </td>
                         <td className="max-w-xs px-3 py-2">
                           <span className="truncate font-medium">{r.descriptionNormalized}</span>
                           {isTicket && <span className="ml-1.5 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold uppercase text-white dark:bg-violet-300 dark:text-violet-950">Ticket</span>}
                           {r.installment && <div className="text-xs text-zinc-500">cuota {r.installment}</div>}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2 tabular-nums">{formatArs(r.amountArs)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 tabular-nums">{formatUsd(r.amountUsd)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 tabular-nums">
+                          <input
+                            type="number"
+                            step="0.01"
+                            inputMode="decimal"
+                            defaultValue={r.amountArs ?? ""}
+                            disabled={savingId === r.id}
+                            onBlur={(e) => {
+                              const raw = e.target.value.trim();
+                              const next = raw === "" ? null : Number(raw);
+                              if (raw !== "" && Number.isNaN(next as number)) return;
+                              if (next !== r.amountArs) void patch(r.id, { amountArs: next });
+                            }}
+                            className="lc-input w-[7.5rem] !px-1.5 !py-1 text-right text-sm tabular-nums"
+                            aria-label="Monto en pesos"
+                          />
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 tabular-nums">
+                          <input
+                            type="number"
+                            step="0.01"
+                            inputMode="decimal"
+                            defaultValue={r.amountUsd ?? ""}
+                            disabled={savingId === r.id}
+                            onBlur={(e) => {
+                              const raw = e.target.value.trim();
+                              const next = raw === "" ? null : Number(raw);
+                              if (raw !== "" && Number.isNaN(next as number)) return;
+                              if (next !== r.amountUsd) void patch(r.id, { amountUsd: next });
+                            }}
+                            className="lc-input w-[7rem] !px-1.5 !py-1 text-right text-sm tabular-nums"
+                            aria-label="Monto en dólares"
+                          />
+                        </td>
                         <td className="px-3 py-2">
                           {isTicket ? (
                             <span className="rounded-md bg-violet-100 px-2 py-1 text-xs font-medium text-violet-900 dark:bg-violet-900/50 dark:text-violet-100">{categoryLabel(r.category?.name) || "Supermercado"}</span>

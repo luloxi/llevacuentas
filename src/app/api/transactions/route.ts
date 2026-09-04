@@ -369,6 +369,19 @@ export async function PATCH(req: Request) {
       nextPaidBy = sessionUser.id;
     }
 
+    const amountArs =
+      "amountArs" in body
+        ? body.amountArs == null || body.amountArs === ""
+          ? null
+          : Number(body.amountArs)
+        : undefined;
+    const amountUsd =
+      "amountUsd" in body
+        ? body.amountUsd == null || body.amountUsd === ""
+          ? null
+          : Number(body.amountUsd)
+        : undefined;
+
     const row = await updateTransaction(ctx.household.id, body.id, {
       categoryId: body.categoryId,
       ownership: nextOwnership,
@@ -378,6 +391,12 @@ export async function PATCH(req: Request) {
         "bank" in body
           ? normalizeBank(body.bank as string | null | undefined)
           : undefined,
+      date:
+        "date" in body && body.date != null && body.date !== ""
+          ? String(body.date).trim()
+          : undefined,
+      amountArs,
+      amountUsd,
     });
 
     let learned = 0;

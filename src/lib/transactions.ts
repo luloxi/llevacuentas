@@ -92,12 +92,52 @@ export async function updateTransaction(
     paidByUserId?: string | null;
     splitPct?: number;
     bank?: string | null;
+    date?: string;
+    amountArs?: number | null;
+    amountUsd?: number | null;
   },
 ) {
   const db = getDb();
+
+  if (patch.date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(patch.date)) {
+    throw new Error("Fecha inválida (YYYY-MM-DD)");
+  }
+
+  const { amountArs, amountUsd, ...rest } = patch;
+  const set: {
+    categoryId?: string | null;
+    ownership?: "personal" | "shared";
+    paidByUserId?: string | null;
+    splitPct?: number;
+    bank?: string | null;
+    date?: string;
+    amountArs?: string | null;
+    amountUsd?: string | null;
+    updatedAt: Date;
+  } = { ...rest, updatedAt: new Date() };
+
+  if ("amountArs" in patch) {
+    if (amountArs == null) {
+      set.amountArs = null;
+    } else {
+      const n = Number(amountArs);
+      if (Number.isNaN(n)) throw new Error("Monto $ inválido");
+      set.amountArs = String(Math.abs(n));
+    }
+  }
+  if ("amountUsd" in patch) {
+    if (amountUsd == null) {
+      set.amountUsd = null;
+    } else {
+      const n = Number(amountUsd);
+      if (Number.isNaN(n)) throw new Error("Monto USD inválido");
+      set.amountUsd = String(Math.abs(n));
+    }
+  }
+
   const [row] = await db
     .update(schema.transactions)
-    .set({ ...patch, updatedAt: new Date() })
+    .set(set)
     .where(
       and(
         eq(schema.transactions.id, id),
