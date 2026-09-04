@@ -1,6 +1,6 @@
 /**
  * Live FX quotes for the home dashboard.
- * - Blue: dolarapi.com
+ * - Blue: dolarapi.com (compra + venta + spread)
  * - BBVA compra: oficial buy (BBVA tracks the official retail band; no public BBVA feed)
  * - USDC Fiwind: comparadolar.ar fiwind-cripto
  */
@@ -8,7 +8,12 @@
 export type LiveRate = {
   id: "blue" | "bbva" | "usdc";
   label: string;
+  /** Primary display value (Blue: venta; BBVA: compra; USDC: ask). */
   value: number | null;
+  buy?: number | null;
+  sell?: number | null;
+  /** venta - compra when both present */
+  spread?: number | null;
   hint?: string;
 };
 
@@ -94,17 +99,26 @@ export async function getLiveRates(): Promise<LiveRatesResult> {
     fetchFiwindUsdc(),
   ]);
 
+  const blueBuy = blue.buy;
+  const blueSell = blue.sell;
+  const blueSpread =
+    blueBuy != null && blueSell != null ? blueSell - blueBuy : null;
+
   const rates: LiveRate[] = [
     {
       id: "blue",
       label: "Blue",
-      value: blue.sell ?? blue.buy,
+      value: blueSell ?? blueBuy,
+      buy: blueBuy,
+      sell: blueSell,
+      spread: blueSpread,
       hint: "venta",
     },
     {
       id: "bbva",
       label: "BBVA",
       value: bbvaBuy,
+      buy: bbvaBuy,
       hint: "compra",
     },
     {

@@ -217,6 +217,31 @@ export async function ensureSchema() {
       `,
       sql`CREATE INDEX IF NOT EXISTS savings_user_idx ON savings_assets(user_id)`,
       sql`CREATE INDEX IF NOT EXISTS savings_household_idx ON savings_assets(household_id)`,
+      sql`
+        CREATE TABLE IF NOT EXISTS debt_settings (
+          user_id text PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          rate_pct numeric(8,4),
+          min_payment_ars numeric(14,2),
+          due_day integer,
+          notes text,
+          updated_at timestamp DEFAULT now() NOT NULL
+        )
+      `,
+      sql`
+        CREATE TABLE IF NOT EXISTS incomes (
+          id text PRIMARY KEY,
+          user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          household_id text NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+          date text NOT NULL,
+          label text NOT NULL,
+          amount_ars numeric(14,2),
+          amount_usd numeric(14,2),
+          created_at timestamp DEFAULT now() NOT NULL,
+          updated_at timestamp DEFAULT now() NOT NULL
+        )
+      `,
+      sql`CREATE INDEX IF NOT EXISTS incomes_user_idx ON incomes(user_id)`,
+      sql`CREATE INDEX IF NOT EXISTS incomes_household_date_idx ON incomes(household_id, date)`,
     ];
 
     for (const statement of statements) {

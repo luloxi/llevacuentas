@@ -234,6 +234,45 @@ export const savingsAssets = pgTable(
   ],
 );
 
+
+export const debtSettings = pgTable("debt_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** Tasa nominal anual (TNA) en %. Ej: 90 = 90% TNA. */
+  ratePct: numeric("rate_pct", { precision: 8, scale: 4 }),
+  minPaymentArs: numeric("min_payment_ars", { precision: 14, scale: 2 }),
+  /** Día de vencimiento del mes (1–31). */
+  dueDay: integer("due_day"),
+  notes: text("notes"),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const incomes = pgTable(
+  "incomes",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    date: text("date").notNull(),
+    label: text("label").notNull(),
+    amountArs: numeric("amount_ars", { precision: 14, scale: 2 }),
+    amountUsd: numeric("amount_usd", { precision: 14, scale: 2 }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("incomes_user_idx").on(t.userId),
+    index("incomes_household_date_idx").on(t.householdId, t.date),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Household = typeof households.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
@@ -241,3 +280,5 @@ export type Category = typeof categories.$inferSelect;
 export type Receipt = typeof receipts.$inferSelect;
 export type ReceiptItem = typeof receiptItems.$inferSelect;
 export type SavingsAsset = typeof savingsAssets.$inferSelect;
+export type DebtSettings = typeof debtSettings.$inferSelect;
+export type Income = typeof incomes.$inferSelect;

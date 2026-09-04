@@ -85,3 +85,23 @@ export function currentPeriodAr(): string {
   }
   return periodFromDate(new Date());
 }
+
+/** Hoy como YYYY-MM-DD en America/Argentina/Buenos_Aires. */
+export function todayDateAr(): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const y = parts.find((p) => p.type === "year")?.value;
+    const mo = parts.find((p) => p.type === "month")?.value;
+    const d = parts.find((p) => p.type === "day")?.value;
+    if (y && mo && d) return `${y}-${mo}-${d}`;
+  } catch {
+    /* fall through */
+  }
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+}

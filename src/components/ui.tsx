@@ -203,6 +203,98 @@ export function LoadingBlock({ label = "Cargando…" }: { label?: string }) {
   );
 }
 
+/** Home: wide hero + grid of cards (mirrors dashboard layout). */
+export function DashboardSkeleton() {
+  return (
+    <div
+      className="mx-auto flex w-full max-w-lg flex-col gap-3 md:max-w-5xl md:gap-4"
+      role="status"
+      aria-live="polite"
+      aria-label="Cargando inicio"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="space-y-2">
+          <div className="skeleton h-4 w-28" />
+          <div className="skeleton h-3 w-20" />
+        </div>
+        <div className="flex gap-1.5">
+          <div className="skeleton h-8 w-8 !rounded-full" />
+          <div className="skeleton h-8 w-8 !rounded-full" />
+        </div>
+      </div>
+      <div className="skeleton h-36 w-full !rounded-2xl md:h-44" />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
+        <div className="skeleton h-28 w-full !rounded-2xl" />
+        <div className="skeleton h-28 w-full !rounded-2xl" />
+        <div className="skeleton h-24 w-full !rounded-2xl" />
+        <div className="skeleton h-24 w-full !rounded-2xl" />
+        <div className="skeleton h-16 w-full !rounded-2xl md:col-span-2" />
+      </div>
+    </div>
+  );
+}
+
+/** Lista de consumos/gastos: filas skeleton. */
+export function ListSkeleton({
+  rows = 6,
+  label = "Cargando…",
+}: {
+  rows?: number;
+  label?: string;
+}) {
+  return (
+    <div className="space-y-2" role="status" aria-live="polite" aria-label={label}>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="skeleton h-5 w-24" />
+        <div className="skeleton h-8 w-28 !rounded-full" />
+      </div>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3"
+        >
+          <div className="skeleton h-9 w-9 shrink-0 !rounded-xl" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="skeleton h-3.5 w-3/5" />
+            <div className="skeleton h-2.5 w-2/5" />
+          </div>
+          <div className="skeleton h-4 w-16 shrink-0" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Hogar / compartido: summary + filas. */
+export function HogarSkeleton({ label = "Cargando hogar…" }: { label?: string }) {
+  return (
+    <div className="space-y-3" role="status" aria-live="polite" aria-label={label}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="skeleton h-5 w-28" />
+        <div className="skeleton h-9 w-40 !rounded-full" />
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="skeleton h-20 w-full !rounded-2xl" />
+        <div className="skeleton h-20 w-full !rounded-2xl" />
+        <div className="skeleton h-20 w-full !rounded-2xl col-span-2 sm:col-span-1" />
+      </div>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3"
+        >
+          <div className="skeleton h-8 w-8 shrink-0 !rounded-lg" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="skeleton h-3.5 w-1/2" />
+            <div className="skeleton h-2.5 w-1/3" />
+          </div>
+          <div className="skeleton h-4 w-14 shrink-0" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Toast({
   children,
   tone = "ok",

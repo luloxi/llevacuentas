@@ -7,7 +7,7 @@ import {
 import * as XLSX from "xlsx";
 import { formatArs, cn, currentPeriodAr, periodFromDateString } from "@/lib/utils";
 import { formatPeriodLabel } from "@/lib/period-label";
-import { LoadingBlock, Toast } from "@/components/ui";
+import { ListSkeleton, Toast } from "@/components/ui";
 
 type Category = { id: string; slug: string; name: string };
 type Member = { userId: string; name: string };
@@ -534,7 +534,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
       {toast && <Toast>{toast}</Toast>}
 
       {loading && !rows.length ? (
-        <LoadingBlock label="Cargando consumos…" />
+        <ListSkeleton label="Cargando consumos…" />
       ) : !sorted.length ? (
         <p className="rounded-2xl border border-dashed border-zinc-200 px-4 py-12 text-center text-sm text-zinc-500 dark:border-zinc-800">
           {activeFilterCount > 0

@@ -4,7 +4,7 @@ import { getUserHousehold } from "@/lib/household";
 import { hasDatabase } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { CompartidoView } from "@/components/compartido-view";
-import { LoadingBlock } from "@/components/ui";
+import { HogarSkeleton } from "@/components/ui";
 
 export default async function CompartidoPage() {
   const user = await requireUser();
@@ -13,7 +13,7 @@ export default async function CompartidoPage() {
   if (!ctx) redirect("/onboarding");
 
   return (
-    <Suspense fallback={<LoadingBlock label="Cargando hogar…" />}>
+    <Suspense fallback={<HogarSkeleton />}>
       <CompartidoView />
     </Suspense>
   );

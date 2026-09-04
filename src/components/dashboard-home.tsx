@@ -41,6 +41,9 @@ type LiveRate = {
   id: string;
   label: string;
   value: number | null;
+  buy?: number | null;
+  sell?: number | null;
+  spread?: number | null;
   hint?: string;
 };
 
@@ -339,32 +342,89 @@ function ThemeToggle() {
 }
 
 function RatesStrip({ rates }: { rates: LiveRate[] }) {
-  const visible = rates.filter((r) => r.value != null && r.value > 0);
-  if (visible.length === 0) return null;
+  const blue = rates.find((r) => r.id === "blue");
+  const others = rates.filter(
+    (r) => r.id !== "blue" && r.value != null && r.value > 0,
+  );
+  const hasBlue =
+    blue &&
+    ((blue.buy != null && blue.buy > 0) ||
+      (blue.sell != null && blue.sell > 0) ||
+      (blue.value != null && blue.value > 0));
+
+  if (!hasBlue && others.length === 0) return null;
+
+  const compra = blue?.buy ?? null;
+  const venta = blue?.sell ?? blue?.value ?? null;
+  const spread =
+    blue?.spread != null
+      ? blue.spread
+      : compra != null && venta != null
+        ? venta - compra
+        : null;
 
   return (
-    <div
-      className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--border)] md:grid-cols-3"
-      aria-label="Cotizaciones del dólar"
-    >
-      {visible.map((r) => (
-        <div
-          key={r.id}
-          className="flex flex-col items-center gap-0.5 bg-[var(--surface)] px-2 py-2.5 text-center md:py-3.5"
-        >
-          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-fg)]">
-            {r.label}
-          </span>
-          <span className="text-base font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-lg">
-            ${formatRate(r.value!)}
-          </span>
-          {r.hint && (
-            <span className="text-[9px] font-medium text-[var(--muted-fg)]/80">
-              {r.hint}
-            </span>
-          )}
+    <div className="space-y-px overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--border)]" aria-label="Cotizaciones del dólar">
+      {hasBlue && (
+        <div className="bg-[var(--surface)] px-3 py-3 md:px-4 md:py-3.5">
+          <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-fg)]">
+            Blue
+          </p>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div>
+              <p className="text-[9px] font-medium uppercase tracking-wide text-[var(--muted-fg)]/80">
+                Compra
+              </p>
+              <p className="mt-0.5 text-base font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-lg">
+                {compra != null ? `$${formatRate(compra)}` : "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-[9px] font-medium uppercase tracking-wide text-[var(--muted-fg)]/80">
+                Venta
+              </p>
+              <p className="mt-0.5 text-base font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-lg">
+                {venta != null ? `$${formatRate(venta)}` : "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-[9px] font-medium uppercase tracking-wide text-[var(--muted-fg)]/80">
+                Spread
+              </p>
+              <p className="mt-0.5 text-base font-semibold tabular-nums tracking-tight text-[var(--brand-fg)] md:text-lg">
+                {spread != null ? `$${formatRate(spread)}` : "—"}
+              </p>
+            </div>
+          </div>
         </div>
-      ))}
+      )}
+      {others.length > 0 && (
+        <div
+          className={cn(
+            "grid gap-px",
+            others.length === 1 ? "grid-cols-1" : "grid-cols-2",
+          )}
+        >
+          {others.map((r) => (
+            <div
+              key={r.id}
+              className="flex flex-col items-center gap-0.5 bg-[var(--surface)] px-2 py-2.5 text-center md:py-3"
+            >
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-fg)]">
+                {r.label}
+              </span>
+              <span className="text-base font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-lg">
+                ${formatRate(r.value!)}
+              </span>
+              {r.hint && (
+                <span className="text-[9px] font-medium text-[var(--muted-fg)]/80">
+                  {r.hint}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -492,6 +552,7 @@ export function DashboardHome({
   savingsUsd = 0,
   savingsUsdc = 0,
   savingsNetArs = 0,
+  incomeArs = 0,
 }: {
   firstName: string;
   period: string;
@@ -510,6 +571,8 @@ export function DashboardHome({
   savingsUsd?: number;
   savingsUsdc?: number;
   savingsNetArs?: number;
+  /** Ingresos del mes en ARS (USD ya convertidos). 0 = sin ingresos cargados. */
+  incomeArs?: number;
   householdName?: string;
   initialCategories?: unknown;
   initialMembers?: unknown;
@@ -536,6 +599,9 @@ export function DashboardHome({
   }, [totalArs, categorySummary]);
 
   const displayTotal = useCountUp(liveTotal, 750);
+  const hasIncomes = incomeArs > 0;
+  const heroTarget = hasIncomes ? incomeArs - liveTotal : liveTotal;
+  const heroAmount = useCountUp(heroTarget, 750);
 
   const triggerCelebrate = useCallback(() => {
     setBurst(true);
@@ -570,38 +636,80 @@ export function DashboardHome({
   const sections = useMemo(() => {
     const map: Record<HomeSectionId, React.ReactNode> = {
       gastos: (
-        <Link
-          href="/consumos?tab=lista"
-          className="group relative block h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-5 py-5 transition active:scale-[0.99] md:px-7 md:py-7"
-          aria-label={`Neta del mes, ${formatArs(Math.round(displayTotal))}`}
-        >
-          <SpendBurst active={burst} />
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--brand-fg)]">
-                Neta del mes
-              </p>
-              <p
-                className={cn(
-                  "mt-1 text-5xl font-semibold leading-none tabular-nums tracking-tight text-[var(--foreground)] md:text-7xl",
-                  pop && "lc-amount-pop",
+        <div className="space-y-2">
+          <Link
+            href="/consumos?tab=lista"
+            className="group relative block h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-5 py-5 transition active:scale-[0.99] md:px-7 md:py-7"
+            aria-label={
+              hasIncomes
+                ? `Neta del mes, ${formatArs(Math.round(heroAmount))}`
+                : `Gastos del mes, ${formatArs(Math.round(displayTotal))}`
+            }
+          >
+            <SpendBurst active={burst} />
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--brand-fg)]">
+                  Neta del mes
+                </p>
+                <p
+                  className={cn(
+                    "mt-1 text-5xl font-semibold leading-none tabular-nums tracking-tight text-[var(--foreground)] md:text-7xl",
+                    pop && "lc-amount-pop",
+                    hasIncomes && heroAmount < 0 && "text-red-700 dark:text-red-300",
+                  )}
+                >
+                  {formatArs(Math.round(heroAmount))}
+                </p>
+                <p className="mt-2 text-[11px] text-[var(--muted-fg)]">
+                  {hasIncomes
+                    ? "ingresos − gastos · pesos + USD al TC del mes"
+                    : "pesos + dólares al TC del mes"}
+                </p>
+                {hasIncomes && (
+                  <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--muted-fg)]">
+                    <span>
+                      Ingresos{" "}
+                      <span className="tabular-nums font-medium text-[var(--brand-fg)]">
+                        {formatArs(Math.round(incomeArs))}
+                      </span>
+                    </span>
+                    <span>
+                      Gastos{" "}
+                      <span className="tabular-nums font-medium text-[var(--foreground)]/80">
+                        {formatArs(Math.round(liveTotal))}
+                      </span>
+                    </span>
+                  </div>
                 )}
-              >
-                {formatArs(Math.round(displayTotal))}
+              </div>
+              <TapHint />
+            </div>
+            <VsPrevMeter
+              total={liveTotal}
+              prevTotal={prevTotalArs}
+              prevPeriod={prevPeriod}
+              inProgressMonth={isCurrentCalendarMonth(period)}
+            />
+          </Link>
+          <Link
+            href="/ingresos"
+            className="group flex items-center justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 transition active:scale-[0.99]"
+            aria-label="Ingresos del mes"
+          >
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-fg)]">
+                Ingresos del mes
               </p>
-              <p className="mt-2 text-[11px] text-[var(--muted-fg)]">
-                pesos + dólares al TC del mes
+              <p className="text-sm font-semibold tabular-nums text-[var(--foreground)]">
+                {hasIncomes
+                  ? formatArs(Math.round(incomeArs))
+                  : "Cargá sueldos u otros ingresos"}
               </p>
             </div>
             <TapHint />
-          </div>
-          <VsPrevMeter
-            total={liveTotal}
-            prevTotal={prevTotalArs}
-            prevPeriod={prevPeriod}
-            inProgressMonth={isCurrentCalendarMonth(period)}
-          />
-        </Link>
+          </Link>
+        </div>
       ),
       categorias:
         liveCats.length > 0 ? (
@@ -794,6 +902,9 @@ export function DashboardHome({
     order,
     hidden,
     displayTotal,
+    heroAmount,
+    hasIncomes,
+    incomeArs,
     burst,
     pop,
     liveTotal,
@@ -811,6 +922,7 @@ export function DashboardHome({
     debtSettled,
     debtBalanceArs,
     liveRates,
+    period,
   ]);
 
   return (

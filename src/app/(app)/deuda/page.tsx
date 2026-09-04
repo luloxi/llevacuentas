@@ -4,7 +4,7 @@ import { getUserHousehold } from "@/lib/household";
 import { hasDatabase } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { DeudaView } from "@/components/deuda-view";
-import { LoadingBlock } from "@/components/ui";
+import { ListSkeleton } from "@/components/ui";
 
 export default async function DeudaPage() {
   const user = await requireUser();
@@ -13,7 +13,7 @@ export default async function DeudaPage() {
   if (!ctx) redirect("/onboarding");
 
   return (
-    <Suspense fallback={<LoadingBlock label="Cargando deuda…" />}>
+    <Suspense fallback={<ListSkeleton label="Cargando deuda…" rows={5} />}>
       <DeudaView />
     </Suspense>
   );

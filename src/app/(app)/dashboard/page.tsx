@@ -92,13 +92,17 @@ export default async function DashboardPage() {
     (t) => periodFromDateString(t.date) === prevPeriod,
   );
 
-  const [rates, liveRatesResult, savingsRows] = await Promise.all([
+  const [rates, liveRatesResult, savingsRows, incomeRows] = await Promise.all([
     getMonthEndBuyRates([period, prevPeriod]),
     getLiveRates(),
     db
       .select()
       .from(schema.savingsAssets)
       .where(eq(schema.savingsAssets.userId, user.id)),
+    db
+      .select()
+      .from(schema.incomes)
+      .where(eq(schema.incomes.userId, user.id)),
   ]);
   const rateNow = rates.get(period)?.buy ?? 0;
   const ratePrev = rates.get(prevPeriod)?.buy ?? 0;
@@ -118,6 +122,17 @@ export default async function DashboardPage() {
 
   const totalArs = totalCombined(monthTx, rateNow);
   const prevTotalArs = totalCombined(prevMonthTx, ratePrev);
+
+  const monthIncomes = incomeRows.filter(
+    (r) => periodFromDateString(r.date) === period,
+  );
+  let incomeArs = 0;
+  for (const r of monthIncomes) {
+    if (r.amountArs != null) incomeArs += Math.abs(Number(r.amountArs));
+    if (r.amountUsd != null) {
+      incomeArs += convertUsdToArs(Math.abs(Number(r.amountUsd)), rateNow);
+    }
+  }
   const sharedTotalArs = totalCombined(sharedMonthTx, rateNow);
   const sharedPrevTotalArs = totalCombined(sharedPrevTx, ratePrev);
 
@@ -246,6 +261,7 @@ export default async function DashboardPage() {
       savingsUsd={savingsUsd}
       savingsUsdc={savingsUsdc}
       savingsNetArs={savingsNetArs}
+      incomeArs={incomeArs}
     />
   );
 }

@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { cn, formatArs, formatUsd, formatDateAr } from "@/lib/utils";
 import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
 import {
-  LoadingBlock,
+  FieldLabel,
+  ListSkeleton,
   SegmentedControl,
   Surface,
 } from "@/components/ui";
@@ -48,6 +49,13 @@ type Summary = {
   monthCount: number;
   monthsPaidInFull?: number;
   settled?: boolean;
+};
+
+type DebtSettings = {
+  ratePct: number | null;
+  minPaymentArs: number | null;
+  dueDay: number | null;
+  notes: string | null;
 };
 
 type DebtTab = "evolucion" | "pagos";
@@ -318,6 +326,37 @@ function MonthCard({ m }: { m: MonthRow }) {
   );
 }
 
+
+function nextDueLabel(dueDay: number | null): string | null {
+  if (dueDay == null || dueDay < 1 || dueDay > 31) return null;
+  const now = new Date();
+  // Rough calendar in local TZ is fine for display
+  let y = now.getFullYear();
+  let m = now.getMonth(); // 0-based
+  const today = now.getDate();
+  if (today > dueDay) {
+    m += 1;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+  }
+  const dim = new Date(y, m + 1, 0).getDate();
+  const day = Math.min(dueDay, dim);
+  const d = String(day).padStart(2, "0");
+  const mo = String(m + 1).padStart(2, "0");
+  return `${d}/${mo}/${y}`;
+}
+
+/** Estimación simple: (TNA% / 100 / 12) * saldo. */
+function estimateMonthlyInterest(
+  balanceArs: number,
+  ratePct: number | null,
+): number | null {
+  if (ratePct == null || ratePct <= 0 || balanceArs <= 0) return null;
+  return (balanceArs * ratePct) / 100 / 12;
+}
+
 export function DeudaView() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -330,6 +369,18 @@ export function DeudaView() {
   const [tab, setTab] = useState<DebtTab>(() =>
     tabFromParam(searchParams.get("tab")),
   );
+  const [settings, setSettings] = useState<DebtSettings>({
+    ratePct: null,
+    minPaymentArs: null,
+    dueDay: null,
+    notes: null,
+  });
+  const [rateInput, setRateInput] = useState("");
+  const [minInput, setMinInput] = useState("");
+  const [dueInput, setDueInput] = useState("");
+  const [notesInput, setNotesInput] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
 
   useEffect(() => {
     setTab(tabFromParam(searchParams.get("tab")));
@@ -348,14 +399,26 @@ export function DeudaView() {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch("/api/stats/deuda", { credentials: "include" });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Error");
+        const [debtRes, setRes] = await Promise.all([
+          fetch("/api/stats/deuda", { credentials: "include" }),
+          fetch("/api/debt-settings", { credentials: "include" }),
+        ]);
+        const data = await debtRes.json();
+        if (!debtRes.ok) throw new Error(data.error || "Error");
+        const setData = await setRes.json();
         if (cancelled) return;
         setMonths(data.months ?? []);
         setChartMonths(data.chartMonths ?? []);
         setPayments(data.payments ?? []);
         setSummary(data.summary ?? null);
+        if (setRes.ok && setData.settings) {
+          const s = setData.settings as DebtSettings;
+          setSettings(s);
+          setRateInput(s.ratePct != null ? String(s.ratePct) : "");
+          setMinInput(s.minPaymentArs != null ? String(s.minPaymentArs) : "");
+          setDueInput(s.dueDay != null ? String(s.dueDay) : "");
+          setNotesInput(s.notes ?? "");
+        }
       } catch (e) {
         if (!cancelled)
           setError(e instanceof Error ? e.message : "Error de red");
@@ -368,8 +431,37 @@ export function DeudaView() {
     };
   }, []);
 
+  async function saveSettings() {
+    setSavingSettings(true);
+    setSettingsMsg(null);
+    try {
+      const res = await fetch("/api/debt-settings", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ratePct: rateInput.trim() ? Number(rateInput.replace(",", ".")) : null,
+          minPaymentArs: minInput.trim()
+            ? Number(minInput.replace(",", "."))
+            : null,
+          dueDay: dueInput.trim() ? Number(dueInput) : null,
+          notes: notesInput.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error");
+      const s = data.settings as DebtSettings;
+      setSettings(s);
+      setSettingsMsg("Guardado");
+    } catch (e) {
+      setSettingsMsg(e instanceof Error ? e.message : "Error");
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
   if (loading) {
-    return <LoadingBlock label="Calculando deuda y pagos…" />;
+    return <ListSkeleton label="Calculando deuda y pagos…" rows={5} />;
   }
   if (error) {
     return (
@@ -382,9 +474,104 @@ export function DeudaView() {
   const onlyPayments = payments.filter((p) => p.kind === "payment");
   const settled = summary?.settled || (summary?.currentBalanceArs ?? 0) <= 0;
   const paymentRows = onlyPayments.length ? onlyPayments : payments;
+  const balance = Math.max(summary?.currentBalanceArs ?? 0, 0);
+  const interestEst = estimateMonthlyInterest(balance, settings.ratePct);
+  const dueLabel = nextDueLabel(settings.dueDay);
 
   return (
     <div className="space-y-3">
+      <Surface className="space-y-3 !p-4">
+        <div>
+          <h2 className="text-sm font-semibold tracking-tight">Tu tarjeta</h2>
+          <p className="text-[11px] text-zinc-500">
+            Tasa, mínimo y vencimiento · estimado simple, sin capitalización
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div>
+            <FieldLabel>Tasa TNA %</FieldLabel>
+            <input
+              className="lc-input w-full"
+              inputMode="decimal"
+              placeholder="ej. 90"
+              value={rateInput}
+              onChange={(e) => setRateInput(e.target.value)}
+            />
+          </div>
+          <div>
+            <FieldLabel>Pago mínimo</FieldLabel>
+            <input
+              className="lc-input w-full"
+              inputMode="decimal"
+              placeholder="ARS"
+              value={minInput}
+              onChange={(e) => setMinInput(e.target.value)}
+            />
+          </div>
+          <div>
+            <FieldLabel>Vence día</FieldLabel>
+            <input
+              className="lc-input w-full"
+              inputMode="numeric"
+              placeholder="1–31"
+              value={dueInput}
+              onChange={(e) => setDueInput(e.target.value)}
+            />
+          </div>
+          <div className="col-span-2 sm:col-span-1">
+            <FieldLabel>Notas</FieldLabel>
+            <input
+              className="lc-input w-full"
+              placeholder="opcional"
+              value={notesInput}
+              onChange={(e) => setNotesInput(e.target.value)}
+            />
+          </div>
+        </div>
+        {(interestEst != null || dueLabel || settings.minPaymentArs != null) && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-zinc-100 pt-2 text-[11px] text-zinc-500 dark:border-zinc-800">
+            {dueLabel && (
+              <span>
+                Próximo vencimiento{" "}
+                <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                  {dueLabel}
+                </span>
+              </span>
+            )}
+            {settings.minPaymentArs != null && (
+              <span>
+                Mínimo{" "}
+                <span className="font-medium tabular-nums text-zinc-800 dark:text-zinc-200">
+                  {formatArs(settings.minPaymentArs)}
+                </span>
+              </span>
+            )}
+            {interestEst != null && (
+              <span>
+                Interés est. / mes{" "}
+                <span className="font-medium tabular-nums text-amber-800 dark:text-amber-200">
+                  {formatArs(interestEst)}
+                </span>
+                <span className="opacity-70"> · TNA÷12×saldo</span>
+              </span>
+            )}
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="lc-btn lc-btn-primary !px-3 !py-1.5 text-sm"
+            disabled={savingSettings}
+            onClick={() => void saveSettings()}
+          >
+            {savingSettings ? "Guardando…" : "Guardar"}
+          </button>
+          {settingsMsg && (
+            <span className="text-xs text-zinc-500">{settingsMsg}</span>
+          )}
+        </div>
+      </Surface>
+
       <div className="flex justify-end">
         <SegmentedControl
           value={tab}

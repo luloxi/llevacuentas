@@ -10,7 +10,7 @@ import {
   cn,
 } from "@/lib/utils";
 import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
-import { LoadingBlock, PageStack, SegmentedControl } from "@/components/ui";
+import { HogarSkeleton, PageStack, SegmentedControl } from "@/components/ui";
 import { HogarCharts } from "@/components/hogar-charts";
 import { CategoryIcon } from "@/lib/category-icons";
 import { colorForCategory } from "@/lib/category-colors";
@@ -301,7 +301,7 @@ export function CompartidoView() {
     applicableCount > 0 && paidCount === applicableCount;
 
   if (loading && expenses.length === 0 && total === 0 && viewTab === "vista") {
-    return <LoadingBlock label="Cargando hogar…" />;
+    return <HogarSkeleton />;
   }
   if (error) {
     return (
