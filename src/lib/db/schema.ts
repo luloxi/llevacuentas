@@ -291,3 +291,19 @@ export type ReceiptItem = typeof receiptItems.$inferSelect;
 export type SavingsAsset = typeof savingsAssets.$inferSelect;
 export type DebtSettings = typeof debtSettings.$inferSelect;
 export type Income = typeof incomes.$inferSelect;
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    polarSubscriptionId: text("polar_subscription_id").primaryKey(),
+    status: text("status").notNull(),
+    currentPeriodEnd: timestamp("current_period_end", { mode: "date" }),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (t) => [index("subscriptions_user_idx").on(t.userId)],
+);
+
+export type AppSubscription = typeof subscriptions.$inferSelect;

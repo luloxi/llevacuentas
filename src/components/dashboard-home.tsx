@@ -12,6 +12,7 @@ import {
   Eye,
   EyeOff,
   LayoutGrid,
+  CreditCard,
   Minus,
   Moon,
   Sun,
@@ -951,6 +952,15 @@ export function DashboardHome({
           >
             <LayoutGrid className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
+          <Link
+            href="/suscripcion"
+            className="inline-flex h-8 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 text-[11px] font-medium text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+            aria-label="Suscripción"
+            title="Suscripción"
+          >
+            <CreditCard className="h-3.5 w-3.5" strokeWidth={1.75} />
+            Plan
+          </Link>
           <ThemeToggle />
         </div>
       </div>

@@ -67,3 +67,17 @@ vercel env pull .env.local
 npx drizzle-kit push
 vercel --prod
 ```
+
+
+## Polar (suscripción Pro)
+
+Cobro recurrente **9.990 ARS/mes** vía Polar (no Mercado Pago). Polar admite ARS como moneda de producto.
+
+1. Creá org + producto mensual en [polar.sh](https://polar.sh) (sandbox para probar).
+2. Precio del producto: **9.990 ARS**. Si la org solo puede USD, ~7 USD.
+3. Access token de la org → `POLAR_ACCESS_TOKEN`.
+4. Product ID → `POLAR_PRODUCT_ID`.
+5. Webhook a `https://TU_DOMINIO/api/billing/webhook` (eventos `subscription.created`, `subscription.updated`, `subscription.canceled`) → `POLAR_WEBHOOK_SECRET`.
+6. `POLAR_SERVER=sandbox` o `production`. `NEXT_PUBLIC_APP_URL` = URL pública.
+
+La UI de **Suscripción** se puede abrir sin keys (muestra "Falta configurar Polar"). El checkout real necesita las keys.

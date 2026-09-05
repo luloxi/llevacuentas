@@ -12,6 +12,7 @@ import {
   Plus,
   PiggyBank,
   Banknote,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth/client";
@@ -92,6 +93,18 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
               <Plus className="h-4 w-4" strokeWidth={2.25} />
               Agregar
             </button>
+            <Link
+              href="/suscripcion"
+              className={cn(
+                "relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                pathname.startsWith("/suscripcion")
+                  ? "bg-[var(--brand-soft)] text-[var(--brand-fg)]"
+                  : "text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]",
+              )}
+            >
+              <CreditCard className="h-4 w-4" strokeWidth={pathname.startsWith("/suscripcion") ? 2.25 : 1.75} />
+              Suscripción
+            </Link>
             <button
               type="button"
               onClick={() => void logout()}
