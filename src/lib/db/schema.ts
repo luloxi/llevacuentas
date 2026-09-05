@@ -260,6 +260,14 @@ export const incomes = pgTable(
     householdId: text("household_id")
       .notNull()
       .references(() => households.id, { onDelete: "cascade" }),
+    /** variable = ingreso puntual; recurring = sueldo/plantilla recurrente */
+    kind: text("kind")
+      .$type<"recurring" | "variable">()
+      .notNull()
+      .default("variable"),
+    /** Solo para recurring: mensual | quincenal (14 días) | semanal */
+    frequency: text("frequency").$type<"mensual" | "quincenal" | "semanal">(),
+    /** Fecha del cobro (variable) o ancla / primer cobro (recurring). */
     date: text("date").notNull(),
     label: text("label").notNull(),
     amountArs: numeric("amount_ars", { precision: 14, scale: 2 }),
@@ -270,6 +278,7 @@ export const incomes = pgTable(
   (t) => [
     index("incomes_user_idx").on(t.userId),
     index("incomes_household_date_idx").on(t.householdId, t.date),
+    index("incomes_user_kind_idx").on(t.userId, t.kind),
   ],
 );
 

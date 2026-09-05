@@ -232,6 +232,8 @@ export async function ensureSchema() {
           id text PRIMARY KEY,
           user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           household_id text NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+          kind text NOT NULL DEFAULT 'variable',
+          frequency text,
           date text NOT NULL,
           label text NOT NULL,
           amount_ars numeric(14,2),
@@ -240,8 +242,11 @@ export async function ensureSchema() {
           updated_at timestamp DEFAULT now() NOT NULL
         )
       `,
+      sql`ALTER TABLE incomes ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'variable'`,
+      sql`ALTER TABLE incomes ADD COLUMN IF NOT EXISTS frequency text`,
       sql`CREATE INDEX IF NOT EXISTS incomes_user_idx ON incomes(user_id)`,
       sql`CREATE INDEX IF NOT EXISTS incomes_household_date_idx ON incomes(household_id, date)`,
+      sql`CREATE INDEX IF NOT EXISTS incomes_user_kind_idx ON incomes(user_id, kind)`,
     ];
 
     for (const statement of statements) {

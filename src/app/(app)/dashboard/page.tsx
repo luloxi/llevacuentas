@@ -15,6 +15,7 @@ import {
 } from "@/lib/fx/month-end-rates";
 import { getLiveRates } from "@/lib/fx/live-rates";
 import { currentPeriodAr, periodFromDateString } from "@/lib/utils";
+import { sumPeriodIncomeArs } from "@/lib/incomes";
 import { isVisibleToUser } from "@/lib/transactions";
 import { ensureSchema } from "@/lib/db/ensure-schema";
 
@@ -123,16 +124,20 @@ export default async function DashboardPage() {
   const totalArs = totalCombined(monthTx, rateNow);
   const prevTotalArs = totalCombined(prevMonthTx, ratePrev);
 
-  const monthIncomes = incomeRows.filter(
-    (r) => periodFromDateString(r.date) === period,
-  );
-  let incomeArs = 0;
-  for (const r of monthIncomes) {
-    if (r.amountArs != null) incomeArs += Math.abs(Number(r.amountArs));
-    if (r.amountUsd != null) {
-      incomeArs += convertUsdToArs(Math.abs(Number(r.amountUsd)), rateNow);
-    }
-  }
+  const incomeArs = sumPeriodIncomeArs(
+    incomeRows.map((r) => ({
+      id: r.id,
+      date: r.date,
+      label: r.label,
+      kind: r.kind,
+      frequency: r.frequency,
+      amountArs: r.amountArs,
+      amountUsd: r.amountUsd,
+    })),
+    period,
+    convertUsdToArs,
+    rateNow,
+  )
   const sharedTotalArs = totalCombined(sharedMonthTx, rateNow);
   const sharedPrevTotalArs = totalCombined(sharedPrevTx, ratePrev);
 

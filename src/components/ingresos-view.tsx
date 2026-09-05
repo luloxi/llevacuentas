@@ -7,6 +7,7 @@ import {
   FieldLabel,
   ListSkeleton,
   PageStack,
+  SegmentedControl,
   Surface,
   Toast,
 } from "@/components/ui";
@@ -17,29 +18,43 @@ import {
   todayDateAr,
   cn,
   currentPeriodAr,
-  periodFromDateString,
 } from "@/lib/utils";
 import { formatPeriodLabel } from "@/lib/period-label";
+import {
+  INCOME_FREQUENCIES,
+  frequencyLabel,
+  periodIncomeEntries,
+  type IncomeFrequency,
+  type IncomeKind,
+  type PeriodIncomeEntry,
+} from "@/lib/incomes";
 
 type IncomeRow = {
   id: string;
+  kind: IncomeKind;
+  frequency: IncomeFrequency | null;
   date: string;
   label: string;
   amountArs: number | null;
   amountUsd: number | null;
 };
 
+type FormMode = "recurring" | "variable";
+
 export function IngresosView() {
   const [rows, setRows] = useState<IncomeRow[]>([]);
+  const [periodEntries, setPeriodEntries] = useState<PeriodIncomeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [mode, setMode] = useState<FormMode>("recurring");
 
   const [date, setDate] = useState(todayDateAr);
   const [label, setLabel] = useState("");
   const [amountArs, setAmountArs] = useState("");
   const [amountUsd, setAmountUsd] = useState("");
+  const [frequency, setFrequency] = useState<IncomeFrequency>("mensual");
 
   const period = currentPeriodAr();
 
@@ -47,25 +62,34 @@ export function IngresosView() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/incomes", { credentials: "include" });
+      const res = await fetch(
+        `/api/incomes?period=${encodeURIComponent(period)}`,
+        { credentials: "include" },
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error");
       setRows(data.incomes ?? []);
+      setPeriodEntries(data.periodEntries ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error de red");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [period]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const monthRows = useMemo(
-    () => rows.filter((r) => periodFromDateString(r.date) === period),
-    [rows, period],
+  const recurringRows = useMemo(
+    () => rows.filter((r) => r.kind === "recurring"),
+    [rows],
   );
+
+  const clientEntries = useMemo(() => {
+    if (periodEntries.length > 0) return periodEntries;
+    return periodIncomeEntries(rows, period);
+  }, [periodEntries, rows, period]);
 
   async function submit() {
     setSaving(true);
@@ -83,6 +107,8 @@ export function IngresosView() {
           label,
           amountArs: ars,
           amountUsd: usd,
+          kind: mode,
+          frequency: mode === "recurring" ? frequency : null,
         }),
       });
       const data = await res.json();
@@ -90,7 +116,11 @@ export function IngresosView() {
       setLabel("");
       setAmountArs("");
       setAmountUsd("");
-      setOk("Ingreso guardado");
+      setOk(
+        mode === "recurring"
+          ? "Sueldo recurrente guardado"
+          : "Ingreso variable guardado",
+      );
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
@@ -108,7 +138,7 @@ export function IngresosView() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error");
-      setRows((prev) => prev.filter((r) => r.id !== id));
+      await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     }
@@ -121,7 +151,7 @@ export function IngresosView() {
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Ingresos</h1>
         <p className="text-xs text-[var(--muted-fg)]">
-          Sueldos y otros ingresos · {formatPeriodLabel(period)}
+          Sueldos recurrentes e ingresos del día · {formatPeriodLabel(period)}
         </p>
       </div>
 
@@ -132,10 +162,29 @@ export function IngresosView() {
       )}
       {ok && <Toast>{ok}</Toast>}
 
+      <SegmentedControl
+        value={mode}
+        onChange={setMode}
+        options={[
+          { id: "recurring", label: "Sueldo recurrente" },
+          { id: "variable", label: "Variables" },
+        ]}
+      />
+
       <Surface className="space-y-3 !p-4">
-        <p className="text-sm font-semibold">Agregar ingreso</p>
+        <p className="text-sm font-semibold">
+          {mode === "recurring" ? "Nuevo sueldo recurrente" : "Agregar ingreso variable"}
+        </p>
+        <p className="text-xs text-[var(--muted-fg)]">
+          {mode === "recurring"
+            ? "Definís frecuencia y monto. En el mes mostramos las fechas esperadas (no inventamos cobros antes de la fecha ancla)."
+            : "Ventas, ingreso del día u otros cobros puntuales."}
+        </p>
+
         <div>
-          <FieldLabel>Fecha</FieldLabel>
+          <FieldLabel>
+            {mode === "recurring" ? "Desde / primer cobro" : "Fecha"}
+          </FieldLabel>
           <input
             type="date"
             className="lc-input w-full"
@@ -143,11 +192,42 @@ export function IngresosView() {
             onChange={(e) => setDate(e.target.value)}
           />
         </div>
+
+        {mode === "recurring" && (
+          <div>
+            <FieldLabel>Frecuencia</FieldLabel>
+            <div className="grid grid-cols-3 gap-2">
+              {INCOME_FREQUENCIES.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setFrequency(f.id)}
+                  className={cn(
+                    "rounded-xl border px-2 py-2 text-center text-xs font-medium transition",
+                    frequency === f.id
+                      ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-fg)]"
+                      : "border-[var(--border)] text-[var(--muted-fg)] hover:bg-[var(--surface-muted)]",
+                  )}
+                >
+                  <div>{f.label}</div>
+                  <div className="mt-0.5 text-[10px] font-normal opacity-80">
+                    {f.hint}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
           <FieldLabel>Qué es</FieldLabel>
           <input
             className="lc-input w-full"
-            placeholder="Sueldo, freelance, alquiler…"
+            placeholder={
+              mode === "recurring"
+                ? "Sueldo, honorarios…"
+                : "Venta, ingreso del día, freelance…"
+            }
             value={label}
             onChange={(e) => setLabel(e.target.value)}
           />
@@ -180,30 +260,117 @@ export function IngresosView() {
           disabled={saving || !label.trim()}
           onClick={() => void submit()}
         >
-          {saving ? "Guardando…" : "Guardar ingreso"}
+          {saving
+            ? "Guardando…"
+            : mode === "recurring"
+              ? "Guardar sueldo"
+              : "Guardar ingreso"}
         </button>
       </Surface>
+
+      {recurringRows.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-fg)]">
+            Sueldos recurrentes
+          </h2>
+          <ul className="space-y-2">
+            {recurringRows.map((r) => {
+              const expected = clientEntries.filter(
+                (e) => e.sourceId === r.id && e.expected,
+              );
+              return (
+                <li
+                  key={r.id}
+                  className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{r.label}</p>
+                      <p className="text-xs text-[var(--muted-fg)]">
+                        {frequencyLabel(r.frequency)} · desde{" "}
+                        {formatDateAr(r.date)}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right text-sm font-semibold tabular-nums text-[var(--brand-fg)]">
+                      {r.amountArs != null && <div>{formatArs(r.amountArs)}</div>}
+                      {r.amountUsd != null && (
+                        <div
+                          className={cn(
+                            r.amountArs != null && "text-xs font-medium",
+                          )}
+                        >
+                          {formatUsd(r.amountUsd)}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-red-600"
+                      aria-label="Borrar sueldo recurrente"
+                      onClick={() => void remove(r.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="mt-2 rounded-xl bg-[var(--surface-muted)]/70 px-2.5 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-fg)]">
+                      Esperado este mes
+                    </p>
+                    {expected.length === 0 ? (
+                      <p className="mt-1 text-xs text-[var(--muted-fg)]">
+                        Ningún cobro cae en {formatPeriodLabel(period)} (revisá
+                        la fecha ancla).
+                      </p>
+                    ) : (
+                      <ul className="mt-1 space-y-1">
+                        {expected.map((e) => (
+                          <li
+                            key={`${e.sourceId}-${e.date}`}
+                            className="flex justify-between gap-2 text-xs"
+                          >
+                            <span>{formatDateAr(e.date)} · esperado</span>
+                            <span className="tabular-nums font-medium">
+                              {e.amountArs != null && formatArs(e.amountArs)}
+                              {e.amountArs != null &&
+                                e.amountUsd != null &&
+                                " · "}
+                              {e.amountUsd != null && formatUsd(e.amountUsd)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <section className="space-y-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-fg)]">
           Este mes
         </h2>
-        {monthRows.length === 0 ? (
+        {clientEntries.length === 0 ? (
           <EmptyState
             title="Todavía no hay ingresos"
-            description="Cuando cargues algo, la neta del home pasa a ser ingresos − gastos."
+            description="Cargá un sueldo recurrente o un ingreso variable. La neta del home usa ingresos − gastos."
           />
         ) : (
           <ul className="space-y-2">
-            {monthRows.map((r) => (
+            {clientEntries.map((r) => (
               <li
-                key={r.id}
+                key={`${r.sourceId}-${r.date}-${r.expected ? "e" : "v"}`}
                 className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{r.label}</p>
                   <p className="text-xs text-[var(--muted-fg)]">
                     {formatDateAr(r.date)}
+                    {r.expected
+                      ? ` · esperado (${frequencyLabel(r.frequency)})`
+                      : " · variable"}
                   </p>
                 </div>
                 <div className="shrink-0 text-right text-sm font-semibold tabular-nums text-[var(--brand-fg)]">
@@ -218,58 +385,21 @@ export function IngresosView() {
                     </div>
                   )}
                 </div>
-                <button
-                  type="button"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-red-600"
-                  aria-label="Borrar"
-                  onClick={() => void remove(r.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                {!r.expected && (
+                  <button
+                    type="button"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-red-600"
+                    aria-label="Borrar"
+                    onClick={() => void remove(r.sourceId)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </li>
             ))}
           </ul>
         )}
       </section>
-
-      {rows.some((r) => periodFromDateString(r.date) !== period) && (
-        <section className="space-y-2">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-fg)]">
-            Anteriores
-          </h2>
-          <ul className="space-y-2">
-            {rows
-              .filter((r) => periodFromDateString(r.date) !== period)
-              .map((r) => (
-                <li
-                  key={r.id}
-                  className="flex items-center gap-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)]/60 px-3.5 py-2.5 opacity-80"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm">{r.label}</p>
-                    <p className="text-xs text-[var(--muted-fg)]">
-                      {formatDateAr(r.date)}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right text-sm tabular-nums">
-                    {r.amountArs != null && formatArs(r.amountArs)}
-                    {r.amountUsd != null && (
-                      <div className="text-xs">{formatUsd(r.amountUsd)}</div>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-red-600"
-                    aria-label="Borrar"
-                    onClick={() => void remove(r.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </li>
-              ))}
-          </ul>
-        </section>
-      )}
     </PageStack>
   );
 }

@@ -4,7 +4,14 @@ import { requireApiUser } from "@/lib/api-auth";
 import { getDb, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
 import { getUserHousehold } from "@/lib/household";
-import { periodFromDateString } from "@/lib/utils";
+import {
+  isIncomeFrequency,
+  isIncomeKind,
+  periodIncomeEntries,
+  type IncomeFrequency,
+  type IncomeKind,
+} from "@/lib/incomes";
+import { currentPeriodAr, periodFromDateString } from "@/lib/utils";
 
 function n(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -13,8 +20,15 @@ function n(v: unknown): number | null {
 }
 
 function serialize(row: typeof schema.incomes.$inferSelect) {
+  const kind: IncomeKind = row.kind === "recurring" ? "recurring" : "variable";
+  const frequency =
+    kind === "recurring" && isIncomeFrequency(row.frequency)
+      ? row.frequency
+      : null;
   return {
     id: row.id,
+    kind,
+    frequency,
     date: row.date,
     label: row.label,
     amountArs: row.amountArs != null ? Number(row.amountArs) : null,
@@ -36,7 +50,7 @@ export async function GET(req: Request) {
     }
 
     const url = new URL(req.url);
-    const period = url.searchParams.get("period"); // YYYY-MM optional
+    const period = url.searchParams.get("period") || currentPeriodAr();
 
     const db = getDb();
     const rows = await db
@@ -45,12 +59,31 @@ export async function GET(req: Request) {
       .where(eq(schema.incomes.userId, user.id))
       .orderBy(desc(schema.incomes.date), desc(schema.incomes.createdAt));
 
-    const filtered = period
-      ? rows.filter((r) => periodFromDateString(r.date) === period)
-      : rows;
+    const incomes = rows.map(serialize);
+    const periodEntries = periodIncomeEntries(
+      rows.map((r) => ({
+        id: r.id,
+        date: r.date,
+        label: r.label,
+        kind: r.kind,
+        frequency: r.frequency,
+        amountArs: r.amountArs,
+        amountUsd: r.amountUsd,
+      })),
+      period,
+    );
+
+    // Compat: si piden period, filtrar incomes "crudos" como antes para variables,
+    // pero siempre devolver también las plantillas recurrentes.
+    const filteredIncomes = incomes.filter((r) => {
+      if (r.kind === "recurring") return true;
+      return periodFromDateString(r.date) === period;
+    });
 
     return NextResponse.json({
-      incomes: filtered.map(serialize),
+      period,
+      incomes: url.searchParams.has("period") ? filteredIncomes : incomes,
+      periodEntries,
     });
   } catch (e) {
     return NextResponse.json(
@@ -77,6 +110,8 @@ export async function POST(req: Request) {
       label?: string;
       amountArs?: number | null;
       amountUsd?: number | null;
+      kind?: string;
+      frequency?: string | null;
     };
 
     const date = (body.date || "").trim();
@@ -89,6 +124,18 @@ export async function POST(req: Request) {
     const label = (body.label || "").trim();
     if (!label) {
       return NextResponse.json({ error: "Falta la descripción" }, { status: 400 });
+    }
+
+    const kind: IncomeKind = isIncomeKind(body.kind) ? body.kind : "variable";
+    let frequency: IncomeFrequency | null = null;
+    if (kind === "recurring") {
+      if (!isIncomeFrequency(body.frequency)) {
+        return NextResponse.json(
+          { error: "Elegí la frecuencia: mensual, quincenal o semanal" },
+          { status: 400 },
+        );
+      }
+      frequency = body.frequency;
     }
 
     const amountArs = n(body.amountArs);
@@ -109,6 +156,8 @@ export async function POST(req: Request) {
       .values({
         userId: user.id,
         householdId: ctx.household.id,
+        kind,
+        frequency,
         date,
         label,
         amountArs: amountArs != null ? String(amountArs) : null,
