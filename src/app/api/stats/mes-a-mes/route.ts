@@ -3,12 +3,12 @@ import { eq } from "drizzle-orm";
 import { requireApiUser } from "@/lib/api-auth";
 import { getCategoryMap, requireHousehold } from "@/lib/household";
 import { getDb, schema } from "@/lib/db";
+import { getMonthEndBuyRates } from "@/lib/fx/month-end-rates";
 import {
-  convertUsdToArs,
-  getMonthEndBuyRates,
-} from "@/lib/fx/month-end-rates";
-import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
-import { isVisibleToUser } from "@/lib/transactions";
+  aggregateByPeriod,
+  buildMonthFromAgg,
+  visibleExpenseRows,
+} from "@/lib/stats/monthly-expenses";
 
 export async function GET(req: Request) {
   const authResult = await requireApiUser();
@@ -27,100 +27,16 @@ export async function GET(req: Request) {
       .from(schema.transactions)
       .where(eq(schema.transactions.householdId, ctx.household.id));
 
-    // Privacy: own personal + household shared
-    const rows = allRows.filter((r) => isVisibleToUser(r, sessionUser.id));
-
-    type Agg = {
-      amountArs: number;
-      amountUsd: number;
-      count: number;
-      categoryId: string | null;
-    };
-    const byPeriod = new Map<string, Map<string, Agg>>();
-    const periodsSet = new Set<string>();
-
-    for (const r of rows) {
-      if (r.isPayment) continue;
-      if (isBankAccountingEntry(r.descriptionNormalized)) continue;
-      const p = r.date.slice(0, 7);
-      periodsSet.add(p);
-
-      const cat = r.categoryId ? byId.get(r.categoryId) : null;
-      const slug = cat?.slug ?? "uncategorized";
-      const name = cat?.name ?? "Sin categoría";
-      const key = `${slug}||${name}||${r.categoryId ?? ""}`;
-
-      if (!byPeriod.has(p)) byPeriod.set(p, new Map());
-      const map = byPeriod.get(p)!;
-      const cur = map.get(key) ?? {
-        amountArs: 0,
-        amountUsd: 0,
-        count: 0,
-        categoryId: r.categoryId ?? null,
-      };
-      cur.amountArs += r.amountArs != null ? Math.abs(Number(r.amountArs)) : 0;
-      cur.amountUsd += r.amountUsd != null ? Math.abs(Number(r.amountUsd)) : 0;
-      cur.count += 1;
-      map.set(key, cur);
-    }
-
-    const periods = [...periodsSet].sort().reverse();
-    const rates = await getMonthEndBuyRates(periods);
+    const expenses = visibleExpenseRows(allRows, sessionUser.id);
+    const { periods, byPeriod } = aggregateByPeriod(expenses, byId);
+    const rates = await getMonthEndBuyRates(
+      periodParam && periodParam !== "all"
+        ? [...new Set([...periods, periodParam])]
+        : periods,
+    );
 
     function buildMonth(p: string) {
-      const map = byPeriod.get(p) ?? new Map();
-      const fx = rates.get(p);
-      const usdRate = fx?.buy ?? 0;
-
-      const categories = [...map.entries()]
-        .map(([key, agg]) => {
-          const [slug, name, categoryId] = key.split("||");
-          const amountArsFromUsd = convertUsdToArs(agg.amountUsd, usdRate);
-          const amountArsCombined = agg.amountArs + amountArsFromUsd;
-          return {
-            slug,
-            name,
-            categoryId: categoryId || agg.categoryId || null,
-            amountArs: agg.amountArs,
-            amountUsd: agg.amountUsd,
-            amountArsFromUsd,
-            amountArsCombined,
-            count: agg.count,
-          };
-        })
-        .sort((a, b) => b.amountArsCombined - a.amountArsCombined);
-
-      const totalArs = categories.reduce((s, c) => s + c.amountArs, 0);
-      const totalUsd = categories.reduce((s, c) => s + c.amountUsd, 0);
-      const totalArsFromUsd = categories.reduce(
-        (s, c) => s + c.amountArsFromUsd,
-        0,
-      );
-      const totalArsCombined = totalArs + totalArsFromUsd;
-      const totalCount = categories.reduce((s, c) => s + c.count, 0);
-
-      return {
-        period: p,
-        totalArs,
-        totalUsd,
-        totalArsFromUsd,
-        totalArsCombined,
-        totalCount,
-        usdRate: fx
-          ? {
-              buy: fx.buy,
-              asOf: fx.asOf,
-              source: fx.source,
-            }
-          : null,
-        categories: categories.map((c) => ({
-          ...c,
-          pct:
-            totalArsCombined > 0
-              ? (c.amountArsCombined / totalArsCombined) * 100
-              : 0,
-        })),
-      };
+      return buildMonthFromAgg(p, byPeriod.get(p), rates.get(p));
     }
 
     let selected: string[];

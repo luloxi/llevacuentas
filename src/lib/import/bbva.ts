@@ -131,8 +131,18 @@ async function parseBbvaMovements(
 ): Promise<{ movements: BbvaMovement[]; source: string }> {
   if (looksLikePdf(buffer, fileName)) {
     const { parseBbvaStatementPdf } = await import("@/lib/bbva/parse-pdf");
-    const movements = await parseBbvaStatementPdf(buffer);
-    return { movements, source: "bbva_pdf" };
+    const bbvaMovements = await parseBbvaStatementPdf(buffer);
+    if (bbvaMovements.length > 0) {
+      return { movements: bbvaMovements, source: "bbva_pdf" };
+    }
+    const { isAiPdfImportConfigured, parseStatementPdfWithAi } = await import(
+      "@/lib/import/parse-pdf-ai"
+    );
+    if (isAiPdfImportConfigured()) {
+      const aiMovements = await parseStatementPdfWithAi(buffer, fileName);
+      return { movements: aiMovements, source: "pdf_ai" };
+    }
+    return { movements: [], source: "bbva_pdf" };
   }
   return {
     movements: parseBbvaWorkbook(buffer),
@@ -288,7 +298,12 @@ export async function importBbvaFile(opts: {
   let inserted = 0;
   let learnedHits = 0;
   let insertFailed = 0;
-  const txSource = source === "bbva_pdf" ? "bbva_pdf" : "bbva_import";
+  const txSource =
+    source === "bbva_pdf"
+      ? "bbva_pdf"
+      : source === "pdf_ai"
+        ? "statement_pdf"
+        : "bbva_import";
 
   for (const m of toInsert) {
     const catMatch = await matchCategoryWithLearning(

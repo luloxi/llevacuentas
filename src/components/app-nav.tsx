@@ -13,6 +13,7 @@ import {
   PiggyBank,
   Banknote,
   CreditCard,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth/client";
@@ -22,6 +23,7 @@ const links = [
   { href: "/dashboard", label: "Inicio", icon: Home },
   { href: "/consumos", label: "Gastos", icon: List },
   { href: "/ingresos", label: "Ingresos", icon: Banknote },
+  { href: "/cargas", label: "Cargas", icon: Upload },
   { href: "/compartido", label: "Hogar", icon: Users },
   { href: "/ahorros", label: "Ahorros", icon: PiggyBank },
   { href: "/deuda", label: "Deuda", icon: Landmark },
@@ -50,7 +52,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
     : links;
 
   const left = links.slice(0, 3);
-  const right = links.slice(3);
+  const right = links.slice(3); // Cargas + Hogar + Ahorros + Deuda
 
   return (
     <>
@@ -118,7 +120,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
       </header>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-md md:hidden">
-        <div className="relative mx-auto grid max-w-lg grid-cols-7 items-end gap-0.5 px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
+        <div className="relative mx-auto grid max-w-lg grid-cols-8 items-end gap-0.5 px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
           {left.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
