@@ -1,48 +1,45 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import {
-  validateEvent,
-  WebhookVerificationError,
-} from "@polar-sh/sdk/webhooks";
-import type { Subscription } from "@polar-sh/sdk/models/components/subscription.js";
 import { getDb, hasDatabase, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
-import { polarWebhookSecret } from "@/lib/polar";
+import { polarWebhookSecret, verifyPolarWebhook } from "@/lib/polar";
 
-function webhookHeaders(req: Request): Record<string, string> {
-  const out: Record<string, string> = {};
-  req.headers.forEach((value, key) => {
-    out[key] = value;
-  });
-  return out;
-}
+type PolarSubscription = {
+  id: string;
+  status: string;
+  current_period_end?: string | null;
+  metadata?: Record<string, unknown>;
+  customer?: { external_id?: string | null };
+};
+
+type PolarWebhookEvent = {
+  type: string;
+  data: PolarSubscription;
+};
 
 function metaUserId(metadata: Record<string, unknown> | undefined): string | null {
   const raw = metadata?.userId;
   return typeof raw === "string" && raw.trim() ? raw.trim() : null;
 }
 
-function resolveUserId(sub: Subscription): string | null {
+function resolveUserId(sub: PolarSubscription): string | null {
   return (
     metaUserId(sub.metadata) ??
-    (sub.customer?.externalId?.trim() || null)
+    (sub.customer?.external_id?.trim() || null)
   );
 }
 
-function periodEnd(sub: Subscription): Date | null {
-  const end = sub.currentPeriodEnd;
+function periodEnd(sub: PolarSubscription): Date | null {
+  const end = sub.current_period_end;
   if (!end) return null;
-  const d = end instanceof Date ? end : new Date(end);
+  const d = new Date(end);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-async function upsertSubscription(sub: Subscription) {
+async function upsertSubscription(sub: PolarSubscription) {
   const userId = resolveUserId(sub);
   if (!userId) {
-    console.warn(
-      "[billing/webhook] subscription without user id",
-      sub.id,
-    );
+    console.warn("[billing/webhook] subscription without user id", sub.id);
     return;
   }
   if (!hasDatabase()) {
@@ -93,15 +90,13 @@ export async function POST(req: Request) {
   }
 
   const body = await req.text();
-  let event;
+  let event: PolarWebhookEvent;
   try {
-    event = validateEvent(body, webhookHeaders(req), secret);
+    event = verifyPolarWebhook(body, req.headers, secret) as PolarWebhookEvent;
   } catch (e) {
-    if (e instanceof WebhookVerificationError) {
-      return NextResponse.json({ error: "Firma inválida" }, { status: 403 });
-    }
     const message = e instanceof Error ? e.message : "Webhook inválido";
-    return NextResponse.json({ error: message }, { status: 400 });
+    const status = message === "Firma inválida" ? 403 : 400;
+    return NextResponse.json({ error: message }, { status });
   }
 
   try {

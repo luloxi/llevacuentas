@@ -3,8 +3,9 @@ import { requireApiUser } from "@/lib/api-auth";
 import {
   appUrlFromRequest,
   clientIp,
-  getPolar,
+  createPolarCheckout,
   isPolarCheckoutConfigured,
+  polarAccessToken,
   polarProductId,
 } from "@/lib/polar";
 
@@ -20,9 +21,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const polar = getPolar();
   const productId = polarProductId();
-  if (!polar || !productId) {
+  if (!polarAccessToken() || !productId) {
     return NextResponse.json(
       { error: "Falta configurar Polar", code: "polar_unconfigured" },
       { status: 503 },
@@ -34,31 +34,26 @@ export async function POST(req: Request) {
   const returnUrl = `${origin}/suscripcion`;
   const ip = clientIp(req);
 
-  const base = {
+  const base: Record<string, unknown> = {
     products: [productId],
-    externalCustomerId: user.id,
-    customerEmail: user.email ?? undefined,
+    external_customer_id: user.id,
+    customer_email: user.email ?? undefined,
     metadata: { userId: user.id },
-    successUrl,
-    returnUrl,
-    locale: "es",
-    customerIpAddress: ip,
+    success_url: successUrl,
+    return_url: returnUrl,
+    customer_ip_address: ip,
   };
 
   try {
     let checkout;
     try {
-      checkout = await polar.checkouts.create({
-        ...base,
-        currency: "ars",
-      });
+      checkout = await createPolarCheckout({ ...base, currency: "ars" });
     } catch (arsErr) {
-      // Product without ARS price: Polar still charges the catalog currency.
       console.warn(
         "[billing/checkout] ARS presentment failed, retrying without currency",
         arsErr instanceof Error ? arsErr.message : arsErr,
       );
-      checkout = await polar.checkouts.create(base);
+      checkout = await createPolarCheckout(base);
     }
 
     if (!checkout.url) {
