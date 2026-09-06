@@ -20,6 +20,15 @@ export async function GET() {
 export async function POST(req: Request) {
   const authResult = await requireApiUser();
   if ("error" in authResult) return authResult.error;
+  if (authResult.authKind === "household_token") {
+    return NextResponse.json(
+      {
+        error: "Usá la sesión de la app para crear o unirte a un hogar",
+        code: "session_required",
+      },
+      { status: 403 },
+    );
+  }
   const { user: sessionUser } = authResult;
   try {
     const body = await req.json();

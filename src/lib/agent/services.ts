@@ -3,7 +3,11 @@ import type { AppUser } from "@/lib/session";
 import { normalizeBank } from "@/lib/banks";
 import { getDb, schema } from "@/lib/db";
 import { getMonthEndBuyRates } from "@/lib/fx/month-end-rates";
-import { getCategoryMap, requireHousehold } from "@/lib/household";
+import {
+  getCategoryMap,
+  getHouseholdById,
+  requireHousehold,
+} from "@/lib/household";
 import {
   importBbvaFile,
   importTransparenciaConsumos,
@@ -44,7 +48,7 @@ function mapCaught(e: unknown): never {
     throw {
       status: 400,
       error:
-        "Sin hogar para el usuario del agente. Si AGENT_USER_ID apunta a un id sin household_members, desactivalo o usá el id PWA del hogar (o AGENT_USER_EMAIL).",
+        "Sin hogar para este token. Generá el token del hogar en /mcp (sesión de la app). Admin/dev: si usás AGENT_API_TOKEN, revisá AGENT_USER_ID / AGENT_USER_EMAIL.",
       code: "no_household",
     } satisfies AgentServiceError;
   }
@@ -55,11 +59,38 @@ function mapCaught(e: unknown): never {
   } satisfies AgentServiceError;
 }
 
-export async function getAgentSummary(user: AppUser) {
+/** Caller from session, household token, or admin/dev global token. */
+export type AgentCaller = {
+  user: AppUser;
+  householdId?: string;
+};
+
+/**
+ * Scope every agent/MCP query to the token's household_id when present.
+ * Never fall back to another household the acting user might belong to.
+ */
+async function householdForAgent(caller: AgentCaller) {
+  if (caller.householdId) {
+    const ctx = await getHouseholdById(caller.householdId);
+    if (!ctx) {
+      throw {
+        status: 400,
+        error:
+          "Este token no tiene un hogar válido. Generá uno nuevo en /mcp.",
+        code: "no_household",
+      } satisfies AgentServiceError;
+    }
+    return ctx;
+  }
+  return requireHousehold(caller.user.id);
+}
+
+export async function getAgentSummary(caller: AgentCaller) {
   try {
-    const ctx = await requireHousehold(user.id);
+    const ctx = await householdForAgent(caller);
+    const user = caller.user;
     const db = getDb();
-    const { byId } = await getCategoryMap();
+    const { byId } = await getCategoryMap({ householdId: ctx.household.id });
 
     const [allRows, statements] = await Promise.all([
       db
@@ -142,13 +173,14 @@ export async function getAgentSummary(user: AppUser) {
 }
 
 export async function getAgentGastos(
-  user: AppUser,
+  caller: AgentCaller,
   periodParam?: string | null,
 ) {
   try {
-    const ctx = await requireHousehold(user.id);
+    const ctx = await householdForAgent(caller);
+    const user = caller.user;
     const db = getDb();
-    const { byId } = await getCategoryMap();
+    const { byId } = await getCategoryMap({ householdId: ctx.household.id });
     const allRows = await db
       .select()
       .from(schema.transactions)
@@ -209,7 +241,7 @@ export async function getAgentGastos(
 }
 
 export async function importAgentStatement(
-  user: AppUser,
+  caller: AgentCaller,
   input: {
     buffer: Buffer;
     fileName: string;
@@ -218,7 +250,8 @@ export async function importAgentStatement(
   },
 ) {
   try {
-    const ctx = await requireHousehold(user.id);
+    const ctx = await householdForAgent(caller);
+    const user = caller.user;
     if (!input.buffer.length) {
       throw {
         status: 400,
@@ -311,9 +344,10 @@ function receiptStatusLabel(status: string): string {
   }
 }
 
-export async function listAgentCargas(user: AppUser, limit = 50) {
+export async function listAgentCargas(caller: AgentCaller, limit = 50) {
   try {
-    const ctx = await requireHousehold(user.id);
+    const ctx = await householdForAgent(caller);
+    const user = caller.user;
     const db = getDb();
     const householdId = ctx.household.id;
     const capped = Math.min(Math.max(limit, 1), 100);

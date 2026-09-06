@@ -131,7 +131,8 @@ export function CargasView() {
             MCP / agentes
           </p>
           <p className="mt-0.5 text-xs text-[var(--muted-fg)]">
-            Conectá grok.com o Cursor para consultar e importar con el mismo token.
+            Conectá grok.com o Cursor con el token de este hogar (se genera en
+            /mcp).
           </p>
         </div>
         <Link href="/mcp" className="lc-btn lc-btn-ghost !px-3 !py-2 text-sm shrink-0">

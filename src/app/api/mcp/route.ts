@@ -1,60 +1,68 @@
 import { createMcpHandler, withMcpAuth } from "mcp-handler";
 import { z } from "zod";
-import {
-  agentTokenMatches,
-  isAgentAuthConfigured,
-  resolveAgentUser,
-} from "@/lib/agent/auth";
+import { resolveAgentUser, resolveBearerAuth } from "@/lib/agent/auth";
 import { mcpErrorResult, mcpJsonResult } from "@/lib/agent/mcp-json";
 import {
   getAgentGastos,
   getAgentSummary,
   importAgentStatement,
   listAgentCargas,
+  type AgentCaller,
 } from "@/lib/agent/services";
-import { syncUser, type AppUser } from "@/lib/session";
+import { syncUser } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-type AuthExtra = { userId?: string; email?: string };
+type AuthExtra = {
+  userId?: string;
+  email?: string;
+  householdId?: string;
+  authKind?: string;
+};
 
-function userFromAuthInfo(authInfo: {
+function callerFromAuthInfo(authInfo: {
   extra?: Record<string, unknown>;
   clientId?: string;
-} | undefined): AppUser | null {
+} | undefined): AgentCaller | null {
   const extra = authInfo?.extra as AuthExtra | undefined;
   if (extra?.userId) {
     return {
-      id: extra.userId,
-      email: extra.email ?? null,
-      name: "Agent",
-      image: null,
+      user: {
+        id: extra.userId,
+        email: extra.email ?? null,
+        name: "Agent",
+        image: null,
+      },
+      householdId: extra.householdId,
     };
   }
   if (authInfo?.clientId) {
     return {
-      id: authInfo.clientId,
-      email: extra?.email ?? null,
-      name: "Agent",
-      image: null,
+      user: {
+        id: authInfo.clientId,
+        email: extra?.email ?? null,
+        name: "Agent",
+        image: null,
+      },
+      householdId: extra?.householdId,
     };
   }
   return null;
 }
 
-async function resolveToolUser(ctx: {
+async function resolveToolCaller(ctx: {
   http?: { authInfo?: { extra?: Record<string, unknown>; clientId?: string } };
-}): Promise<AppUser> {
-  const fromCtx = userFromAuthInfo(ctx.http?.authInfo);
+}): Promise<AgentCaller> {
+  const fromCtx = callerFromAuthInfo(ctx.http?.authInfo);
   if (fromCtx) return fromCtx;
   const user = await resolveAgentUser();
   if (!user) {
     throw new Error(
-      "Agente autenticado pero no hay usuario de app. Configurá AGENT_USER_ID o iniciá sesión una vez en la PWA.",
+      "Agente autenticado pero no hay usuario de app. Generá el token del hogar en /mcp, o (admin/dev) configurá AGENT_USER_ID.",
     );
   }
-  return user;
+  return { user };
 }
 
 const mcpHandler = createMcpHandler(
@@ -76,9 +84,9 @@ const mcpHandler = createMcpHandler(
       },
       async ({ period }, ctx) => {
         try {
-          const user = await resolveToolUser(ctx);
-          await syncUser(user);
-          const data = await getAgentGastos(user, period ?? null);
+          const caller = await resolveToolCaller(ctx);
+          await syncUser(caller.user);
+          const data = await getAgentGastos(caller, period ?? null);
           return mcpJsonResult(data);
         } catch (e) {
           return mcpErrorResult(e);
@@ -96,9 +104,9 @@ const mcpHandler = createMcpHandler(
       },
       async (_args, ctx) => {
         try {
-          const user = await resolveToolUser(ctx);
-          await syncUser(user);
-          const data = await getAgentSummary(user);
+          const caller = await resolveToolCaller(ctx);
+          await syncUser(caller.user);
+          const data = await getAgentSummary(caller);
           return mcpJsonResult(data);
         } catch (e) {
           return mcpErrorResult(e);
@@ -133,10 +141,10 @@ const mcpHandler = createMcpHandler(
       },
       async ({ fileBase64, fileName, bank, kind }, ctx) => {
         try {
-          const user = await resolveToolUser(ctx);
-          await syncUser(user);
+          const caller = await resolveToolCaller(ctx);
+          await syncUser(caller.user);
           const buffer = Buffer.from(fileBase64, "base64");
-          const data = await importAgentStatement(user, {
+          const data = await importAgentStatement(caller, {
             buffer,
             fileName: fileName ?? "statement.bin",
             bank,
@@ -167,9 +175,9 @@ const mcpHandler = createMcpHandler(
       },
       async ({ limit }, ctx) => {
         try {
-          const user = await resolveToolUser(ctx);
-          await syncUser(user);
-          const data = await listAgentCargas(user, limit ?? 40);
+          const caller = await resolveToolCaller(ctx);
+          await syncUser(caller.user);
+          const data = await listAgentCargas(caller, limit ?? 40);
           return mcpJsonResult(data);
         } catch (e) {
           return mcpErrorResult(e);
@@ -183,22 +191,24 @@ const mcpHandler = createMcpHandler(
       version: "1.0.0",
     },
     instructions:
-      "LlevaCuentas MCP: consultá e importá finanzas del hogar. Auth: Authorization Bearer AGENT_API_TOKEN. Los números vienen de la base; no inventes montos.",
+      "LlevaCuentas MCP: consultá e importá finanzas del hogar. Auth: Authorization Bearer <token del hogar> (se genera en /mcp). Fallback admin/dev: AGENT_API_TOKEN. Los números vienen de la base; no inventes montos. El token solo ve ese hogar.",
   },
 );
 
 const verifyToken = async (_req: Request, bearerToken?: string) => {
-  if (!bearerToken || !isAgentAuthConfigured()) return undefined;
-  if (!agentTokenMatches(bearerToken)) return undefined;
-  const user = await resolveAgentUser();
-  if (!user) return undefined;
+  if (!bearerToken) return undefined;
+  const resolved = await resolveBearerAuth(bearerToken);
+  if (!resolved) return undefined;
+  await syncUser(resolved.user);
   return {
     token: bearerToken,
-    clientId: user.id,
+    clientId: resolved.user.id,
     scopes: ["llevacuentas:read", "llevacuentas:import"],
     extra: {
-      userId: user.id,
-      email: user.email ?? undefined,
+      userId: resolved.user.id,
+      email: resolved.user.email ?? undefined,
+      ...(resolved.householdId ? { householdId: resolved.householdId } : {}),
+      authKind: resolved.kind,
     },
   };
 };

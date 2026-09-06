@@ -88,6 +88,20 @@ export async function ensureSchema() {
       `,
       sql`CREATE INDEX IF NOT EXISTS hm_user_idx ON household_members(user_id)`,
       sql`
+        CREATE TABLE IF NOT EXISTS household_api_tokens (
+          id text PRIMARY KEY,
+          household_id text NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+          token_hash text NOT NULL,
+          token_prefix text NOT NULL,
+          created_by text REFERENCES users(id) ON DELETE SET NULL,
+          created_at timestamp DEFAULT now() NOT NULL,
+          last_used_at timestamp,
+          revoked_at timestamp
+        )
+      `,
+      sql`CREATE UNIQUE INDEX IF NOT EXISTS hat_hash_uidx ON household_api_tokens(token_hash)`,
+      sql`CREATE INDEX IF NOT EXISTS hat_household_idx ON household_api_tokens(household_id)`,
+      sql`
         CREATE TABLE IF NOT EXISTS categories (
           id text PRIMARY KEY,
           slug text NOT NULL UNIQUE,

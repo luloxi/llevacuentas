@@ -3,13 +3,25 @@ import { eq, sql } from "drizzle-orm";
 import { ADMIN_EMAIL } from "@/lib/auth/allowlist";
 import { getDb, hasDatabase, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
+import {
+  getUserHousehold,
+  pickHouseholdActingUser,
+} from "@/lib/household";
+import {
+  lookupHouseholdToken,
+  touchHouseholdTokenLastUsed,
+} from "@/lib/agent/household-token";
 import type { AppUser } from "@/lib/session";
 
-/** Env var: shared bearer secret for El Tano / Jurio / other agents. */
+/**
+ * Env var: shared bearer secret for admin/dev fallback (El Tano / Jurio).
+ * Optional once households mint their own tokens. A global token cannot sell
+ * the .com product — it always maps to AGENT_USER_ID / AGENT_USER_EMAIL.
+ */
 export const AGENT_TOKEN_ENV = "AGENT_API_TOKEN";
-/** Env var: Neon Auth / app user id to act as (preferred). */
+/** Env var: Neon Auth / app user id to act as (preferred). Admin/dev fallback only. */
 export const AGENT_USER_ID_ENV = "AGENT_USER_ID";
-/** Env var: email to resolve the app user if AGENT_USER_ID is unset. */
+/** Env var: email to resolve the app user if AGENT_USER_ID is unset. Admin/dev fallback only. */
 export const AGENT_USER_EMAIL_ENV = "AGENT_USER_EMAIL";
 
 export function isAgentAuthConfigured(): boolean {
@@ -197,4 +209,59 @@ export async function resolveAgentUser(): Promise<AppUser | null> {
     name: row.name,
     image: row.image,
   };
+}
+
+export type ResolvedBearerAuth =
+  | {
+      kind: "household_token";
+      user: AppUser;
+      householdId: string;
+      tokenId: string;
+    }
+  | {
+      kind: "global_token";
+      user: AppUser;
+      householdId?: string;
+    };
+
+/**
+ * Resolve a Bearer token to an acting user + household.
+ * 1. Per-household hashed token (product path) — scoped to that household_id only.
+ * 2. Global AGENT_API_TOKEN (admin/dev fallback) — the configured user's household.
+ */
+export async function resolveBearerAuth(
+  provided: string,
+): Promise<ResolvedBearerAuth | null> {
+  if (!provided) return null;
+
+  const household = await lookupHouseholdToken(provided);
+  if (household.status === "revoked") return null;
+  if (household.status === "active") {
+    const user = await pickHouseholdActingUser(
+      household.householdId,
+      household.createdBy,
+    );
+    if (!user) return null;
+    try {
+      await touchHouseholdTokenLastUsed(household.id);
+    } catch {
+      // Auth still succeeds if last_used_at cannot be written.
+    }
+    return {
+      kind: "household_token",
+      user,
+      householdId: household.householdId,
+      tokenId: household.id,
+    };
+  }
+
+  if (!agentTokenMatches(provided)) return null;
+  const user = await resolveAgentUser();
+  if (!user) return null;
+  let householdId: string | undefined;
+  if (hasDatabase()) {
+    const ctx = await getUserHousehold(user.id);
+    householdId = ctx?.household.id;
+  }
+  return { kind: "global_token", user, householdId };
 }

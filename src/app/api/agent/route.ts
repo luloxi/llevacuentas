@@ -8,10 +8,12 @@ export async function GET() {
 
   return NextResponse.json({
     name: "LlevaCuentas agent API",
-    auth: "Authorization: Bearer <AGENT_API_TOKEN>",
+    auth: "Authorization: Bearer <token del hogar>. Fallback admin/dev: AGENT_API_TOKEN",
     actingAs: {
       id: authResult.user.id,
       email: authResult.user.email,
+      householdId: authResult.householdId ?? null,
+      authKind: authResult.authKind,
     },
     mcp: {
       url: "/api/mcp",

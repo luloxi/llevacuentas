@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const data = await getAgentGastos(
-      authResult.user,
+      authResult,
       searchParams.get("period"),
     );
     return NextResponse.json(data);

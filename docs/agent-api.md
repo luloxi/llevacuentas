@@ -1,41 +1,56 @@
-# Agent API + MCP remoto (El Tano / Jurio / grok.com)
+# Agent API + MCP remoto (token por hogar)
 
 LlevaCuentas expone los mismos datos del hogar por:
 
 1. **HTTP Agent API** (`/api/agent/*`) — ideal para `curl` / scripts.
 2. **MCP remoto** (`/api/mcp`) — Streamable HTTP para grok.com, Cursor u otros clientes MCP.
 
-Ambos usan el mismo bearer `AGENT_API_TOKEN` y la misma lógica (no inventan números).
+Ambos usan el **token del hogar** (Bearer) y la misma lógica (no inventan números). La PWA sigue con cookie de sesión; esto es para máquinas / IAs.
 
 UI de setup (español): **`/mcp`** en la PWA (`https://llevacuentas.vercel.app/mcp`).
+
+Polar (suscripción por hogar) y monotributo **no** se implementan acá: primero token por hogar, después Polar, después monotributo.
 
 ## Auth
 
 ```
-Authorization: Bearer <AGENT_API_TOKEN>
+Authorization: Bearer <token del hogar>
 ```
 
-El token actúa como el usuario de la app (dueño del hogar). Cookie login sigue para la PWA; bearer es para agentes / MCP.
+El token se genera en la PWA (`/mcp`), se guarda **hasheado** y se muestra **una sola vez**. Resuelve siempre a **ese** `household_id`: el hogar A no ve al B.
 
-### Secrets (Vercel env, never commit)
+Cookie login sigue para la PWA. Bearer es para agentes / MCP.
+
+### Cómo mintar un token del hogar
+
+1. Entrá a la PWA con tu usuario (sesión).
+2. Andá a **https://llevacuentas.vercel.app/mcp** (también hay un atajo “Token MCP” en Hogar).
+3. Tocá **Generar token del hogar**. Copiá el valor ahora: no se vuelve a mostrar.
+4. Pegalo en grok.com / Grok CLI / Cursor como `Authorization: Bearer …` (en la config del MCP, **no** en el chat).
+5. Si se filtró o lo perdiste: **Rotar** (invalida el anterior) o **Revocar**.
+
+`POST /api/household/agent-token` (sesión, no Bearer) con `{ "action": "create" | "rotate" }` devuelve `{ token, prefix, household }`. `DELETE` revoca.
+
+### Fallback admin/dev (no es el producto)
+
+El secreto de entorno `AGENT_API_TOKEN` sigue andando como **fallback interno**. Mapea al usuario de `AGENT_USER_ID` / `AGENT_USER_EMAIL` y a **su** hogar, no a todos los hogares. No sirve para vender el .com multi-tenant.
 
 | Name | Required | Purpose |
 | --- | --- | --- |
-| `AGENT_API_TOKEN` | yes | Random bearer secret. Same value in Vercel and in the agent environment. |
-| `AGENT_USER_ID` | optional | Neon Auth / `users.id` that **belongs to a hogar** (`household_members`). |
-| `AGENT_USER_EMAIL` | optional | Used if `AGENT_USER_ID` is unset or points to a user without household. Defaults to `lucianoolivabianco@gmail.com`. |
+| `AGENT_API_TOKEN` | no (fallback) | Bearer admin/dev. Mismo valor en Vercel y en el entorno del agente interno. |
+| `AGENT_USER_ID` | optional | Neon Auth / `users.id` del hogar de admin/dev (`household_members`). Solo con el fallback global. |
+| `AGENT_USER_EMAIL` | optional | Si `AGENT_USER_ID` falta o no tiene hogar. Default `lucianoolivabianco@gmail.com`. |
 
-Generate a token (example): `openssl rand -hex 32`
+No hay env nuevos para el token por hogar: vive en Postgres (hash).
 
-The PWA user must already exist (one login) and belong to a household.
-If `AGENT_USER_ID` is set to an id that is **not** in `household_members`, the agent falls back to the email user who does have a hogar.
-If tools return `code: "no_household"`, unset the wrong `AGENT_USER_ID` or set it to the PWA user id that owns the hogar (after one login).
+The PWA user must already belong to a household to mint a token.
+If tools return `code: "no_household"`, mint from `/mcp` while logged into that hogar.
 
 ## MCP remoto
 
 - **URL:** `https://llevacuentas.vercel.app/api/mcp`
 - **Transport:** Streamable HTTP (MCP 2025/2026). Stateless on Vercel (Node runtime).
-- **Auth:** header `Authorization: Bearer <AGENT_API_TOKEN>` (no OAuth browser flow).
+- **Auth:** header `Authorization: Bearer <token del hogar>` (no OAuth browser flow).
 
 ### Tools
 
@@ -46,14 +61,16 @@ If tools return `code: "no_household"`, unset the wrong `AGENT_USER_ID` or set i
 | `importar_resumen` | Importa Excel/PDF: `fileBase64` + `fileName` (+ `bank`, `kind`). |
 | `listar_cargas` | Historial de cargas (resúmenes, tickets, manuales). |
 
+Todas las tools filtran por el `household_id` del token.
+
 ### grok.com / Grok CLI
 
 ```bash
-export AGENT_API_TOKEN="…"   # mismo valor que en Vercel
+export LLEVACUENTAS_TOKEN="…"   # token del hogar, copiado una vez desde /mcp
 
 grok mcp add --transport http llevacuentas \
   https://llevacuentas.vercel.app/api/mcp \
-  --header "Authorization: Bearer ${AGENT_API_TOKEN}"
+  --header "Authorization: Bearer ${LLEVACUENTAS_TOKEN}"
 ```
 
 O en `~/.grok/config.toml`:
@@ -61,8 +78,10 @@ O en `~/.grok/config.toml`:
 ```toml
 [mcp_servers.llevacuentas]
 url = "https://llevacuentas.vercel.app/api/mcp"
-headers = { Authorization = "Bearer ${AGENT_API_TOKEN}" }
+headers = { Authorization = "Bearer ${LLEVACUENTAS_TOKEN}" }
 ```
+
+En grok.com: MCP remoto Streamable HTTP, misma URL, header `Authorization: Bearer …`. No pegues el token en el chat.
 
 ### Cursor / cliente genérico
 
@@ -72,7 +91,7 @@ headers = { Authorization = "Bearer ${AGENT_API_TOKEN}" }
     "llevacuentas": {
       "url": "https://llevacuentas.vercel.app/api/mcp",
       "headers": {
-        "Authorization": "Bearer ${AGENT_API_TOKEN}"
+        "Authorization": "Bearer ${LLEVACUENTAS_TOKEN}"
       }
     }
   }
@@ -85,11 +104,12 @@ El flujo esperado es bearer estático, no un Authorization Server interactivo.
 ## HTTP calls (curl)
 
 Replace `$APP_URL` with the Vercel origin (same host as the PWA).
+`$LLEVACUENTAS_TOKEN` is the household token from `/mcp`.
 
 ### 1. Load summary (stored statements + current month)
 
 ```bash
-curl -sS -H "Authorization: Bearer $AGENT_API_TOKEN" \
+curl -sS -H "Authorization: Bearer $LLEVACUENTAS_TOKEN" \
   "$APP_URL/api/agent/summary"
 ```
 
@@ -101,7 +121,7 @@ fecha / comercio / importe columns work. Pass `bank=Fiwind` to label rows.
 Multipart:
 
 ```bash
-curl -sS -H "Authorization: Bearer $AGENT_API_TOKEN" \
+curl -sS -H "Authorization: Bearer $LLEVACUENTAS_TOKEN" \
   -F "file=@resumen.xlsx" -F "bank=BBVA" \
   "$APP_URL/api/agent/import"
 ```
@@ -109,7 +129,7 @@ curl -sS -H "Authorization: Bearer $AGENT_API_TOKEN" \
 JSON (when the agent already has bytes as base64):
 
 ```bash
-curl -sS -H "Authorization: Bearer $AGENT_API_TOKEN" \
+curl -sS -H "Authorization: Bearer $LLEVACUENTAS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"fileName":"resumen.xlsx","bank":"BBVA","fileBase64":"<base64>"}' \
   "$APP_URL/api/agent/import"
@@ -120,27 +140,28 @@ curl -sS -H "Authorization: Bearer $AGENT_API_TOKEN" \
 Current calendar month (America/Argentina/Buenos_Aires):
 
 ```bash
-curl -sS -H "Authorization: Bearer $AGENT_API_TOKEN" \
+curl -sS -H "Authorization: Bearer $LLEVACUENTAS_TOKEN" \
   "$APP_URL/api/agent/gastos"
 ```
 
 A specific month, or the latest month that has data:
 
 ```bash
-curl -sS -H "Authorization: Bearer $AGENT_API_TOKEN" \
+curl -sS -H "Authorization: Bearer $LLEVACUENTAS_TOKEN" \
   "$APP_URL/api/agent/gastos?period=2026-08"
 
-curl -sS -H "Authorization: Bearer $AGENT_API_TOKEN" \
+curl -sS -H "Authorization: Bearer $LLEVACUENTAS_TOKEN" \
   "$APP_URL/api/agent/gastos?period=latest"
 ```
 
 Read `formatted.headline` plus `totalArs` / `totalUsd` / `totalArsCombined`.
 Empty months return zeros — never invented figures.
 
-Bearer also works on the existing PWA routes (`POST /api/import/bbva`,
-`GET /api/stats/mes-a-mes`) if you need the full UI payloads.
+`GET /api/agent` (auth required) lists HTTP + MCP and echoes `actingAs.householdId` + `authKind` (`household_token` | `global_token` | `session`).
 
-Discovery: `GET /api/agent` (auth required) lists HTTP + MCP.
+Bearer also works on the existing PWA routes (`POST /api/import/bbva`,
+`GET /api/stats/mes-a-mes`) if you need the full UI payloads — still scoped
+to the token's household via the acting member.
 
 ## PDF genéricos (IA)
 
@@ -148,4 +169,4 @@ Si el PDF no matchea el parser BBVA y está `OPENAI_API_KEY`, el import usa IA (
 
 ## Privacidad
 
-Cuando conectas una IA por MCP, los movimientos salen de LlevaCuentas hacia esa IA. No pegues el token del agente en chats ni en el repo. Polar/suscripcion no se toca con este cambio.
+Cuando conectás una IA por MCP, los movimientos salen de LlevaCuentas hacia esa IA. No pegues el token del hogar en chats ni en el repo. Polar/suscripción no se toca con este cambio.

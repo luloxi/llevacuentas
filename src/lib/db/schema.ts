@@ -55,6 +55,34 @@ export const householdMembers = pgTable(
   ],
 );
 
+/**
+ * Per-household Agent/MCP bearer tokens.
+ * Store only the SHA-256 hex of the plaintext; plaintext is shown once on create/rotate.
+ */
+export const householdApiTokens = pgTable(
+  "household_api_tokens",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    tokenPrefix: text("token_prefix").notNull(),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    lastUsedAt: timestamp("last_used_at", { mode: "date" }),
+    revokedAt: timestamp("revoked_at", { mode: "date" }),
+  },
+  (t) => [
+    uniqueIndex("hat_hash_uidx").on(t.tokenHash),
+    index("hat_household_idx").on(t.householdId),
+  ],
+);
+
 export const categories = pgTable("categories", {
   id: text("id")
     .primaryKey()
@@ -284,6 +312,7 @@ export const incomes = pgTable(
 
 export type User = typeof users.$inferSelect;
 export type Household = typeof households.$inferSelect;
+export type HouseholdApiToken = typeof householdApiTokens.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type Category = typeof categories.$inferSelect;
 export type Receipt = typeof receipts.$inferSelect;

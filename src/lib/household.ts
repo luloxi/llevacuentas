@@ -3,6 +3,7 @@ import { customAlphabet } from "nanoid";
 import { getDb, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
 import { CATEGORY_SEEDS } from "@/lib/categorize/rules";
+import type { AppUser } from "@/lib/session";
 
 const inviteCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
 
@@ -87,6 +88,77 @@ export async function getUserHousehold(
     .where(eq(schema.householdMembers.householdId, household.id));
 
   return { household, membership, members };
+}
+
+/** Load a household by id (token-bound scope). Null if missing or empty. */
+export async function getHouseholdById(
+  householdId: string,
+): Promise<HouseholdContext | null> {
+  await ensureSchema();
+  const db = getDb();
+  const [household] = await db
+    .select()
+    .from(schema.households)
+    .where(eq(schema.households.id, householdId))
+    .limit(1);
+  if (!household) return null;
+
+  const members = await db
+    .select({
+      userId: schema.householdMembers.userId,
+      role: schema.householdMembers.role,
+      displayName: schema.householdMembers.displayName,
+      name: schema.users.name,
+      email: schema.users.email,
+      image: schema.users.image,
+    })
+    .from(schema.householdMembers)
+    .innerJoin(schema.users, eq(schema.users.id, schema.householdMembers.userId))
+    .where(eq(schema.householdMembers.householdId, household.id));
+
+  if (members.length === 0) return null;
+
+  const acting =
+    members.find((m) => m.role === "owner") ?? members[0] ?? null;
+  if (!acting) return null;
+
+  const [membership] = await db
+    .select()
+    .from(schema.householdMembers)
+    .where(
+      and(
+        eq(schema.householdMembers.householdId, household.id),
+        eq(schema.householdMembers.userId, acting.userId),
+      ),
+    )
+    .limit(1);
+  if (!membership) return null;
+
+  return { household, membership, members };
+}
+
+/**
+ * Acting app user for a household-scoped token.
+ * Prefers the member who minted it; otherwise owner, otherwise any member.
+ */
+export async function pickHouseholdActingUser(
+  householdId: string,
+  preferredUserId?: string | null,
+): Promise<AppUser | null> {
+  const ctx = await getHouseholdById(householdId);
+  if (!ctx) return null;
+  const preferred = preferredUserId
+    ? ctx.members.find((m) => m.userId === preferredUserId)
+    : undefined;
+  const owner = ctx.members.find((m) => m.role === "owner");
+  const member = preferred ?? owner ?? ctx.members[0];
+  if (!member) return null;
+  return {
+    id: member.userId,
+    email: member.email,
+    name: member.name,
+    image: member.image,
+  };
 }
 
 export async function createHousehold(userId: string, name = "Mi espacio") {

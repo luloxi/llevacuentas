@@ -60,7 +60,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: upload.error }, { status: 400 });
     }
 
-    const data = await importAgentStatement(authResult.user, upload);
+    const data = await importAgentStatement(authResult, upload);
     return NextResponse.json(data);
   } catch (e) {
     if (isAgentServiceError(e)) {

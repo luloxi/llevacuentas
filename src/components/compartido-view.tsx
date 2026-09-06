@@ -14,9 +14,11 @@ import { HogarSkeleton, PageStack, SegmentedControl } from "@/components/ui";
 import { HogarCharts } from "@/components/hogar-charts";
 import { CategoryIcon } from "@/lib/category-icons";
 import { colorForCategory } from "@/lib/category-colors";
+import Link from "next/link";
 import {
   ArrowDownRight,
   ArrowUpRight,
+  Bot,
   Check,
   ChevronDown,
   ChevronRight,
@@ -367,6 +369,13 @@ export function CompartidoView() {
               Invitar
             </button>
           )}
+          <Link
+            href="/mcp"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--muted-fg)] transition hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)]"
+          >
+            <Bot className="h-3.5 w-3.5" />
+            Token MCP
+          </Link>
         </div>
 
         {viewTab === "charts" ? (

@@ -10,7 +10,7 @@ export async function GET() {
   if ("error" in authResult) return authResult.error;
 
   try {
-    const data = await getAgentSummary(authResult.user);
+    const data = await getAgentSummary(authResult);
     return NextResponse.json(data);
   } catch (e) {
     if (isAgentServiceError(e)) {
