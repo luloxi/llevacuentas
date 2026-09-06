@@ -1,21 +1,15 @@
 import { and, eq, inArray } from "drizzle-orm";
-import {
-  parseBbvaWorkbook,
-  parseTransparenciaConsumos,
-  type BbvaMovement,
-} from "@/lib/bbva/parse";
-import { matchCategory, categoryNameToSlug } from "@/lib/categorize/rules";
+import { parseTransparenciaConsumos } from "@/lib/bbva/parse";
+import { categoryNameToSlug } from "@/lib/categorize/rules";
 import { matchCategoryWithLearning } from "@/lib/categorize/learn";
 import { getDb, schema } from "@/lib/db";
 import { getCategoryMap } from "@/lib/household";
-
-/** Cheap PDF sniff without loading pdf-parse / pdfjs. */
-function looksLikePdf(buffer: Buffer, fileName?: string): boolean {
-  if (fileName && /\.pdf$/i.test(fileName)) return true;
-  return (
-    buffer.length >= 5 && buffer.subarray(0, 5).toString("ascii") === "%PDF-"
-  );
-}
+import { parseStatementFile } from "@/lib/import/parse-statement";
+import {
+  emptyParseMessage,
+  resolveImportBank,
+  statementTxSource,
+} from "@/lib/import/source";
 
 /** Stable key for “same expense” even if fingerprint algorithm changed. */
 function logicalExpenseKey(m: {
@@ -57,6 +51,9 @@ export type ImportBbvaResult = {
   fullyDuplicate: boolean;
   warning: string | null;
   message: string;
+  hint: string | null;
+  source: string;
+  bank: string;
 };
 
 function buildImportMessage(r: {
@@ -125,31 +122,6 @@ function buildImportMessage(r: {
   };
 }
 
-async function parseBbvaMovements(
-  buffer: Buffer,
-  fileName: string,
-): Promise<{ movements: BbvaMovement[]; source: string }> {
-  if (looksLikePdf(buffer, fileName)) {
-    const { parseBbvaStatementPdf } = await import("@/lib/bbva/parse-pdf");
-    const bbvaMovements = await parseBbvaStatementPdf(buffer);
-    if (bbvaMovements.length > 0) {
-      return { movements: bbvaMovements, source: "bbva_pdf" };
-    }
-    const { isAiPdfImportConfigured, parseStatementPdfWithAi } = await import(
-      "@/lib/import/parse-pdf-ai"
-    );
-    if (isAiPdfImportConfigured()) {
-      const aiMovements = await parseStatementPdfWithAi(buffer, fileName);
-      return { movements: aiMovements, source: "pdf_ai" };
-    }
-    return { movements: [], source: "bbva_pdf" };
-  }
-  return {
-    movements: parseBbvaWorkbook(buffer),
-    source: "bbva_xlsx",
-  };
-}
-
 export async function importBbvaFile(opts: {
   householdId: string;
   userId: string;
@@ -157,14 +129,21 @@ export async function importBbvaFile(opts: {
   buffer: Buffer;
   bank?: string | null;
 }): Promise<ImportBbvaResult> {
-  const bank = opts.bank?.trim() || "BBVA";
-  const { movements, source } = await parseBbvaMovements(
-    opts.buffer,
-    opts.fileName,
-  );
+  const parsed = await parseStatementFile(opts.buffer, opts.fileName);
+  const bank = resolveImportBank({
+    selected: opts.bank,
+    detected: parsed.detectedBank,
+    fileName: opts.fileName,
+  });
+  const { movements, source } = parsed;
   const total = movements.length;
 
   if (total === 0) {
+    const empty = emptyParseMessage({
+      fileName: opts.fileName,
+      fileKind: parsed.fileKind,
+      pdfTextLength: parsed.pdfTextLength,
+    });
     const meta = buildImportMessage({
       total: 0,
       uniqueInFile: 0,
@@ -182,6 +161,10 @@ export async function importBbvaFile(opts: {
       skipped: 0,
       learnedHits: 0,
       ...meta,
+      message: empty.message,
+      hint: parsed.hint ?? empty.hint,
+      source,
+      bank,
     };
   }
 
@@ -279,6 +262,9 @@ export async function importBbvaFile(opts: {
       skipped: alreadyExists + duplicatesInFile,
       learnedHits: 0,
       ...meta,
+      hint: null,
+      source,
+      bank,
     };
   }
 
@@ -298,12 +284,7 @@ export async function importBbvaFile(opts: {
   let inserted = 0;
   let learnedHits = 0;
   let insertFailed = 0;
-  const txSource =
-    source === "bbva_pdf"
-      ? "bbva_pdf"
-      : source === "pdf_ai"
-        ? "statement_pdf"
-        : "bbva_import";
+  const txSource = statementTxSource(source);
 
   for (const m of toInsert) {
     const catMatch = await matchCategoryWithLearning(
@@ -362,6 +343,9 @@ export async function importBbvaFile(opts: {
     skipped: finalAlreadyExists + duplicatesInFile,
     learnedHits,
     ...meta,
+    hint: null,
+    source,
+    bank,
   };
 }
 

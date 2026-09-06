@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { AppUser } from "@/lib/session";
-import { normalizeBank } from "@/lib/banks";
+import { resolveImportBank, statementTypeLabel } from "@/lib/import/source";
 import { getDb, schema } from "@/lib/db";
 import { getMonthEndBuyRates } from "@/lib/fx/month-end-rates";
 import {
@@ -260,13 +260,17 @@ export async function importAgentStatement(
       } satisfies AgentServiceError;
     }
     const fileName = (input.fileName ?? "statement.bin").trim() || "statement.bin";
-    const bank = normalizeBank(input.bank) ?? "BBVA";
     const kind = String(input.kind ?? "bbva");
 
-    const { movements, source } = await parseStatementMovements(
+    const { movements, source, detectedBank } = await parseStatementMovements(
       input.buffer,
       fileName,
     );
+    const bank = resolveImportBank({
+      selected: input.bank,
+      detected: detectedBank,
+      fileName,
+    });
     const fileSummary = summarizeParsedMovements(movements, source);
 
     const result =
@@ -310,24 +314,6 @@ export type CargaItem = {
   source: string | null;
   detail: string | null;
 };
-
-function statementTypeLabel(source: string, bank: string | null): string {
-  const bankSuffix = bank ? ` (${bank})` : "";
-  switch (source) {
-    case "bbva_pdf":
-      return `Resumen PDF${bankSuffix || " (BBVA)"}`;
-    case "bbva_xlsx":
-      return `Movimientos Excel${bankSuffix || ""}`;
-    case "pdf_ai":
-      return `Resumen PDF (IA)${bankSuffix}`;
-    case "transparencia_xlsx":
-      return "Transparencia Excel";
-    case "statement_pdf":
-      return `Resumen PDF${bankSuffix}`;
-    default:
-      return bank ? `Importación (${bank})` : "Resumen / importación";
-  }
-}
 
 function receiptStatusLabel(status: string): string {
   switch (status) {

@@ -368,10 +368,13 @@ export function AddExpenseModal({
           alreadyExists?: number;
           skipped?: number;
           message?: string;
+          hint?: string | null;
         };
         if ((data.total ?? 0) === 0) {
           throw new Error(
-            `Sin movimientos en “${file.name}”. Probá Excel o PDF del resumen.`,
+            `${data.message || `Sin movimientos en “${file.name}”.`}${
+              data.hint ? ` ${data.hint}` : ""
+            }`,
           );
         }
         total += data.total ?? 0;
@@ -502,7 +505,7 @@ export function AddExpenseModal({
           <input
             ref={cardRef}
             type="file"
-            accept=".xlsx,.xls,.pdf,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".xlsx,.xls,.csv,.txt,.pdf,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             multiple
             className="hidden"
             disabled={busy}

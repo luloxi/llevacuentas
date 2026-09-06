@@ -117,12 +117,30 @@ export function CargasView() {
             window.dispatchEvent(new Event("lc:card-imported"));
           }}
         />
-        <p className="mt-3 text-xs text-[var(--muted-fg)]">
-          Excel/PDF: BBVA y formatos parecidos (ej. Fiwind) van por el import. PDF raro usa IA si hay{" "}
-          <code className="rounded bg-[var(--surface-muted)] px-1">OPENAI_API_KEY</code>
-          , se usa IA (fuente <code className="rounded bg-[var(--surface-muted)] px-1">pdf_ai</code>
-          ).
+      </Surface>
+
+      <Surface>
+        <p className="text-sm font-medium text-[var(--foreground)]">
+          Cómo sacar el resumen
         </p>
+        <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-[var(--muted-fg)]">
+          <li>
+            <span className="font-medium text-[var(--foreground)]">BBVA:</span>{" "}
+            home banking → Tarjetas → <em>Últimos movimientos</em> (Excel) o{" "}
+            <em>Resumen con vencimiento</em> (PDF).
+          </li>
+          <li>
+            <span className="font-medium text-[var(--foreground)]">Fiwind:</span>{" "}
+            app → Actividad o Tarjeta → exportar / compartir (Excel, CSV o PDF).
+          </li>
+          <li>
+            <span className="font-medium text-[var(--foreground)]">
+              Si el banco no da archivo:
+            </span>{" "}
+            en la web, Imprimir → Guardar como PDF (no una foto). CSV/Excel entra
+            mejor. Desde el celu, “Compartir” el PDF a LlevaCuentas.
+          </li>
+        </ul>
       </Surface>
 
       <Surface className="flex flex-wrap items-center justify-between gap-3">

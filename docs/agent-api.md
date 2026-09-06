@@ -113,10 +113,12 @@ curl -sS -H "Authorization: Bearer $LLEVACUENTAS_TOKEN" \
   "$APP_URL/api/agent/summary"
 ```
 
-### 1b. Import a statement (BBVA Excel/PDF; label bank=Fiwind if needed)
+### 1b. Import a statement (BBVA / Fiwind Excel, CSV o PDF)
 
-Same parser as the PWA import. Fiwind has no dedicated parser yet; files with
-fecha / comercio / importe columns work. Pass `bank=Fiwind` to label rows.
+Same parser as the PWA import (`/cargas`). Detects BBVA PDF, generic
+fecha+importe PDF (Fiwind y otros), Excel y CSV (coma o `;`). Si el nombre
+o el contenido dice Fiwind, no se etiqueta como BBVA. Pass `bank=Fiwind` to
+force the label.
 
 Multipart:
 

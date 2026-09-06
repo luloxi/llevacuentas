@@ -1,39 +1,17 @@
 import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
-import {
-  parseBbvaWorkbook,
-  type BbvaMovement,
-} from "@/lib/bbva/parse";
+import type { BbvaMovement } from "@/lib/bbva/parse";
+import { parseStatementFile } from "@/lib/import/parse-statement";
 import { periodFromDateString } from "@/lib/utils";
-
-function looksLikePdf(buffer: Buffer, fileName?: string): boolean {
-  if (fileName && /\.pdf$/i.test(fileName)) return true;
-  return (
-    buffer.length >= 5 && buffer.subarray(0, 5).toString("ascii") === "%PDF-"
-  );
-}
 
 export async function parseStatementMovements(
   buffer: Buffer,
   fileName: string,
-): Promise<{ movements: BbvaMovement[]; source: string }> {
-  if (looksLikePdf(buffer, fileName)) {
-    const { parseBbvaStatementPdf } = await import("@/lib/bbva/parse-pdf");
-    const bbvaMovements = await parseBbvaStatementPdf(buffer);
-    if (bbvaMovements.length > 0) {
-      return { movements: bbvaMovements, source: "bbva_pdf" };
-    }
-    const { isAiPdfImportConfigured, parseStatementPdfWithAi } = await import(
-      "@/lib/import/parse-pdf-ai"
-    );
-    if (isAiPdfImportConfigured()) {
-      const aiMovements = await parseStatementPdfWithAi(buffer, fileName);
-      return { movements: aiMovements, source: "pdf_ai" };
-    }
-    return { movements: [], source: "bbva_pdf" };
-  }
+): Promise<{ movements: BbvaMovement[]; source: string; detectedBank: string | null }> {
+  const parsed = await parseStatementFile(buffer, fileName);
   return {
-    movements: parseBbvaWorkbook(buffer),
-    source: "bbva_xlsx",
+    movements: parsed.movements,
+    source: parsed.source,
+    detectedBank: parsed.detectedBank,
   };
 }
 

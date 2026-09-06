@@ -29,16 +29,23 @@ export function parseBbvaAmount(raw: unknown): ParsedAmount | null {
   // Remove spaces used as thousand separators sometimes
   s = s.replace(/\s/g, "");
 
-  // Argentine format: 1.234.567,89  or US-like in some exports
+  // Argentine format: 1.234.567,89  or US-like 1,234.56 (last separator wins)
   const negative = s.startsWith("-") || s.includes("-");
   s = s.replace(/-/g, "");
 
-  if (s.includes(",") && s.includes(".")) {
-    // 1.234,56 → 1234.56
-    s = s.replace(/\./g, "").replace(",", ".");
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma >= 0 && lastDot >= 0) {
+    if (lastComma > lastDot) {
+      // 1.234,56
+      s = s.replace(/\./g, "").replace(",", ".");
+    } else {
+      // 1,234.56
+      s = s.replace(/,/g, "");
+    }
   } else if (s.includes(",")) {
-    // 1234,56 or 1,234.56 ambiguous — prefer AR if last sep is comma
-    s = s.replace(",", ".");
+    // 1234,56
+    s = s.replace(/\./g, "").replace(",", ".");
   }
 
   const value = Number(s);

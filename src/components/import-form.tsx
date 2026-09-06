@@ -20,6 +20,8 @@ export function ImportForm({
     message: string;
     warning: string | null;
     fullyDuplicate: boolean;
+    hint: string | null;
+    bank: string | null;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,12 +48,16 @@ export function ImportForm({
       message?: string;
       warning?: string | null;
       fullyDuplicate?: boolean;
+      hint?: string | null;
+      bank?: string;
+      source?: string;
     };
 
     try {
       let total = 0;
       let inserted = 0;
       let alreadyExists = 0;
+      let lastBank: string | null = bank;
       const warnings: string[] = [];
       const messages: string[] = [];
 
@@ -78,15 +84,17 @@ export function ImportForm({
         }
         if (!res.ok) throw new Error(data?.error || `Error al importar ${file.name}`);
         if ((data?.total ?? 0) === 0) {
-          throw new Error(
-            `No se leyeron movimientos de “${file.name}”. Probá Excel de movimientos o PDF de resumen.`,
-          );
+          const detail = data?.message || `No se leyeron movimientos de “${file.name}”.`;
+          const hint = data?.hint ? ` ${data.hint}` : "";
+          throw new Error(`${detail}${hint}`);
         }
         total += data?.total ?? 0;
         inserted += data?.inserted ?? 0;
         alreadyExists += data?.alreadyExists ?? data?.skipped ?? 0;
         if (data?.message) messages.push(`${file.name}: ${data.message}`);
         if (data?.warning) warnings.push(`${file.name}: ${data.warning}`);
+        if (data?.hint) warnings.push(`${file.name}: ${data.hint}`);
+        lastBank = data?.bank ?? lastBank;
       }
 
       const fullyDuplicate = inserted === 0 && alreadyExists > 0;
@@ -100,6 +108,8 @@ export function ImportForm({
             : (messages[0] ?? `${inserted} nuevos · ${alreadyExists} coincidencias`),
         warning: warnings[0] ?? null,
         fullyDuplicate,
+        hint: null,
+        bank: lastBank,
       });
       form.reset();
       if (inserted > 0) onDone?.();
@@ -144,8 +154,8 @@ export function ImportForm({
               }
             >
               {compact
-                ? "Excel o PDF del banco"
-                : "Excel de movimientos o PDF de resumen. Sin duplicados."}
+                ? "Excel, CSV o PDF · BBVA y Fiwind"
+                : "Excel, CSV o PDF de BBVA, Fiwind u otro banco. Elegí el banco. Sin duplicados."}
             </p>
           </div>
           <label className={`block w-full ${compact ? "text-left" : "text-left max-w-md"}`}>
@@ -165,9 +175,24 @@ export function ImportForm({
           <input
             name="file"
             type="file"
-            accept=".xlsx,.xls,.pdf,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".xlsx,.xls,.csv,.txt,.pdf,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             required
             multiple
+            onChange={(e) => {
+              const files = e.currentTarget.files;
+              if (!files?.length) return;
+              for (const f of Array.from(files)) {
+                const n = f.name.toLowerCase();
+                if (n.includes("fiwind") && (bank === "BBVA" || !bank)) {
+                  setBank("Fiwind");
+                  break;
+                }
+                if (n.includes("bbva") && bank !== "BBVA") {
+                  setBank("BBVA");
+                  break;
+                }
+              }
+            }}
             className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-emerald-700"
           />
           <button
@@ -205,6 +230,7 @@ export function ImportForm({
             <p className="text-zinc-700 dark:text-zinc-300">
               {result.message ||
                 `${result.inserted} nuevos · ${result.alreadyExists} coincidencias · ${result.total} filas`}
+              {result.bank ? ` · ${result.bank}` : ""}
             </p>
             {result.warning && !result.fullyDuplicate && (
               <p className="mt-1 text-amber-800 dark:text-amber-200">

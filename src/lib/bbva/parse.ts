@@ -6,6 +6,7 @@ import {
   normalizeMovementCurrency,
   parseBbvaAmount,
 } from "@/lib/money";
+import { detectBankFromText } from "@/lib/import/source";
 
 export type BbvaMovement = {
   date: string; // YYYY-MM-DD
@@ -77,7 +78,11 @@ function isPaymentDescription(desc: string): boolean {
     u.includes("SU PAGO") ||
     u.includes("PAGO EN PESOS") ||
     u.includes("PAGO EN USD") ||
-    u.includes("PAGO RECIBIDO")
+    u.includes("PAGO RECIBIDO") ||
+    u.includes("PAGO DE TARJETA") ||
+    u.includes("RECARGA") ||
+    u.includes("CARGA DE SALDO") ||
+    u.includes("CARGA SALDO")
   );
 }
 
@@ -101,17 +106,40 @@ function normalizeHeaderCell(c: unknown): string {
     .trim();
 }
 
-function isHeaderRow(row: (string | number | Date | null)[]): boolean {
-  const joined = row.map((c) => normalizeHeaderCell(c)).join("|");
-  if (!joined.includes("fecha")) return false;
-  // BBVA actual export: Fecha | Establecimiento | Importe en $ | Importe en U$S
-  // Older / other banks: Movimiento / Descripción
+function isDateHeader(h: string): boolean {
+  if (h.includes("fecha")) return true;
+  if (h === "date" || h.startsWith("date ") || h.endsWith(" date")) return true;
+  return false;
+}
+
+function isMerchantHeader(h: string): boolean {
   return (
-    joined.includes("establecimiento") ||
-    joined.includes("movimiento") ||
-    joined.includes("descrip") ||
-    joined.includes("comercio") ||
-    joined.includes("detalle")
+    h.includes("establecimiento") ||
+    h.includes("movimiento") ||
+    h.includes("descrip") ||
+    h.includes("comercio") ||
+    h.includes("detalle") ||
+    h.includes("concepto") ||
+    h.includes("merchant") ||
+    h === "narration" ||
+    h === "detalle operacion" ||
+    h === "detalle de operacion"
+  );
+}
+
+function isHeaderRow(row: (string | number | Date | null)[]): boolean {
+  const cells = row.map((c) => normalizeHeaderCell(c));
+  const joined = cells.join("|");
+  if (!cells.some(isDateHeader)) return false;
+  // BBVA: Fecha | Establecimiento | Importe en $ | Importe en U$S
+  // Fiwind / others: Concepto, Descripción, Merchant + Monto / Débito
+  return (
+    cells.some(isMerchantHeader) ||
+    joined.includes("importe") ||
+    joined.includes("monto") ||
+    joined.includes("amount") ||
+    joined.includes("debito") ||
+    joined.includes("credito")
   );
 }
 
@@ -131,13 +159,35 @@ function isArsHeader(h: string): boolean {
     h.includes("importe") ||
     h.includes("monto") ||
     h.includes("peso") ||
+    h.includes("amount") ||
     h.includes("$")
   );
 }
 
-function parseColumnAmount(raw: unknown): number | null {
-  const parsed = parseBbvaAmount(raw);
-  return parsed ? parsed.value : null;
+function isDebitHeader(h: string): boolean {
+  return (
+    h.includes("debito") ||
+    h.includes("débito") ||
+    h === "cargo" ||
+    h.includes("cargo ") ||
+    h.startsWith("debe") ||
+    h === "debit"
+  );
+}
+
+function isCreditHeader(h: string): boolean {
+  return (
+    h.includes("credito") ||
+    h.includes("crédito") ||
+    h === "abono" ||
+    h.includes("abono") ||
+    h.startsWith("haber") ||
+    h === "credit"
+  );
+}
+
+function isCurrencyHeader(h: string): boolean {
+  return h === "moneda" || h === "currency" || h === "divisa" || h === "curr";
 }
 
 /** Parse ARS/USD columns; honor USD markers inside either cell. */
@@ -167,23 +217,118 @@ function parseArsUsdColumns(
   return { amountArs, amountUsd };
 }
 
+function decodeSpreadsheetText(buf: Buffer): string {
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    return buf.toString("utf16le").replace(/^\uFEFF/, "");
+  }
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    return new TextDecoder("utf-16be").decode(buf).replace(/^\uFEFF/, "");
+  }
+  return buf.toString("utf8").replace(/^\uFEFF/, "");
+}
+
+function detectCsvDelimiter(text: string): string {
+  const line = text.split(/\r?\n/).find((l) => l.trim()) ?? "";
+  const counts: Array<[string, number]> = [
+    [";", (line.match(/;/g) ?? []).length],
+    ["\t", (line.match(/\t/g) ?? []).length],
+    [",", (line.match(/,/g) ?? []).length],
+  ];
+  counts.sort((a, b) => b[1] - a[1]);
+  return counts[0][1] > 0 ? counts[0][0] : ",";
+}
+
+function sniffTableKind(
+  buf: Buffer,
+  fileName?: string,
+): "xlsx" | "xls" | "csv" | "unknown" {
+  const name = fileName?.toLowerCase() ?? "";
+  if (name.endsWith(".csv") || name.endsWith(".txt")) return "csv";
+  if (name.endsWith(".xlsx")) return "xlsx";
+  if (name.endsWith(".xls")) return "xls";
+  if (buf.length >= 2 && buf[0] === 0x50 && buf[1] === 0x4b) return "xlsx";
+  if (
+    buf.length >= 8 &&
+    buf[0] === 0xd0 &&
+    buf[1] === 0xcf &&
+    buf[2] === 0x11 &&
+    buf[3] === 0xe0
+  ) {
+    return "xls";
+  }
+  const sample = buf.subarray(0, Math.min(buf.length, 800));
+  if (!sample.includes(0) && /[\r\n]/.test(sample.toString("utf8")) && /[;,\t]/.test(sample.toString("utf8"))) {
+    return "csv";
+  }
+  return "unknown";
+}
+
+function currencyFromCell(raw: unknown): "USD" | "ARS" | null {
+  if (raw == null || raw === "") return null;
+  const u = String(raw).trim().toUpperCase();
+  if (!u) return null;
+  if (/\b(USD|U\$S|USDT|USDC|DOLAR|DÓLAR)\b/.test(u) || u === "US$") return "USD";
+  if (/\b(ARS|PESO|\$)\b/.test(u) || u === "$") return "ARS";
+  return null;
+}
+
+export type StatementWorkbookMeta = {
+  movements: BbvaMovement[];
+  classicBbva: boolean;
+  detectedBank: string | null;
+  fileKind: "xlsx" | "xls" | "csv" | "unknown";
+};
+
 /**
- * Parse BBVA "Últimos movimientos" (.xls / .xlsx) buffer.
- * Supports the home-banking export:
- *   Nro. Tarjeta | Fecha | Establecimiento | Cuota | Importe en $ | Importe en U$S
+ * Parse BBVA "Últimos movimientos" and similar bank tables (.xls / .xlsx / .csv).
+ * Classic BBVA: Nro. Tarjeta | Fecha | Establecimiento | Cuota | Importe en $ | Importe en U$S
+ * Also: Fecha + Concepto/Descripción + Monto/Moneda, or Débito/Crédito (Fiwind y otros).
  */
-export function parseBbvaWorkbook(data: ArrayBuffer | Buffer): BbvaMovement[] {
-  const wb = XLSX.read(data, { type: "buffer", cellDates: true });
+export function parseStatementWorkbook(
+  data: ArrayBuffer | Buffer,
+  fileName?: string,
+): StatementWorkbookMeta {
+  const buf = Buffer.isBuffer(data) ? data : Buffer.from(new Uint8Array(data));
+  const fileKind = sniffTableKind(buf, fileName);
+
+  let wb: XLSX.WorkBook;
+  try {
+    if (fileKind === "csv") {
+      const text = decodeSpreadsheetText(buf);
+      wb = XLSX.read(text, {
+        type: "string",
+        FS: detectCsvDelimiter(text),
+        cellDates: true,
+        raw: true,
+      });
+    } else {
+      wb = XLSX.read(buf, { type: "buffer", cellDates: true });
+    }
+  } catch {
+    return { movements: [], classicBbva: false, detectedBank: null, fileKind };
+  }
+
   const sheetName =
     wb.SheetNames.find((n) => /mov/i.test(n)) ??
-    wb.SheetNames.find((n) => /periodo|period/i.test(n)) ??
+    wb.SheetNames.find((n) => /periodo|period|consumo/i.test(n)) ??
     wb.SheetNames[0];
-  if (!sheetName) return [];
+  if (!sheetName) {
+    return { movements: [], classicBbva: false, detectedBank: null, fileKind };
+  }
 
   const rows = XLSX.utils.sheet_to_json<(string | number | Date | null)[]>(
     wb.Sheets[sheetName],
     { header: 1, defval: null, raw: true },
   );
+
+  const previewText = [
+    fileName ?? "",
+    sheetName,
+    ...rows.slice(0, 20).map((r) =>
+      (r ?? []).map((c) => String(c ?? "")).join(" "),
+    ),
+  ].join("\n");
+  const detectedBank = detectBankFromText(previewText);
 
   // Find header row (title row may sit above it)
   let headerIdx = -1;
@@ -196,8 +341,8 @@ export function parseBbvaWorkbook(data: ArrayBuffer | Buffer): BbvaMovement[] {
   if (headerIdx < 0) {
     // Last resort: first row that has "fecha"
     for (let i = 0; i < Math.min(rows.length, 25); i++) {
-      const joined = (rows[i] ?? []).map((c) => normalizeHeaderCell(c)).join("|");
-      if (joined.includes("fecha")) {
+      const cells = (rows[i] ?? []).map((c) => normalizeHeaderCell(c));
+      if (cells.some(isDateHeader)) {
         headerIdx = i;
         break;
       }
@@ -207,29 +352,35 @@ export function parseBbvaWorkbook(data: ArrayBuffer | Buffer): BbvaMovement[] {
 
   const header = (rows[headerIdx] ?? []).map(normalizeHeaderCell);
 
-  const colDate = header.findIndex((h) => h.includes("fecha"));
-  const colMov = header.findIndex(
-    (h) =>
-      h.includes("establecimiento") ||
-      h.includes("movimiento") ||
-      h.includes("descrip") ||
-      h.includes("comercio") ||
-      h.includes("detalle"),
-  );
+  const colDate = header.findIndex(isDateHeader);
+  const colMov = header.findIndex(isMerchantHeader);
   const colCuota = header.findIndex((h) => h.includes("cuota"));
   const colUsd = header.findIndex(
-    (h) => (h.includes("importe") || h.includes("monto")) && isUsdHeader(h),
+    (h) => (h.includes("importe") || h.includes("monto") || h.includes("amount")) && isUsdHeader(h),
   );
   let colArs = header.findIndex(
-    (h) => (h.includes("importe") || h.includes("monto") || h.includes("$")) && isArsHeader(h),
+    (h) =>
+      (h.includes("importe") || h.includes("monto") || h.includes("amount") || h.includes("$")) &&
+      isArsHeader(h),
   );
   // If only one "importe" and it's not USD, use it as ARS
   if (colArs < 0) {
     colArs = header.findIndex(
       (h, i) =>
-        i !== colUsd && (h.includes("importe") || h.includes("monto") || h.includes("peso")),
+        i !== colUsd &&
+        (h.includes("importe") || h.includes("monto") || h.includes("peso") || h.includes("amount")),
     );
   }
+  const colDebit = header.findIndex(isDebitHeader);
+  const colCredit = header.findIndex(isCreditHeader);
+  const colCurrency = header.findIndex(isCurrencyHeader);
+
+  const classicBbva =
+    header.some((h) => h.includes("establecimiento")) &&
+    (header.some((h) => h.includes("importe en") || h.includes("u$s")) ||
+      (colArs >= 0 && colUsd >= 0));
+
+  const useSplit = colArs < 0 && (colDebit >= 0 || colCredit >= 0);
 
   // Layout fallback for classic BBVA export (no reliable header match):
   // 0 card, 1 date, 2 merchant, 3 cuota, 4 ARS, 5 USD
@@ -255,9 +406,32 @@ export function parseBbvaWorkbook(data: ArrayBuffer | Buffer): BbvaMovement[] {
     if (!date) continue;
 
     const descriptionNormalized = normalizeDescription(descriptionRaw);
-    const installment = extractInstallment(descriptionRaw, row[cuotaIdx]);
+    const installment = extractInstallment(
+      descriptionRaw,
+      colCuota >= 0 || classicBbva ? row[cuotaIdx] : null,
+    );
 
-    let { amountArs, amountUsd } = parseArsUsdColumns(row[arsIdx], row[usdIdx]);
+    let amountArs: number | null = null;
+    let amountUsd: number | null = null;
+
+    if (useSplit) {
+      const debit = colDebit >= 0 ? parseBbvaAmount(row[colDebit]) : null;
+      const credit = colCredit >= 0 ? parseBbvaAmount(row[colCredit]) : null;
+      if (debit && Math.abs(debit.value) > 0) {
+        amountArs = Math.abs(debit.value);
+      } else if (credit && Math.abs(credit.value) > 0) {
+        amountArs = -Math.abs(credit.value);
+      }
+    } else {
+      ({ amountArs, amountUsd } = parseArsUsdColumns(row[arsIdx], row[usdIdx]));
+    }
+
+    const moneda = colCurrency >= 0 ? currencyFromCell(row[colCurrency]) : null;
+    if (moneda === "USD" && amountUsd == null && amountArs != null) {
+      amountUsd = amountArs;
+      amountArs = null;
+    }
+
     ({ amountArs, amountUsd } = normalizeMovementCurrency({
       descriptionNormalized,
       amountArs,
@@ -282,7 +456,18 @@ export function parseBbvaWorkbook(data: ArrayBuffer | Buffer): BbvaMovement[] {
     out.push({ ...partial, fingerprint: makeFingerprint(partial) });
   }
 
-  return out;
+  return { movements: out, classicBbva, detectedBank, fileKind };
+}
+
+/**
+ * Parse BBVA "Últimos movimientos" (.xls / .xlsx) buffer.
+ * Supports the home-banking export and similar Fecha/Descripción/Importe tables.
+ */
+export function parseBbvaWorkbook(
+  data: ArrayBuffer | Buffer,
+  fileName?: string,
+): BbvaMovement[] {
+  return parseStatementWorkbook(data, fileName).movements;
 }
 
 /**

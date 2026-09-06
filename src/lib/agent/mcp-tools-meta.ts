@@ -13,7 +13,7 @@ export const MCP_TOOLS = [
   {
     name: "importar_resumen",
     summary:
-      "Importa Excel/PDF (fileBase64 + fileName; bank opcional, ej. Fiwind).",
+      "Importa Excel/CSV/PDF (fileBase64 + fileName; bank opcional, ej. Fiwind).",
   },
   {
     name: "listar_cargas",

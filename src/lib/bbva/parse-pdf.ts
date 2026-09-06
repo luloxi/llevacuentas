@@ -3,6 +3,7 @@ import {
   amountFingerprintKey,
   fingerprintParts,
   normalizeMovementCurrency,
+  parseBbvaAmount,
 } from "@/lib/money";
 import type { BbvaMovement } from "@/lib/bbva/parse";
 import { ensurePdfDomPolyfills } from "@/lib/bbva/pdf-polyfill";
@@ -245,31 +246,31 @@ function makeFingerprint(m: Omit<BbvaMovement, "fingerprint">, cupon: string | n
   return createHash("sha256").update(base).digest("hex").slice(0, 32);
 }
 
-/**
- * Parse BBVA Visa "Resumen con vencimiento" PDF (formato de resumen mensual clásico).
- */
-export async function parseBbvaStatementPdf(
+export async function extractPdfText(
   data: ArrayBuffer | Buffer,
-): Promise<BbvaMovement[]> {
+): Promise<string> {
   // Polyfill browser APIs *before* loading pdf-parse (pdfjs needs DOMMatrix).
   ensurePdfDomPolyfills();
   const { PDFParse } = await import("pdf-parse");
 
   const bytes = data instanceof Buffer ? new Uint8Array(data) : new Uint8Array(data);
   const parser = new PDFParse({ data: bytes });
-  let text: string;
   try {
     const result = await parser.getText();
-    text = result.text ?? "";
+    return result.text ?? "";
   } finally {
-    // pdf-parse may hold resources
     try {
       await parser.destroy?.();
     } catch {
       /* ignore */
     }
   }
+}
 
+/**
+ * Parse already-extracted text of a BBVA Visa "Resumen con vencimiento".
+ */
+export function parseBbvaPdfText(text: string): BbvaMovement[] {
   const lines = text
     .split(/\r?\n/)
     .map((l) => l.replace(/\u0000/g, "").trim())
@@ -318,7 +319,7 @@ export async function parseBbvaStatementPdf(
     if (moneys.length === 0) continue;
 
     // Cupón before stripping moneys
-    let cupon = extractCupon(restRaw);
+    const cupon = extractCupon(restRaw);
     // Avoid treating money thousands as cupón (shouldn't with 6 digits only)
 
     const { amountArs, amountUsd } = assignAmounts(restRaw, moneys);
@@ -361,6 +362,153 @@ export async function parseBbvaStatementPdf(
     if (seenFp.has(fingerprint)) continue;
     seenFp.add(fingerprint);
 
+    out.push({ ...partial, fingerprint });
+  }
+
+  return out;
+}
+
+/**
+ * Parse BBVA Visa "Resumen con vencimiento" PDF (formato de resumen mensual clásico).
+ */
+export async function parseBbvaStatementPdf(
+  data: ArrayBuffer | Buffer,
+): Promise<BbvaMovement[]> {
+  const text = await extractPdfText(data);
+  return parseBbvaPdfText(text);
+}
+
+const GENERIC_DATE_DMY_RE =
+  /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})\s+(.+)$/;
+const GENERIC_DATE_ISO_RE = /^(\d{4})-(\d{2})-(\d{2})\s+(.+)$/;
+
+const GENERIC_MONEY_RE =
+  /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}|-?\d{1,3}(?:,\d{3})*\.\d{2}|-?\d+\.\d{2}/g;
+
+function parseGenericPdfDate(
+  day: string,
+  month: string,
+  year: string,
+): string | null {
+  let y = Number(year);
+  if (y < 100) y += 2000;
+  const m = Number(month);
+  const d = Number(day);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const iso = new Date(Date.UTC(y, m - 1, d));
+  if (
+    Number.isNaN(iso.getTime()) ||
+    iso.getUTCFullYear() !== y ||
+    iso.getUTCMonth() !== m - 1 ||
+    iso.getUTCDate() !== d
+  ) {
+    return null;
+  }
+  return iso.toISOString().slice(0, 10);
+}
+
+function findGenericMoneyTokens(
+  text: string,
+): { raw: string; value: number; index: number }[] {
+  const out: { raw: string; value: number; index: number }[] = [];
+  GENERIC_MONEY_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = GENERIC_MONEY_RE.exec(text)) !== null) {
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 1);
+    if (after === "%") continue;
+    const before = text.slice(Math.max(0, m.index - 1), m.index);
+    if (/[A-Za-zÁÉÍÓÚáéíóú]/.test(before)) continue;
+    const parsed = parseBbvaAmount(m[0]);
+    if (!parsed) continue;
+    out.push({ raw: m[0], value: parsed.value, index: m.index });
+  }
+  return out;
+}
+
+function isGenericPayment(desc: string): boolean {
+  const u = desc.toUpperCase();
+  return (
+    isPaymentDescription(desc) ||
+    u.includes("RECARGA") ||
+    u.includes("CARGA DE SALDO") ||
+    u.includes("PAGO RECIBIDO")
+  );
+}
+
+/**
+ * Conservative line parser for Fiwind / other AR statements:
+ *   01/08/2026  DIA TIENDA 99  15.420,50
+ *   2026-08-01  OPENAI  USD 20.00
+ */
+export function parseGenericPdfText(text: string): BbvaMovement[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\u0000/g, "").trim())
+    .filter(Boolean);
+
+  const out: BbvaMovement[] = [];
+  const seenFp = new Set<string>();
+
+  for (const line of lines) {
+    const upper = line.toUpperCase();
+    if (
+      upper.includes("LEGALES") ||
+      upper.includes("TNA FIJA") ||
+      upper.includes("PLAN V:") ||
+      (upper.includes("FECHA") && upper.includes("DESCRIP"))
+    ) {
+      continue;
+    }
+    if (/\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\s*[-–]\s*\d{1,2}[/\-.]/.test(line)) {
+      // Period range in the header, not a movement
+      continue;
+    }
+
+    let date: string | null = null;
+    let restRaw = "";
+
+    const iso = line.match(GENERIC_DATE_ISO_RE);
+    const dmy = line.match(GENERIC_DATE_DMY_RE);
+    if (iso) {
+      date = `${iso[1]}-${iso[2]}-${iso[3]}`;
+      restRaw = iso[4] ?? "";
+    } else if (dmy) {
+      date = parseGenericPdfDate(dmy[1], dmy[2], dmy[3]);
+      restRaw = dmy[4] ?? "";
+    }
+    if (!date || !restRaw) continue;
+
+    restRaw = stripNoise(restRaw);
+    if (!restRaw) continue;
+
+    const installment = extractInstallment(restRaw);
+    const moneys = findGenericMoneyTokens(restRaw);
+    if (moneys.length === 0) continue;
+
+    const cupon = extractCupon(restRaw);
+    const { amountArs, amountUsd } = assignAmounts(restRaw, moneys);
+    if (amountArs == null && amountUsd == null) continue;
+
+    const descriptionRaw = cleanDescription(restRaw, installment, cupon, moneys);
+    if (shouldSkipDescription(descriptionRaw)) continue;
+    if (descriptionRaw.length < 3) continue;
+
+    const descriptionNormalized = descriptionRaw.replace(/\s+/g, " ").trim();
+    const payment = isGenericPayment(descriptionNormalized);
+    const arsNeg = (amountArs ?? 0) < 0;
+    const partial: Omit<BbvaMovement, "fingerprint"> = {
+      date,
+      descriptionRaw: descriptionNormalized,
+      descriptionNormalized,
+      installment,
+      amountArs,
+      amountUsd,
+      isPayment: payment || arsNeg,
+      isCredit: arsNeg && !payment,
+    };
+    const fingerprint = makeFingerprint(partial, cupon);
+    if (seenFp.has(fingerprint)) continue;
+    seenFp.add(fingerprint);
     out.push({ ...partial, fingerprint });
   }
 

@@ -119,7 +119,7 @@ const mcpHandler = createMcpHandler(
       {
         title: "Importar resumen",
         description:
-          "Importa un resumen de tarjeta (Excel/PDF BBVA u similar; bank=Fiwind para etiquetar). Enviá el archivo en base64 (fileBase64). Misma lógica que POST /api/agent/import.",
+          "Importa un resumen de tarjeta (Excel/CSV/PDF de BBVA, Fiwind u similar). Enviá el archivo en base64 (fileBase64). bank etiqueta el origen (Fiwind, BBVA). Misma lógica que POST /api/agent/import.",
         inputSchema: z.object({
           fileBase64: z
             .string()
