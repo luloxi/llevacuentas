@@ -6,7 +6,10 @@ import {
   parseBbvaAmount,
 } from "@/lib/money";
 import type { BbvaMovement } from "@/lib/bbva/parse";
-import { ensurePdfDomPolyfills } from "@/lib/bbva/pdf-polyfill";
+import {
+  configurePdfJsWorker,
+  ensurePdfDomPolyfills,
+} from "@/lib/bbva/pdf-polyfill";
 
 const MONTHS: Record<string, number> = {
   ene: 1,
@@ -252,6 +255,7 @@ export async function extractPdfText(
   // Polyfill browser APIs *before* loading pdf-parse (pdfjs needs DOMMatrix).
   ensurePdfDomPolyfills();
   const { PDFParse } = await import("pdf-parse");
+  configurePdfJsWorker(PDFParse);
 
   const bytes = data instanceof Buffer ? new Uint8Array(data) : new Uint8Array(data);
   const parser = new PDFParse({ data: bytes });

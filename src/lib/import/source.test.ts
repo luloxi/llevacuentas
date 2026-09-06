@@ -33,6 +33,24 @@ describe("statement source labels", () => {
       "Movimientos Excel (BBVA)",
     );
   });
+
+  it("never surfaces the technical source code as the label", () => {
+    const codes = [
+      "bbva_xlsx",
+      "bbva_pdf",
+      "xlsx",
+      "xls",
+      "csv",
+      "pdf",
+      "pdf_ai",
+      "statement_pdf",
+    ];
+    for (const code of codes) {
+      const label = statementTypeLabel(code, "BBVA");
+      assert.notEqual(label, code);
+      assert.doesNotMatch(label, /bbva_xlsx|bbva_pdf|pdf_ai/);
+    }
+  });
 });
 
 describe("resolveImportBank", () => {

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test src/lib/agent/auth.test.ts src/lib/agent/household-token.test.ts src/lib/agent/import-summary.test.ts src/lib/agent/mcp-json.test.ts src/lib/stats/monthly-expenses.test.ts src/lib/import/source.test.ts src/lib/import/parse-statement.test.ts",
+    "test": "tsx --test src/lib/agent/auth.test.ts src/lib/agent/household-token.test.ts src/lib/agent/import-summary.test.ts src/lib/agent/mcp-json.test.ts src/lib/stats/monthly-expenses.test.ts src/lib/import/source.test.ts src/lib/import/parse-statement.test.ts src/lib/bbva/pdf-polyfill.test.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "test:parse": "tsx scripts/test-bbva-parse.ts",

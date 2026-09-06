@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FileSpreadsheet,
-  FileText,
   Loader2,
   PenLine,
   Receipt,
@@ -232,12 +231,6 @@ export function CargasView() {
                     <span className="rounded-md bg-[var(--brand-soft)]/60 px-2 py-0.5 text-[var(--brand-fg)]">
                       {item.status}
                     </span>
-                    {item.source && item.kind === "statement" && (
-                      <span className="inline-flex items-center gap-1 text-[var(--muted-fg)]">
-                        <FileText className="h-3 w-3" />
-                        {item.source}
-                      </span>
-                    )}
                   </div>
                 </div>
               </li>

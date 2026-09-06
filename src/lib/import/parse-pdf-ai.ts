@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import OpenAI from "openai";
 import { z } from "zod";
 import type { BbvaMovement } from "@/lib/bbva/parse";
-import { ensurePdfDomPolyfills } from "@/lib/bbva/pdf-polyfill";
+import { extractPdfText } from "@/lib/bbva/parse-pdf";
 import {
   amountFingerprintKey,
   fingerprintParts,
@@ -60,23 +60,6 @@ function normalizeIsoDate(raw: string): string | null {
   return dt.toISOString().slice(0, 10);
 }
 
-async function extractPdfText(buffer: Buffer): Promise<string> {
-  ensurePdfDomPolyfills();
-  const { PDFParse } = await import("pdf-parse");
-  const bytes = new Uint8Array(buffer);
-  const parser = new PDFParse({ data: bytes });
-  try {
-    const result = await parser.getText();
-    return (result.text ?? "").trim();
-  } finally {
-    try {
-      await parser.destroy?.();
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
 /**
  * Generic card/bank statement PDF → movements via OpenAI.
  * Gated on OPENAI_API_KEY. Used when the BBVA-specific parser finds nothing.
@@ -91,7 +74,7 @@ export async function parseStatementPdfWithAi(
     );
   }
 
-  const text = await extractPdfText(buffer);
+  const text = (await extractPdfText(buffer)).trim();
   if (!text || text.length < 40) {
     throw new Error(
       "No se pudo leer texto del PDF. Probá otro archivo o el Excel de movimientos.",

@@ -1,3 +1,8 @@
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
 /**
  * pdfjs-dist (via pdf-parse) expects browser canvas APIs.
  * On Vercel Node they are missing and module init throws DOMMatrix.
@@ -103,4 +108,83 @@ export function ensurePdfDomPolyfills() {
     }
     g.Path2D = Path2DPolyfill;
   }
+}
+
+type PdfParseCtor = { setWorker: (workerSrc?: string) => string };
+
+function requireFrom(from: string) {
+  try {
+    return createRequire(from);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * pdfjs Node always fake-workers via `import(workerSrc)`.
+ * Default workerSrc is `./pdf.worker.mjs` (relative to the pdfjs file).
+ * Vercel NFT does not trace that dynamic import, so serverless fails with
+ * "Cannot find module pdf.worker.mjs". Point at an absolute file URL instead.
+ */
+export function resolvePdfJsWorkerSrc(): string | null {
+  const here =
+    typeof import.meta.url === "string"
+      ? fileURLToPath(import.meta.url)
+      : join(process.cwd(), "package.json");
+  const starters = [
+    join(process.cwd(), "package.json"),
+    here,
+  ];
+
+  const tried = new Set<string>();
+  const candidates: string[] = [];
+
+  for (const start of starters) {
+    const req = requireFrom(start);
+    if (!req) continue;
+    let pdfParseEntry: string | null = null;
+    try {
+      pdfParseEntry = req.resolve("pdf-parse");
+    } catch {
+      pdfParseEntry = null;
+    }
+    if (pdfParseEntry) {
+      const fromParse = requireFrom(pdfParseEntry);
+      for (const id of [
+        "pdfjs-dist/legacy/build/pdf.worker.mjs",
+        "pdfjs-dist/build/pdf.worker.mjs",
+      ]) {
+        try {
+          if (fromParse) candidates.push(fromParse.resolve(id));
+        } catch {
+          /* not hoisted here */
+        }
+      }
+      const parseDir = dirname(pdfParseEntry);
+      candidates.push(
+        join(parseDir, "pdf.worker.mjs"),
+        join(parseDir, "../esm/pdf.worker.mjs"),
+        join(parseDir, "../cjs/pdf.worker.mjs"),
+        join(parseDir, "../../worker/pdf.worker.mjs"),
+      );
+    }
+    try {
+      candidates.push(req.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs"));
+    } catch {
+      /* optional direct dep */
+    }
+  }
+
+  for (const file of candidates) {
+    if (!file || tried.has(file)) continue;
+    tried.add(file);
+    if (existsSync(file)) return pathToFileURL(file).href;
+  }
+  return null;
+}
+
+export function configurePdfJsWorker(PDFParse: PdfParseCtor): string | null {
+  const src = resolvePdfJsWorkerSrc();
+  if (src) PDFParse.setWorker(src);
+  return src;
 }
