@@ -43,7 +43,8 @@ function mapCaught(e: unknown): never {
   if (msg === "NO_HOUSEHOLD") {
     throw {
       status: 400,
-      error: "Creá o uníte a un hogar primero",
+      error:
+        "Sin hogar para el usuario del agente. Si AGENT_USER_ID apunta a un id sin household_members, desactivalo o usá el id PWA del hogar (o AGENT_USER_EMAIL).",
       code: "no_household",
     } satisfies AgentServiceError;
   }

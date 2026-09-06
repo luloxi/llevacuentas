@@ -133,8 +133,24 @@ headers = { Authorization = "Bearer \${AGENT_API_TOKEN}" }`;
             con ese valor (y opcional{" "}
             <code className="rounded bg-[var(--surface-muted)] px-1 text-[var(--foreground)]">
               AGENT_USER_ID
+            </code>{" "}
+            = el id del usuario PWA que ya está en el hogar). Redeploy.
+          </li>
+          <li>
+            Si el agente responde{" "}
+            <code className="rounded bg-[var(--surface-muted)] px-1 text-[var(--foreground)]">
+              no_household
             </code>
-            ). Redeploy.
+            : sacá un{" "}
+            <code className="rounded bg-[var(--surface-muted)] px-1 text-[var(--foreground)]">
+              AGENT_USER_ID
+            </code>{" "}
+            incorrecto o poné el id del usuario que creó/une el hogar (tras un
+            login en la PWA). El email{" "}
+            <code className="rounded bg-[var(--surface-muted)] px-1 text-[var(--foreground)]">
+              AGENT_USER_EMAIL
+            </code>{" "}
+            también sirve de fallback.
           </li>
           <li>
             En tu máquina / cliente, exportá el mismo valor como{" "}

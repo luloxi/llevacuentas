@@ -22,13 +22,14 @@ El token actúa como el usuario de la app (dueño del hogar). Cookie login sigue
 | Name | Required | Purpose |
 | --- | --- | --- |
 | `AGENT_API_TOKEN` | yes | Random bearer secret. Same value in Vercel and in the agent environment. |
-| `AGENT_USER_ID` | recommended | Neon Auth / `users.id` to act as. |
-| `AGENT_USER_EMAIL` | optional | Used if `AGENT_USER_ID` is unset. Defaults to `lucianoolivabianco@gmail.com`. |
+| `AGENT_USER_ID` | optional | Neon Auth / `users.id` that **belongs to a hogar** (`household_members`). |
+| `AGENT_USER_EMAIL` | optional | Used if `AGENT_USER_ID` is unset or points to a user without household. Defaults to `lucianoolivabianco@gmail.com`. |
 
 Generate a token (example): `openssl rand -hex 32`
 
-The user row must already exist (one PWA login) unless you set `AGENT_USER_ID`.
-The user must already belong to a household.
+The PWA user must already exist (one login) and belong to a household.
+If `AGENT_USER_ID` is set to an id that is **not** in `household_members`, the agent falls back to the email user who does have a hogar.
+If tools return `code: "no_household"`, unset the wrong `AGENT_USER_ID` or set it to the PWA user id that owns the hogar (after one login).
 
 ## MCP remoto
 

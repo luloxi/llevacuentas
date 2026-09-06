@@ -4,6 +4,8 @@ import {
   agentTokenMatches,
   isAgentAuthConfigured,
   parseBearerToken,
+  pickUserWithHousehold,
+  type AgentUserCandidate,
 } from "./auth";
 
 const prevToken = process.env.AGENT_API_TOKEN;
@@ -41,5 +43,57 @@ describe("agent bearer auth", () => {
     );
     assert.equal(agentTokenMatches("wrong"), false);
     assert.equal(agentTokenMatches(""), false);
+  });
+});
+
+describe("pickUserWithHousehold", () => {
+  const base = {
+    email: "lucianoolivabianco@gmail.com",
+    name: "Luciano",
+    image: null,
+  };
+
+  it("returns null for empty candidates", () => {
+    assert.equal(pickUserWithHousehold([]), null);
+  });
+
+  it("prefers the candidate with household membership", () => {
+    const stub: AgentUserCandidate = {
+      id: "wrong-agent-id",
+      ...base,
+      hasHousehold: false,
+    };
+    const hogar: AgentUserCandidate = {
+      id: "pwa-user-with-hogar",
+      ...base,
+      hasHousehold: true,
+    };
+    const picked = pickUserWithHousehold([stub, hogar]);
+    assert.equal(picked?.id, "pwa-user-with-hogar");
+  });
+
+  it("returns null when nobody has a household (no stub fallback)", () => {
+    const onlyStub: AgentUserCandidate = {
+      id: "orphan-id",
+      ...base,
+      hasHousehold: false,
+    };
+    assert.equal(pickUserWithHousehold([onlyStub]), null);
+  });
+
+  it("returns the household user even if listed first", () => {
+    const hogar: AgentUserCandidate = {
+      id: "owner",
+      ...base,
+      hasHousehold: true,
+    };
+    const other: AgentUserCandidate = {
+      id: "other",
+      email: "other@example.com",
+      name: null,
+      image: null,
+      hasHousehold: false,
+    };
+    assert.equal(pickUserWithHousehold([hogar, other])?.id, "owner");
   });
 });
