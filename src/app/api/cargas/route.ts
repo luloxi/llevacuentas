@@ -16,18 +16,21 @@ export type CargaItem = {
   detail: string | null;
 };
 
-function statementTypeLabel(source: string): string {
+function statementTypeLabel(source: string, bank: string | null): string {
+  const bankSuffix = bank ? ` (${bank})` : "";
   switch (source) {
     case "bbva_pdf":
-      return "Resumen PDF (BBVA)";
+      return `Resumen PDF${bankSuffix || " (BBVA)"}`;
     case "bbva_xlsx":
-      return "Movimientos Excel (BBVA)";
+      return `Movimientos Excel${bankSuffix || ""}`;
     case "pdf_ai":
-      return "Resumen PDF (IA)";
+      return `Resumen PDF (IA)${bankSuffix}`;
     case "transparencia_xlsx":
       return "Transparencia Excel";
+    case "statement_pdf":
+      return `Resumen PDF${bankSuffix}`;
     default:
-      return "Resumen / importación";
+      return bank ? `Importación (${bank})` : "Resumen / importación";
   }
 }
 
@@ -100,6 +103,30 @@ export async function GET() {
         .limit(200),
     ]);
 
+    const statementIds = statements.map((s) => s.id);
+    const bankByStatement = new Map<string, string>();
+    if (statementIds.length > 0) {
+      const bankRows = await db
+        .select({
+          statementId: schema.transactions.statementId,
+          bank: schema.transactions.bank,
+        })
+        .from(schema.transactions)
+        .where(
+          and(
+            eq(schema.transactions.householdId, householdId),
+            inArray(schema.transactions.statementId, statementIds),
+          ),
+        )
+        .limit(2000);
+      for (const row of bankRows) {
+        if (!row.statementId || !row.bank) continue;
+        if (!bankByStatement.has(row.statementId)) {
+          bankByStatement.set(row.statementId, row.bank);
+        }
+      }
+    }
+
     const receiptIds = receipts.map((r) => r.id);
     const itemCounts = new Map<string, number>();
     if (receiptIds.length > 0) {
@@ -122,13 +149,13 @@ export async function GET() {
       items.push({
         id: `statement:${s.id}`,
         kind: "statement",
-        typeLabel: statementTypeLabel(s.source),
+        typeLabel: statementTypeLabel(s.source, bankByStatement.get(s.id) ?? null),
         date: s.importedAt.toISOString(),
         fileName: s.fileName,
         count: s.rowCount,
         status: s.rowCount > 0 ? "Importado" : "Sin filas",
         source: s.source,
-        detail: null,
+        detail: bankByStatement.get(s.id) ?? null,
       });
     }
 

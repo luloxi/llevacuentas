@@ -117,7 +117,7 @@ export function CargasView() {
           }}
         />
         <p className="mt-3 text-xs text-[var(--muted-fg)]">
-          PDF de BBVA se interpreta con el parser propio. Si no es BBVA y hay{" "}
+          Excel/PDF: BBVA y formatos parecidos (ej. Fiwind) van por el import. PDF raro usa IA si hay{" "}
           <code className="rounded bg-[var(--surface-muted)] px-1">OPENAI_API_KEY</code>
           , se usa IA (fuente <code className="rounded bg-[var(--surface-muted)] px-1">pdf_ai</code>
           ).
