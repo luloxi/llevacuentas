@@ -1,15 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
-import { requireHousehold } from "@/lib/household";
 import { normalizeBank } from "@/lib/banks";
 import {
-  importBbvaFile,
-  importTransparenciaConsumos,
-} from "@/lib/import/bbva";
-import {
-  parseStatementMovements,
-  summarizeParsedMovements,
-} from "@/lib/agent/import-summary";
+  importAgentStatement,
+  isAgentServiceError,
+} from "@/lib/agent/services";
 
 async function readUpload(req: Request): Promise<
   | {
@@ -58,53 +53,23 @@ async function readUpload(req: Request): Promise<
 export async function POST(req: Request) {
   const authResult = await requireApiUser();
   if ("error" in authResult) return authResult.error;
-  const { user } = authResult;
 
   try {
-    const ctx = await requireHousehold(user.id);
     const upload = await readUpload(req);
     if ("error" in upload) {
       return NextResponse.json({ error: upload.error }, { status: 400 });
     }
 
-    const { movements, source } = await parseStatementMovements(
-      upload.buffer,
-      upload.fileName,
-    );
-    const fileSummary = summarizeParsedMovements(movements, source);
-
-    const result =
-      upload.kind === "transparencia"
-        ? await importTransparenciaConsumos({
-            householdId: ctx.household.id,
-            userId: user.id,
-            fileName: upload.fileName,
-            buffer: upload.buffer,
-            bank: upload.bank,
-          })
-        : await importBbvaFile({
-            householdId: ctx.household.id,
-            userId: user.id,
-            fileName: upload.fileName,
-            buffer: upload.buffer,
-            bank: upload.bank,
-          });
-
-    return NextResponse.json({
-      ok: true,
-      bank: upload.bank,
-      fileName: upload.fileName,
-      file: fileSummary,
-      import: result,
-    });
+    const data = await importAgentStatement(authResult.user, upload);
+    return NextResponse.json(data);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Error";
-    if (msg === "NO_HOUSEHOLD") {
+    if (isAgentServiceError(e)) {
       return NextResponse.json(
-        { error: "Creá o uníte a un hogar primero" },
-        { status: 400 },
+        { error: e.error, code: e.code },
+        { status: e.status },
       );
     }
+    const msg = e instanceof Error ? e.message : "Error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

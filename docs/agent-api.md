@@ -1,11 +1,13 @@
-# Agent API (El Tano / Jurio)
+# Agent API + MCP remoto (El Tano / Jurio / grok.com)
 
-LlevaCuentas already imported BBVA statements and computed mes-a-mes in the PWA.
-This slice exposes that same data to Cursor/Grok Bot agents over HTTP.
+LlevaCuentas expone los mismos datos del hogar por:
 
-There is no MCP server in this slice: Grok Bot cannot host one for the app, and
-WebFetch cannot send `Authorization` headers. Agents should `curl` the deployed
-PWA origin (the Vercel URL of this project).
+1. **HTTP Agent API** (`/api/agent/*`) — ideal para `curl` / scripts.
+2. **MCP remoto** (`/api/mcp`) — Streamable HTTP para grok.com, Cursor u otros clientes MCP.
+
+Ambos usan el mismo bearer `AGENT_API_TOKEN` y la misma lógica (no inventan números).
+
+UI de setup (español): **`/mcp`** en la PWA (`https://llevacuentas.vercel.app/mcp`).
 
 ## Auth
 
@@ -13,8 +15,7 @@ PWA origin (the Vercel URL of this project).
 Authorization: Bearer <AGENT_API_TOKEN>
 ```
 
-The token acts as Luciano's app user (household owner). Cookie login still works
-for the PWA; bearer is for agents only.
+El token actúa como el usuario de la app (dueño del hogar). Cookie login sigue para la PWA; bearer es para agentes / MCP.
 
 ### Secrets (Vercel env, never commit)
 
@@ -29,7 +30,58 @@ Generate a token (example): `openssl rand -hex 32`
 The user row must already exist (one PWA login) unless you set `AGENT_USER_ID`.
 The user must already belong to a household.
 
-## Calls
+## MCP remoto
+
+- **URL:** `https://llevacuentas.vercel.app/api/mcp`
+- **Transport:** Streamable HTTP (MCP 2025/2026). Stateless on Vercel (Node runtime).
+- **Auth:** header `Authorization: Bearer <AGENT_API_TOKEN>` (no OAuth browser flow).
+
+### Tools
+
+| Tool | Qué hace |
+| --- | --- |
+| `gastos_del_mes` | Totales reales; `period` opcional (`YYYY-MM`, `latest`, o mes actual AR). |
+| `resumen` | Resúmenes importados + períodos + mes actual / último con datos. |
+| `importar_resumen` | Importa Excel/PDF: `fileBase64` + `fileName` (+ `bank`, `kind`). |
+| `listar_cargas` | Historial de cargas (resúmenes, tickets, manuales). |
+
+### grok.com / Grok CLI
+
+```bash
+export AGENT_API_TOKEN="…"   # mismo valor que en Vercel
+
+grok mcp add --transport http llevacuentas \
+  https://llevacuentas.vercel.app/api/mcp \
+  --header "Authorization: Bearer ${AGENT_API_TOKEN}"
+```
+
+O en `~/.grok/config.toml`:
+
+```toml
+[mcp_servers.llevacuentas]
+url = "https://llevacuentas.vercel.app/api/mcp"
+headers = { Authorization = "Bearer ${AGENT_API_TOKEN}" }
+```
+
+### Cursor / cliente genérico
+
+```json
+{
+  "mcpServers": {
+    "llevacuentas": {
+      "url": "https://llevacuentas.vercel.app/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ${AGENT_API_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Metadata RFC 9728 (descubrimiento): `/.well-known/oauth-protected-resource`.
+El flujo esperado es bearer estático, no un Authorization Server interactivo.
+
+## HTTP calls (curl)
 
 Replace `$APP_URL` with the Vercel origin (same host as the PWA).
 
@@ -87,6 +139,12 @@ Empty months return zeros — never invented figures.
 Bearer also works on the existing PWA routes (`POST /api/import/bbva`,
 `GET /api/stats/mes-a-mes`) if you need the full UI payloads.
 
+Discovery: `GET /api/agent` (auth required) lists HTTP + MCP.
+
 ## PDF genéricos (IA)
 
 Si el PDF no matchea el parser BBVA y está `OPENAI_API_KEY`, el import usa IA (`pdf_ai` / `statement_pdf`). Misma dedupe por `externalFingerprint`.
+
+## Privacidad
+
+Cuando conectas una IA por MCP, los movimientos salen de LlevaCuentas hacia esa IA. No pegues el token del agente en chats ni en el repo. Polar/suscripcion no se toca con este cambio.

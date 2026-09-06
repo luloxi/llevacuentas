@@ -7,13 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test src/lib/agent/auth.test.ts src/lib/agent/import-summary.test.ts src/lib/stats/monthly-expenses.test.ts",
+    "test": "tsx --test src/lib/agent/auth.test.ts src/lib/agent/import-summary.test.ts src/lib/agent/mcp-json.test.ts src/lib/stats/monthly-expenses.test.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "test:parse": "tsx scripts/test-bbva-parse.ts",
     "test:parse-pdf": "tsx scripts/test-bbva-pdf.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
     "@neondatabase/auth": "^0.4.2-beta",
     "@neondatabase/serverless": "^1.1.0",
     "@vercel/blob": "^2.6.1",
@@ -21,6 +22,7 @@
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.28.0",
+    "mcp-handler": "^2.1.1",
     "nanoid": "^6.0.1",
     "next": "16.2.12",
     "openai": "^7.3.0",

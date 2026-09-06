@@ -13,6 +13,16 @@ export async function GET() {
       id: authResult.user.id,
       email: authResult.user.email,
     },
+    mcp: {
+      url: "/api/mcp",
+      transport: "streamable-http",
+      tools: [
+        "gastos_del_mes",
+        "resumen",
+        "importar_resumen",
+        "listar_cargas",
+      ],
+    },
     endpoints: [
       {
         method: "GET",
@@ -34,6 +44,12 @@ export async function GET() {
         },
         description:
           "Gastos del mes from stored transactions (no placeholders).",
+      },
+      {
+        method: "GET|POST",
+        path: "/api/mcp",
+        description:
+          "Remote MCP (Streamable HTTP). Same bearer token. Tools wrap the agent API.",
       },
     ],
   });

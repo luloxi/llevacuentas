@@ -82,12 +82,13 @@ Cobro recurrente **9.990 ARS/mes** vía Polar (no Mercado Pago). Polar admite AR
 
 La UI de **Suscripción** se puede abrir sin keys (muestra "Falta configurar Polar"). El checkout real necesita las keys.
 
-## Agent API
 
-HTTP autenticado para agentes (sin MCP en la app). Ver [docs/agent-api.md](docs/agent-api.md).
+## Agent API + MCP remoto
 
-Vars Vercel: `AGENT_API_TOKEN` (obligatorio), `AGENT_USER_ID` (recomendado), `AGENT_USER_EMAIL` (opcional). PDF no-BBVA: `OPENAI_API_KEY`.
+HTTP autenticado y servidor MCP remoto en /api/mcp.
+- Setup UI: /mcp
+- Docs: docs/agent-api.md
 
-```bash
-npm test
-```
+Al conectar una IA, los movimientos salen hacia esa IA. No pegues claves en chats.
+
+Suscripcion queda aparte. Ver la doc del agent API.
