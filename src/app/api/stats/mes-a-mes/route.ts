@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { requireApiUser } from "@/lib/api-auth";
 import { getCategoryMap, requireHousehold } from "@/lib/household";
+import { forceSharedOnlyForHousehold } from "@/lib/personal-household";
 import { getDb, schema } from "@/lib/db";
 import { getMonthEndBuyRates } from "@/lib/fx/month-end-rates";
 import {
@@ -22,10 +23,15 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const periodParam = searchParams.get("period"); // YYYY-MM | "all" | null (latest)
     const ownershipRaw = searchParams.get("ownership");
-    const ownershipFilter =
+    let ownershipFilter =
       ownershipRaw === "personal" || ownershipRaw === "shared"
         ? ownershipRaw
         : "all";
+    // Casita / non-Personal: Personal-owned rows belong in Personal space.
+    // Personal chip → empty (or leftovers until migrate); all/shared → shared only.
+    if (forceSharedOnlyForHousehold(ctx.household.name)) {
+      ownershipFilter = ownershipRaw === "personal" ? "personal" : "shared";
+    }
 
     const db = getDb();
     const { byId, cats } = await getCategoryMap();

@@ -9,7 +9,10 @@ import {
   moveTransactionToHousehold,
   updateTransaction,
 } from "@/lib/transactions";
-import { resolvePersonalHouseholdId } from "@/lib/personal-household";
+import {
+  forceSharedOnlyForHousehold,
+  resolvePersonalHouseholdId,
+} from "@/lib/personal-household";
 import { getDb, schema } from "@/lib/db";
 import { normalizeBank } from "@/lib/banks";
 
@@ -33,9 +36,12 @@ export async function GET(req: Request) {
     const uncategorizedOnly =
       searchParams.get("uncategorized") === "1" ||
       searchParams.get("uncategorized") === "true";
-    const sharedOnly =
+    const sharedOnlyParam =
       searchParams.get("shared") === "1" ||
       searchParams.get("shared") === "true";
+    // Casita / non-Personal: never list Asignar=Personal (ownership=personal) rows.
+    const sharedOnly =
+      sharedOnlyParam || forceSharedOnlyForHousehold(ctx.household.name);
 
     const [rows, mapAll, mapVisible] = await Promise.all([
       listTransactions(ctx.household.id, {

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  forceSharedOnlyForHousehold,
   isPersonalHouseholdName,
   pickPersonalHouseholdId,
+  shouldListPersonalOwnedRows,
 } from "./personal-household";
 
 describe("pickPersonalHouseholdId", () => {
@@ -50,5 +52,21 @@ describe("isPersonalHouseholdName", () => {
     assert.equal(isPersonalHouseholdName("Personal"), true);
     assert.equal(isPersonalHouseholdName("mi espacio"), true);
     assert.equal(isPersonalHouseholdName("Casita"), false);
+  });
+});
+
+describe("shouldListPersonalOwnedRows / forceSharedOnlyForHousehold", () => {
+  it("lists personal rows only on Personal space and Invoice IOG", () => {
+    assert.equal(shouldListPersonalOwnedRows("Personal"), true);
+    assert.equal(shouldListPersonalOwnedRows("Mi espacio"), true);
+    assert.equal(shouldListPersonalOwnedRows("Invoice IOG"), true);
+    assert.equal(shouldListPersonalOwnedRows("Casita"), false);
+    assert.equal(shouldListPersonalOwnedRows("Otro hogar"), false);
+  });
+
+  it("forces sharedOnly on Casita / non-Personal assign hogares", () => {
+    assert.equal(forceSharedOnlyForHousehold("Casita"), true);
+    assert.equal(forceSharedOnlyForHousehold("Personal"), false);
+    assert.equal(forceSharedOnlyForHousehold("Invoice IOG"), false);
   });
 });

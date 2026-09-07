@@ -12,7 +12,10 @@ import {
   importBbvaFile,
   importTransparenciaConsumos,
 } from "@/lib/import/bbva";
-import { resolvePersonalHouseholdId } from "@/lib/personal-household";
+import {
+  forceSharedOnlyForHousehold,
+  resolvePersonalHouseholdId,
+} from "@/lib/personal-household";
 import {
   parseStatementMovements,
   summarizeParsedMovements,
@@ -112,7 +115,9 @@ export async function getAgentSummary(caller: AgentCaller) {
         .limit(10),
     ]);
 
-    const expenses = visibleExpenseRows(allRows, user.id);
+    const expenses = forceSharedOnlyForHousehold(ctx.household.name)
+      ? visibleExpenseRows(allRows, user.id).filter((r) => r.ownership === "shared")
+      : visibleExpenseRows(allRows, user.id);
     const { periods, byPeriod } = aggregateByPeriod(expenses, byId);
     const period = currentPeriodAr();
     const rates = await getMonthEndBuyRates([
@@ -187,7 +192,9 @@ export async function getAgentGastos(
       .from(schema.transactions)
       .where(eq(schema.transactions.householdId, ctx.household.id));
 
-    const expenses = visibleExpenseRows(allRows, user.id);
+    const expenses = forceSharedOnlyForHousehold(ctx.household.name)
+      ? visibleExpenseRows(allRows, user.id).filter((r) => r.ownership === "shared")
+      : visibleExpenseRows(allRows, user.id);
     const { periods, byPeriod } = aggregateByPeriod(expenses, byId);
     const extraPeriod =
       periodParam && periodParam !== "latest" && periodParam !== "current"

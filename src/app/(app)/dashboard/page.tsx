@@ -17,6 +17,7 @@ import { getLiveRates } from "@/lib/fx/live-rates";
 import { currentPeriodAr, periodFromDateString } from "@/lib/utils";
 import { sumPeriodIncomeArs } from "@/lib/incomes";
 import { isVisibleToUser } from "@/lib/transactions";
+import { forceSharedOnlyForHousehold } from "@/lib/personal-household";
 import { ensureSchema } from "@/lib/db/ensure-schema";
 import { computeCardDebt } from "@/lib/stats/debt";
 
@@ -59,8 +60,12 @@ export default async function DashboardPage() {
   }
   const prevPeriod = `${prevY}-${String(prevM).padStart(2, "0")}`;
 
+  const hidePersonalOwned = forceSharedOnlyForHousehold(ctx.household.name);
   const spendTxs = txs.filter(
-    (t) => isExpenseRow(t) && isVisibleToUser(t, user.id),
+    (t) =>
+      isExpenseRow(t) &&
+      isVisibleToUser(t, user.id) &&
+      (!hidePersonalOwned || t.ownership === "shared"),
   );
 
   const sharedTxs = txs.filter(

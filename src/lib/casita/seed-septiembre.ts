@@ -154,8 +154,9 @@ async function seedCasitaSeptiembre(user: AppUser): Promise<void> {
 }
 
 /**
- * Move previously seeded Casita Fiwind/CSV rows → Personal.
- * Keeps Invoice IOG seed and non-seed user-assigned Casita rows.
+ * Move previously seeded Casita Fiwind/CSV rows → Personal, plus any leftover
+ * ownership=personal bank rows (BBVA/etc.) still sitting in Casita after the
+ * ownership-model cutover. Keeps Invoice IOG seed and shared (Hogar) Casita bills.
  */
 export async function migrateCasitaSeptDumpToPersonal(opts: {
   userId: string;
@@ -177,14 +178,18 @@ export async function migrateCasitaSeptDumpToPersonal(opts: {
       externalFingerprint: schema.transactions.externalFingerprint,
       source: schema.transactions.source,
       statementId: schema.transactions.statementId,
+      ownership: schema.transactions.ownership,
     })
     .from(schema.transactions)
     .where(eq(schema.transactions.householdId, casitaId));
 
+  // Seed dump fingerprints OR Asignar=Personal leftovers (BBVA/Fiwind still in Casita).
+  // Shared (Hogar) Casita bills stay put.
   const toMove = casitaTxs.filter(
     (t) =>
       t.source !== INVOICE_IOG_SOURCE &&
-      (t.source === CASITA_SEPT_SOURCE ||
+      (t.ownership === "personal" ||
+        t.source === CASITA_SEPT_SOURCE ||
         fpSet.has(t.externalFingerprint)),
   );
   if (toMove.length === 0) {
@@ -293,7 +298,7 @@ export async function migrateCasitaSeptDumpToPersonal(opts: {
 
   if (movedTxs || movedIncomes || movedStatements) {
     console.info(
-      `[personal] migrated Casita sept dump → Personal: txs=${movedTxs} incomes=${movedIncomes} statements=${movedStatements}`,
+      `[personal] migrated Casita personal/seed dump → Personal: txs=${movedTxs} incomes=${movedIncomes} statements=${movedStatements}`,
     );
   }
   return { movedTxs, movedIncomes, movedStatements };
