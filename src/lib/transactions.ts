@@ -152,3 +152,95 @@ export async function updateTransaction(
     .returning();
   return row;
 }
+
+/**
+ * Move a gasto to another household the user belongs to.
+ * Receipts follow; household-scoped categories fall back to uncategorized.
+ * Assigning to a household ⇒ ownership shared; Personal stays in-place via PATCH ownership.
+ */
+export async function moveTransactionToHousehold(opts: {
+  fromHouseholdId: string;
+  toHouseholdId: string;
+  txId: string;
+  userId: string;
+}) {
+  const { fromHouseholdId, toHouseholdId, txId, userId } = opts;
+  if (fromHouseholdId === toHouseholdId) {
+    throw new Error("Ya está en ese hogar");
+  }
+  const db = getDb();
+
+  const [before] = await db
+    .select()
+    .from(schema.transactions)
+    .where(
+      and(
+        eq(schema.transactions.id, txId),
+        eq(schema.transactions.householdId, fromHouseholdId),
+      ),
+    )
+    .limit(1);
+  if (!before) throw new Error("No encontrado");
+  if (!isVisibleToUser(before, userId)) throw new Error("Sin permiso");
+  if (
+    before.ownership === "personal" &&
+    before.paidByUserId !== userId
+  ) {
+    throw new Error("Sin permiso");
+  }
+
+  const { byId, bySlug } = await getCategoryMap({
+    householdId: toHouseholdId,
+    includeHidden: true,
+  });
+  let nextCategoryId = before.categoryId;
+  if (nextCategoryId) {
+    const cat = byId.get(nextCategoryId);
+    // Drop categories that belong to another household (not system / not target).
+    if (!cat) {
+      nextCategoryId = bySlug.get("uncategorized")?.id ?? null;
+    }
+  }
+
+  let fingerprint = before.externalFingerprint;
+  const clash = await db
+    .select({ id: schema.transactions.id })
+    .from(schema.transactions)
+    .where(
+      and(
+        eq(schema.transactions.householdId, toHouseholdId),
+        eq(schema.transactions.externalFingerprint, fingerprint),
+      ),
+    )
+    .limit(1);
+  if (clash.length) {
+    fingerprint = `${fingerprint}:moved:${Date.now().toString(36)}`.slice(0, 64);
+  }
+
+  const [row] = await db
+    .update(schema.transactions)
+    .set({
+      householdId: toHouseholdId,
+      ownership: "shared",
+      categoryId: nextCategoryId,
+      externalFingerprint: fingerprint,
+      paidByUserId: before.paidByUserId ?? userId,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(schema.transactions.id, txId),
+        eq(schema.transactions.householdId, fromHouseholdId),
+      ),
+    )
+    .returning();
+
+  if (!row) throw new Error("No se pudo mover");
+
+  await db
+    .update(schema.receipts)
+    .set({ householdId: toHouseholdId })
+    .where(eq(schema.receipts.transactionId, txId));
+
+  return row;
+}

@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Home, Receipt } from "lucide-react";
+import { Home, Receipt, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type HouseholdOption = {
   id: string;
   name: string;
+  role?: "owner" | "member";
+  canDelete?: boolean;
 };
 
 type Props = {
@@ -96,7 +98,44 @@ export function HouseholdSwitcher({ variant = "page", className }: Props) {
     }
   }
 
-  if (households.length < 2) return null;
+  async function deleteHousehold(householdId: string, name: string) {
+    if (!householdId || busy) return;
+    const ok = window.confirm(
+      `¿Eliminar “${name}”? Se borran sus gastos y no se puede deshacer.`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/household/active", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ householdId, action: "delete" }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        error?: string;
+        households?: HouseholdOption[];
+        activeHouseholdId?: string | null;
+      } | null;
+      if (!res.ok) {
+        setError(data?.error || `Error ${res.status}`);
+        return;
+      }
+      setHouseholds(data?.households ?? []);
+      setActiveId(data?.activeHouseholdId ?? null);
+      router.refresh();
+      window.dispatchEvent(new Event("lc:household-switched"));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de red");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Still show switcher with 1 hogar if any is deletable (e.g. leftover test).
+  if (households.length < 1) return null;
+  if (households.length < 2 && !households.some((h) => h.canDelete)) return null;
 
   const active = households.find((h) => h.id === activeId) ?? households[0];
 
@@ -137,22 +176,35 @@ export function HouseholdSwitcher({ variant = "page", className }: Props) {
           const Icon = iconFor(h.name);
           const selected = h.id === (activeId ?? active?.id);
           return (
-            <button
-              key={h.id}
-              type="button"
-              disabled={busy}
-              onClick={() => void switchTo(h.id)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-semibold transition",
-                selected
-                  ? "bg-[var(--brand-soft)] text-[var(--brand-fg)]"
-                  : "text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]",
-                busy && "opacity-70",
+            <span key={h.id} className="inline-flex items-center">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void switchTo(h.id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-semibold transition",
+                  selected
+                    ? "bg-[var(--brand-soft)] text-[var(--brand-fg)]"
+                    : "text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]",
+                  busy && "opacity-70",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" strokeWidth={selected ? 2.25 : 1.75} />
+                {h.name}
+              </button>
+              {h.canDelete && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void deleteHousehold(h.id, h.name)}
+                  className="ml-0.5 rounded-lg p-1.5 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                  aria-label={`Eliminar ${h.name}`}
+                  title="Eliminar hogar"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
               )}
-            >
-              <Icon className="h-3.5 w-3.5" strokeWidth={selected ? 2.25 : 1.75} />
-              {h.name}
-            </button>
+            </span>
           );
         })}
       </div>

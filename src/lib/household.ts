@@ -12,6 +12,20 @@ const inviteCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
 /** Max members per shared space (1 solo or several people). */
 export const MAX_HOUSEHOLD_MEMBERS = 12;
 
+/** Hogares seeded / product-critical — never delete via UI or purge. */
+export const PROTECTED_HOUSEHOLD_NAMES = new Set([
+  "Casita",
+  "Invoice IOG",
+]);
+
+export function isProtectedHouseholdName(name: string): boolean {
+  const n = name.trim();
+  if (PROTECTED_HOUSEHOLD_NAMES.has(n)) return true;
+  if (/^invoice\s*iog$/i.test(n)) return true;
+  return false;
+}
+
+
 export async function ensureCategoriesSeeded() {
   await ensureSchema();
   const db = getDb();
@@ -279,6 +293,49 @@ export async function leaveSoloHousehold(
   await db
     .delete(schema.households)
     .where(eq(schema.households.id, householdId));
+}
+
+
+/**
+ * Owner deletes a solo household (no other members).
+ * Refuses protected names (Casita, Invoice IOG).
+ */
+export async function deleteOwnedSoloHousehold(
+  userId: string,
+  householdId: string,
+) {
+  await ensureSchema();
+  const ctx = await getUserHousehold(userId, householdId);
+  if (!ctx) throw new Error("No encontrado");
+  if (ctx.membership.role !== "owner") {
+    throw new Error("Solo el dueño puede eliminar este hogar");
+  }
+  if (isProtectedHouseholdName(ctx.household.name)) {
+    throw new Error(`No se puede eliminar “${ctx.household.name}”`);
+  }
+  if (ctx.members.length > 1) {
+    throw new Error(
+      "No podés eliminar este hogar mientras haya otras personas.",
+    );
+  }
+  await leaveSoloHousehold(userId, householdId);
+}
+
+/** One-shot cleanup: drop empty test hogares named exactly "Test Monk". */
+export async function purgeTestMonkHouseholds(userId: string): Promise<string[]> {
+  const list = await listUserHouseholds(userId);
+  const removed: string[] = [];
+  for (const h of list) {
+    if (h.name !== "Test Monk") continue;
+    if (h.role !== "owner") continue;
+    try {
+      await deleteOwnedSoloHousehold(userId, h.id);
+      removed.push(h.id);
+    } catch {
+      // Keep going — maybe it gained members.
+    }
+  }
+  return removed;
 }
 
 export async function joinHousehold(userId: string, code: string) {

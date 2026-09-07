@@ -34,6 +34,7 @@ type Tx = {
   category: Category | null; hasTicket: boolean; receipt: ReceiptInfo | null;
 };
 
+type HouseholdOption = { id: string; name: string };
 type OwnershipFilter = "all" | "personal" | "shared";
 type CategoryFilter = "all" | "uncategorized" | string;
 type TicketFilter = "all" | "ticket" | "no-ticket";
@@ -146,6 +147,8 @@ export function TransactionsTable() {
   const [ticketF, setTicketF] = useState<TicketFilter>("all");
   const [currencyF, setCurrencyF] = useState<CurrencyFilter>("all");
   const [iogOnly, setIogOnly] = useState(false);
+  const [households, setHouseholds] = useState<HouseholdOption[]>([]);
+  const [activeHouseholdId, setActiveHouseholdId] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +176,47 @@ export function TransactionsTable() {
     const t = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(t);
   }, [toast, applyPrompt]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/household/active", { credentials: "include" });
+        if (!res.ok || cancelled) return;
+        const data = await parseJson<{
+          households?: HouseholdOption[];
+          activeHouseholdId?: string | null;
+        }>(res);
+        if (cancelled) return;
+        setHouseholds(data.households ?? []);
+        setActiveHouseholdId(data.activeHouseholdId ?? null);
+      } catch {
+        /* ignore — Tipo falls back to Personal/Hogar */
+      }
+    })();
+    function onSwitch() {
+      void (async () => {
+        try {
+          const res = await fetch("/api/household/active", { credentials: "include" });
+          if (!res.ok) return;
+          const data = await parseJson<{
+            households?: HouseholdOption[];
+            activeHouseholdId?: string | null;
+          }>(res);
+          setHouseholds(data.households ?? []);
+          setActiveHouseholdId(data.activeHouseholdId ?? null);
+        } catch { /* ignore */ }
+      })();
+    }
+    window.addEventListener("lc:household-switched", onSwitch);
+    window.addEventListener("lc:household-created", onSwitch);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("lc:household-switched", onSwitch);
+      window.removeEventListener("lc:household-created", onSwitch);
+    };
+  }, []);
+
 
   useEffect(() => {
     if (!exportOpen && !filterOpen) return;
@@ -414,6 +458,82 @@ export function TransactionsTable() {
     setCurrencyF("all");
     setIogOnly(false);
   }
+
+  function assignValueFor(r: Tx): string {
+    if (r.ownership === "personal") return "personal";
+    return activeHouseholdId ?? "shared";
+  }
+
+  async function onAssignChange(r: Tx, value: string) {
+    if (value === "personal") {
+      if (r.ownership !== "personal") void patch(r.id, { ownership: "personal" });
+      return;
+    }
+    // value is a household id (or legacy "shared")
+    if (value === "shared" || value === (activeHouseholdId ?? "")) {
+      if (r.ownership !== "shared") void patch(r.id, { ownership: "shared" });
+      return;
+    }
+    // Move to another household — drop from this list on success
+    setError(null);
+    setSavingId(r.id);
+    const prev = rows;
+    setRows((list) => list.filter((x) => x.id !== r.id));
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ id: r.id, targetHouseholdId: value }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setRows(prev);
+        setError(data?.error || "No se pudo mover");
+        return;
+      }
+      const dest = households.find((h) => h.id === value)?.name ?? "otro hogar";
+      setToast(`Movido a ${dest}.`);
+    } catch (e) {
+      setRows(prev);
+      setError(e instanceof Error ? e.message : "Error de red");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  function AssignSelect({ r }: { r: Tx }) {
+    const value = assignValueFor(r);
+    const opts =
+      households.length > 0
+        ? households
+        : activeHouseholdId
+          ? [{ id: activeHouseholdId, name: "Hogar" }]
+          : [];
+    return (
+      <select
+        value={value === "shared" && activeHouseholdId ? activeHouseholdId : value}
+        disabled={savingId === r.id}
+        onChange={(e) => void onAssignChange(r, e.target.value)}
+        className={cn(
+          "lc-input !px-2 !py-1.5 text-xs font-medium",
+          r.ownership === "shared"
+            ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
+            : "",
+        )}
+        aria-label="Asignar a"
+      >
+        <option value="personal">Personal</option>
+        {opts.map((h) => (
+          <option key={h.id} value={h.id}>
+            {h.name}
+          </option>
+        ))}
+        {opts.length === 0 && <option value="shared">Hogar</option>}
+      </select>
+    );
+  }
+
 
   const periods = allPeriods.length
     ? allPeriods
@@ -801,20 +921,7 @@ export function TransactionsTable() {
                         {categories.map((c) => <option key={c.id} value={c.id}>{categoryLabel(c.name)}</option>)}
                       </select>
                     )}
-                    <select
-                      value={r.ownership}
-                      disabled={savingId === r.id}
-                      onChange={(e) => void patch(r.id, { ownership: e.target.value })}
-                      className={cn(
-                        "lc-input !px-2 !py-1.5 text-xs font-medium",
-                        r.ownership === "shared"
-                          ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
-                          : "",
-                      )}
-                    >
-                      <option value="personal">Personal</option>
-                      <option value="shared">Hogar</option>
-                    </select>
+                    <AssignSelect r={r} />
                   </div>
                   <div className="mt-2">
                     <select value={r.paidByUserId ?? members[0]?.userId ?? ""} disabled={savingId === r.id || !members.length} onChange={(e) => void patch(r.id, { paidByUserId: e.target.value || null })} className="lc-input w-full !px-2 !py-1.5 text-xs">
@@ -948,20 +1055,9 @@ export function TransactionsTable() {
                           )}
                         </td>
                         <td className="px-3 py-2">
-                          <select
-                            value={r.ownership}
-                            disabled={savingId === r.id}
-                            onChange={(e) => void patch(r.id, { ownership: e.target.value })}
-                            className={cn(
-                              "lc-input max-w-[110px] !px-1.5 !py-1 text-xs font-medium",
-                              r.ownership === "shared"
-                                ? "border-sky-300 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/40"
-                                : "",
-                            )}
-                          >
-                            <option value="personal">Personal</option>
-                            <option value="shared">Hogar</option>
-                          </select>
+                          <div className="max-w-[140px]">
+                            <AssignSelect r={r} />
+                          </div>
                         </td>
                         <td className="px-3 py-2">
                           <select value={r.paidByUserId ?? members[0]?.userId ?? ""} disabled={savingId === r.id || !members.length} onChange={(e) => void patch(r.id, { paidByUserId: e.target.value || null })} className="lc-input max-w-[120px] !px-1.5 !py-1 text-xs">

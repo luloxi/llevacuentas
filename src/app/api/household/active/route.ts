@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import {
+  deleteOwnedSoloHousehold,
   getUserHousehold,
+  isProtectedHouseholdName,
   listUserHouseholds,
+  purgeTestMonkHouseholds,
 } from "@/lib/household";
 import { writePreferredHouseholdId } from "@/lib/household-cookie";
 import { pickActiveHouseholdId } from "@/lib/household-select";
@@ -21,6 +24,7 @@ export async function GET() {
   }
   const { user: sessionUser } = authResult;
   try {
+    const purged = await purgeTestMonkHouseholds(sessionUser.id);
     const households = await listUserHouseholds(sessionUser.id);
     const active = await getUserHousehold(sessionUser.id);
     return NextResponse.json({
@@ -29,9 +33,12 @@ export async function GET() {
         name: h.name,
         role: h.role,
         joinedAt: h.joinedAt,
+        canDelete:
+          h.role === "owner" && !isProtectedHouseholdName(h.name),
       })),
       activeHouseholdId: active?.household.id ?? null,
       household: active,
+      purgedTestMonk: purged,
     });
   } catch (e) {
     return NextResponse.json(
@@ -65,6 +72,26 @@ export async function POST(req: Request) {
         { error: "Falta householdId" },
         { status: 400 },
       );
+    }
+
+    if (body?.action === "delete") {
+      await deleteOwnedSoloHousehold(sessionUser.id, householdId);
+      const households = await listUserHouseholds(sessionUser.id);
+      const active = await getUserHousehold(sessionUser.id);
+      if (active) await writePreferredHouseholdId(active.household.id);
+      return NextResponse.json({
+        ok: true,
+        deletedHouseholdId: householdId,
+        households: households.map((h) => ({
+          id: h.id,
+          name: h.name,
+          role: h.role,
+          joinedAt: h.joinedAt,
+          canDelete:
+            h.role === "owner" && !isProtectedHouseholdName(h.name),
+        })),
+        activeHouseholdId: active?.household.id ?? null,
+      });
     }
 
     const households = await listUserHouseholds(sessionUser.id);

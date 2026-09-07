@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { requireApiUser } from "@/lib/api-auth";
-import { getCategoryMap, requireHousehold } from "@/lib/household";
+import { getCategoryMap, listUserHouseholds, requireHousehold } from "@/lib/household";
 import {
   isVisibleToUser,
   listTransactions,
+  moveTransactionToHousehold,
   updateTransaction,
 } from "@/lib/transactions";
 import { getDb, schema } from "@/lib/db";
@@ -367,6 +368,35 @@ export async function PATCH(req: Request) {
       before.paidByUserId !== sessionUser.id
     ) {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+    }
+
+    const targetHouseholdId =
+      typeof body.targetHouseholdId === "string"
+        ? body.targetHouseholdId.trim()
+        : "";
+    if (targetHouseholdId && targetHouseholdId !== ctx.household.id) {
+      const households = await listUserHouseholds(sessionUser.id);
+      if (!households.some((h) => h.id === targetHouseholdId)) {
+        return NextResponse.json(
+          { error: "No pertenecés a ese hogar" },
+          { status: 403 },
+        );
+      }
+      const moved = await moveTransactionToHousehold({
+        fromHouseholdId: ctx.household.id,
+        toHouseholdId: targetHouseholdId,
+        txId: body.id,
+        userId: sessionUser.id,
+      });
+      return NextResponse.json({
+        transaction: moved,
+        moved: true,
+        targetHouseholdId,
+        learned: 0,
+        similarUpdated: 0,
+        similarCount: 0,
+        appliedToSimilar: false,
+      });
     }
 
     let nextOwnership = body.ownership as "personal" | "shared" | undefined;
