@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { LineChart, Trash2 } from "lucide-react";
+import { TotalSpendChart } from "@/components/spend-charts";
 import {
   EmptyState,
   FieldLabel,
@@ -45,6 +46,9 @@ type FormMode = "recurring" | "variable";
 export function IngresosView() {
   const [rows, setRows] = useState<IncomeRow[]>([]);
   const [periodEntries, setPeriodEntries] = useState<PeriodIncomeEntry[]>([]);
+  const [monthlyEvolution, setMonthlyEvolution] = useState<
+    Array<{ period: string; amountArs: number }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +75,7 @@ export function IngresosView() {
       if (!res.ok) throw new Error(data.error || "Error");
       setRows(data.incomes ?? []);
       setPeriodEntries(data.periodEntries ?? []);
+      setMonthlyEvolution(data.monthlyEvolution ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error de red");
     } finally {
@@ -160,6 +165,25 @@ export function IngresosView() {
         </p>
       )}
       {ok && <Toast>{ok}</Toast>}
+
+      {!loading && monthlyEvolution.some((p) => p.amountArs > 0) && (
+        <Surface className="space-y-2 !p-4">
+          <div className="flex items-center gap-2">
+            <LineChart className="h-4 w-4 text-[var(--brand-fg)]" aria-hidden />
+            <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-fg)]">
+              Evolución de ingresos
+            </h2>
+          </div>
+          <p className="text-xs text-[var(--muted-fg)]">
+            Total en pesos por mes (sueldos recurrentes + variables).
+          </p>
+          <TotalSpendChart
+            totals={monthlyEvolution}
+            ariaLabel="Evolución de ingresos por mes"
+            gradientPrefix="ingresos"
+          />
+        </Surface>
+      )}
 
       <SegmentedControl
         value={mode}

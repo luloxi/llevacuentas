@@ -7,6 +7,7 @@ import { getUserHousehold } from "@/lib/household";
 import {
   isIncomeFrequency,
   isIncomeKind,
+  monthlyIncomeEvolution,
   periodIncomeEntries,
   type IncomeFrequency,
   type IncomeKind,
@@ -80,10 +81,24 @@ export async function GET(req: Request) {
       return periodFromDateString(r.date) === period;
     });
 
+    const incomeRowsForChart = rows.map((r) => ({
+      id: r.id,
+      date: r.date,
+      label: r.label,
+      kind: r.kind,
+      frequency: r.frequency,
+      amountArs: r.amountArs,
+      amountUsd: r.amountUsd,
+    }));
+    const monthlyEvolution = monthlyIncomeEvolution(incomeRowsForChart, {
+      months: 12,
+    });
+
     return NextResponse.json({
       period,
       incomes: url.searchParams.has("period") ? filteredIncomes : incomes,
       periodEntries,
+      monthlyEvolution,
     });
   } catch (e) {
     return NextResponse.json(

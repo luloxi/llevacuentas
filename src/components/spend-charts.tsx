@@ -41,10 +41,21 @@ function linePath(
     .join(" ");
 }
 
-export function TotalSpendChart({ totals }: { totals: TotalPoint[] }) {
+export function TotalSpendChart({
+  totals,
+  ariaLabel = "Evolución del gasto total por mes",
+  gradientPrefix = "total",
+}: {
+  totals: TotalPoint[];
+  ariaLabel?: string;
+  /** Unique SVG gradient id prefix when multiple charts share a page. */
+  gradientPrefix?: string;
+}) {
   const [hover, setHover] = useState<number | null>(null);
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
+  const fillId = `${gradientPrefix}Fill`;
+  const strokeId = `${gradientPrefix}Stroke`;
 
   const max = useMemo(
     () => chartMax(Math.max(...totals.map((t) => t.amountArs), 0)),
@@ -74,7 +85,7 @@ export function TotalSpendChart({ totals }: { totals: TotalPoint[] }) {
         viewBox={`0 0 ${W} ${H}`}
         className="h-auto w-full"
         role="img"
-        aria-label="Evolución del gasto total por mes"
+        aria-label={ariaLabel}
       >
         {gridYs.map((g) => (
           <g key={g.y}>
@@ -103,23 +114,23 @@ export function TotalSpendChart({ totals }: { totals: TotalPoint[] }) {
         ))}
 
         <defs>
-          <linearGradient id="totalFill" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#10b981" stopOpacity="0.45" />
             <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
           </linearGradient>
-          <linearGradient id="totalStroke" x1="0" y1="0" x2="1" y2="0">
+          <linearGradient id={strokeId} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="#059669" />
             <stop offset="100%" stopColor="#14b8a6" />
           </linearGradient>
         </defs>
         <path
           d={`${linePath(points)} L ${points[points.length - 1]!.x} ${PAD.top + chartH} L ${points[0]!.x} ${PAD.top + chartH} Z`}
-          fill="url(#totalFill)"
+          fill={`url(#${fillId})`}
         />
         <path
           d={linePath(points)}
           fill="none"
-          stroke="url(#totalStroke)"
+          stroke={`url(#${strokeId})`}
           strokeWidth={2.75}
           strokeLinejoin="round"
           strokeLinecap="round"

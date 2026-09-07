@@ -200,3 +200,64 @@ export function frequencyLabel(f: IncomeFrequency | null | undefined): string {
   if (f === "semanal") return "Semanal";
   return "";
 }
+
+/**
+ * Monthly ARS totals for the ingresos evolution chart.
+ * Expands recurring salaries into each month that appears in `periods`
+ * (or inferred from variable rows + the last 12 calendar months).
+ */
+export function monthlyIncomeEvolution(
+  rows: Array<
+    IncomeLike & {
+      id: string;
+      label: string;
+    }
+  >,
+  opts?: { periods?: string[]; months?: number },
+): Array<{ period: string; amountArs: number }> {
+  const months = opts?.months ?? 12;
+  let periods = opts?.periods ? [...opts.periods] : [];
+
+  if (periods.length === 0) {
+    const set = new Set<string>();
+    for (const r of rows) {
+      if (r.kind === "recurring") continue;
+      set.add(periodFromDateString(r.date));
+    }
+    // Always include recent calendar months so recurrentes show up.
+    const now = new Date();
+    for (let i = 0; i < months; i++) {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+      const p = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+      set.add(p);
+    }
+    periods = [...set].sort();
+  } else {
+    periods = [...periods].sort();
+  }
+
+  // Keep last N periods for a readable chart
+  if (periods.length > months) {
+    periods = periods.slice(periods.length - months);
+  }
+
+  return periods.map((period) => {
+    let amountArs = 0;
+    for (const e of periodIncomeEntries(rows, period)) {
+      if (e.amountArs != null && Number.isFinite(e.amountArs)) {
+        amountArs += Math.abs(e.amountArs);
+      }
+      // USD-only cobros: count nominal USD so the series is not a flat zero.
+      // (FX conversion lives elsewhere; chart is shape-first.)
+      if (
+        (e.amountArs == null || e.amountArs === 0) &&
+        e.amountUsd != null &&
+        Number.isFinite(e.amountUsd)
+      ) {
+        amountArs += Math.abs(e.amountUsd);
+      }
+    }
+    return { period, amountArs };
+  });
+}
+

@@ -53,6 +53,32 @@ function categoryLabel(name?: string | null) {
   if (!name) return "—";
   return name.toLowerCase() === "uncategorized" ? "Sin categoría" : name;
 }
+
+function hasAnyAmount(t: { amountArs: number | null; amountUsd: number | null }) {
+  return (
+    (t.amountArs != null && Number.isFinite(t.amountArs) && Math.abs(t.amountArs) > 0) ||
+    (t.amountUsd != null && Number.isFinite(t.amountUsd) && Math.abs(t.amountUsd) > 0)
+  );
+}
+
+/** Never wipe the last currency on blur of an empty field (imported rows). */
+function nextAmountOnBlur(
+  raw: string,
+  current: number | null,
+  other: number | null,
+): number | null | undefined {
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    // Refuse to clear the only monto — keep current (incl. null → no patch).
+    if (other == null || !Number.isFinite(other) || Math.abs(other) === 0) {
+      return undefined; // skip patch
+    }
+    return null;
+  }
+  const n = Number(trimmed);
+  if (Number.isNaN(n)) return undefined;
+  return n;
+}
 function isUncategorized(t: Tx) {
   const slug = t.category?.slug?.toLowerCase();
   const name = t.category?.name?.toLowerCase();
@@ -662,36 +688,38 @@ export function TransactionsTable() {
                       <label className="flex items-center justify-end gap-1">
                         <span className="text-[10px] font-medium text-zinc-400">$</span>
                         <input
+                          key={`${r.id}-ars-${r.amountArs ?? "∅"}`}
                           type="number"
                           step="0.01"
                           inputMode="decimal"
                           defaultValue={r.amountArs ?? ""}
+                          placeholder={hasAnyAmount(r) ? undefined : "sin monto"}
                           disabled={savingId === r.id}
                           onBlur={(e) => {
-                            const raw = e.target.value.trim();
-                            const next = raw === "" ? null : Number(raw);
-                            if (raw !== "" && Number.isNaN(next as number)) return;
+                            const next = nextAmountOnBlur(e.target.value, r.amountArs, r.amountUsd);
+                            if (next === undefined) return;
                             if (next !== r.amountArs) void patch(r.id, { amountArs: next });
                           }}
-                          className="lc-input w-[7.5rem] !px-1.5 !py-0.5 text-right text-sm font-semibold tabular-nums"
+                          className="lc-input w-[7.5rem] !px-1.5 !py-0.5 text-right text-sm font-semibold tabular-nums placeholder:text-[10px] placeholder:font-normal placeholder:text-zinc-400"
                           aria-label="Monto en pesos"
                         />
                       </label>
                       <label className="flex items-center justify-end gap-1">
                         <span className="text-[10px] font-medium text-zinc-400">USD</span>
                         <input
+                          key={`${r.id}-usd-${r.amountUsd ?? "∅"}`}
                           type="number"
                           step="0.01"
                           inputMode="decimal"
                           defaultValue={r.amountUsd ?? ""}
+                          placeholder={hasAnyAmount(r) ? undefined : "sin monto"}
                           disabled={savingId === r.id}
                           onBlur={(e) => {
-                            const raw = e.target.value.trim();
-                            const next = raw === "" ? null : Number(raw);
-                            if (raw !== "" && Number.isNaN(next as number)) return;
+                            const next = nextAmountOnBlur(e.target.value, r.amountUsd, r.amountArs);
+                            if (next === undefined) return;
                             if (next !== r.amountUsd) void patch(r.id, { amountUsd: next });
                           }}
-                          className="lc-input w-[7.5rem] !px-1.5 !py-0.5 text-right text-xs tabular-nums text-zinc-600"
+                          className="lc-input w-[7.5rem] !px-1.5 !py-0.5 text-right text-xs tabular-nums text-zinc-600 placeholder:text-[10px] placeholder:font-normal placeholder:text-zinc-400"
                           aria-label="Monto en dólares"
                         />
                       </label>
@@ -803,35 +831,37 @@ export function TransactionsTable() {
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 tabular-nums">
                           <input
+                            key={`${r.id}-desk-ars-${r.amountArs ?? "∅"}`}
                             type="number"
                             step="0.01"
                             inputMode="decimal"
                             defaultValue={r.amountArs ?? ""}
+                            placeholder={hasAnyAmount(r) ? undefined : "sin monto"}
                             disabled={savingId === r.id}
                             onBlur={(e) => {
-                              const raw = e.target.value.trim();
-                              const next = raw === "" ? null : Number(raw);
-                              if (raw !== "" && Number.isNaN(next as number)) return;
+                              const next = nextAmountOnBlur(e.target.value, r.amountArs, r.amountUsd);
+                              if (next === undefined) return;
                               if (next !== r.amountArs) void patch(r.id, { amountArs: next });
                             }}
-                            className="lc-input w-[7.5rem] !px-1.5 !py-1 text-right text-sm tabular-nums"
+                            className="lc-input w-[7.5rem] !px-1.5 !py-1 text-right text-sm tabular-nums placeholder:text-[10px] placeholder:font-normal placeholder:text-zinc-400"
                             aria-label="Monto en pesos"
                           />
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 tabular-nums">
                           <input
+                            key={`${r.id}-desk-usd-${r.amountUsd ?? "∅"}`}
                             type="number"
                             step="0.01"
                             inputMode="decimal"
                             defaultValue={r.amountUsd ?? ""}
+                            placeholder={hasAnyAmount(r) ? undefined : "sin monto"}
                             disabled={savingId === r.id}
                             onBlur={(e) => {
-                              const raw = e.target.value.trim();
-                              const next = raw === "" ? null : Number(raw);
-                              if (raw !== "" && Number.isNaN(next as number)) return;
+                              const next = nextAmountOnBlur(e.target.value, r.amountUsd, r.amountArs);
+                              if (next === undefined) return;
                               if (next !== r.amountUsd) void patch(r.id, { amountUsd: next });
                             }}
-                            className="lc-input w-[7rem] !px-1.5 !py-1 text-right text-sm tabular-nums"
+                            className="lc-input w-[7rem] !px-1.5 !py-1 text-right text-sm tabular-nums placeholder:text-[10px] placeholder:font-normal placeholder:text-zinc-400"
                             aria-label="Monto en dólares"
                           />
                         </td>

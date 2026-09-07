@@ -1,6 +1,6 @@
 import { readFileSync } from "fs";
 import { join } from "path";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
 import { ensureCategoriesSeeded, getCategoryMap } from "@/lib/household";
@@ -122,54 +122,92 @@ async function seedGastos(
     .where(eq(schema.transactions.householdId, householdId));
   const have = new Set(already.map((r) => r.fp));
   const missing = gastos.filter((_, i) => !have.has(fps[i]!));
-  if (missing.length === 0) return;
 
-  const [statement] = await db
-    .insert(schema.cardStatements)
-    .values({
-      householdId,
-      source: CASITA_SEPT_SOURCE,
-      fileName: CASITA_SEPT_FILE,
-      importedBy: user.id,
-      rowCount: missing.length,
-    })
-    .returning();
-
-  const { bySlug } = await getCategoryMap({ householdId });
-
-  for (const row of missing) {
-    const catMatch = await matchCategoryWithLearning(
-      householdId,
-      row.description,
-    );
-    const category =
-      (catMatch.categoryId ? { id: catMatch.categoryId } : null) ??
-      bySlug.get(catMatch.slug) ??
-      bySlug.get("uncategorized");
-    try {
-      await db.insert(schema.transactions).values({
+  if (missing.length > 0) {
+    const [statement] = await db
+      .insert(schema.cardStatements)
+      .values({
         householdId,
-        statementId: statement.id,
-        date: row.date,
-        descriptionRaw: row.description,
-        descriptionNormalized: row.description,
-        amountArs: moneyAbs2(row.amountArs),
-        amountUsd: null,
-        installment: null,
-        isPayment: false,
-        isCredit: false,
-        categoryId: category?.id,
-        ownership: "personal",
-        paidByUserId: user.id,
-        splitPct: 50,
-        externalFingerprint: casitaSeptFingerprint(row),
         source: CASITA_SEPT_SOURCE,
-        bank: "Fiwind",
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (!/unique|duplicate/i.test(msg)) throw e;
+        fileName: CASITA_SEPT_FILE,
+        importedBy: user.id,
+        rowCount: missing.length,
+      })
+      .returning();
+
+    const { bySlug } = await getCategoryMap({ householdId });
+
+    for (const row of missing) {
+      const abs = moneyAbs2(row.amountArs);
+      if (!abs || Number(abs) <= 0) continue;
+      const catMatch = await matchCategoryWithLearning(
+        householdId,
+        row.description,
+      );
+      const category =
+        (catMatch.categoryId ? { id: catMatch.categoryId } : null) ??
+        bySlug.get(catMatch.slug) ??
+        bySlug.get("uncategorized");
+      try {
+        await db.insert(schema.transactions).values({
+          householdId,
+          statementId: statement.id,
+          date: row.date,
+          descriptionRaw: row.description,
+          descriptionNormalized: row.description,
+          amountArs: abs,
+          amountUsd: null,
+          installment: null,
+          isPayment: false,
+          isCredit: false,
+          categoryId: category?.id,
+          ownership: "personal",
+          paidByUserId: user.id,
+          splitPct: 50,
+          externalFingerprint: casitaSeptFingerprint(row),
+          source: CASITA_SEPT_SOURCE,
+          bank: "Fiwind",
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/unique|duplicate/i.test(msg)) throw e;
+      }
     }
+  }
+
+  // Backfill: Open 25 (and any other CSV gasto) that landed with null montos.
+  await backfillCasitaSeptAmounts(householdId, gastos);
+}
+
+/**
+ * Idempotent repair: match by date + description (any source/fingerprint) and
+ * fill amount_ars from the fixture when both currencies are missing.
+ * Prefer never leaving imported Casita sept rows without a visible monto.
+ */
+async function backfillCasitaSeptAmounts(
+  householdId: string,
+  gastos: CasitaSeptRow[],
+) {
+  const db = getDb();
+  for (const row of gastos) {
+    const abs = moneyAbs2(row.amountArs);
+    if (!abs || Number(abs) <= 0) continue;
+    const desc = row.description.trim();
+    await db
+      .update(schema.transactions)
+      .set({
+        amountArs: abs,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.transactions.householdId, householdId),
+          eq(schema.transactions.date, row.date),
+          sql`lower(trim(${schema.transactions.descriptionNormalized})) = ${desc.toLowerCase()}`,
+          isNull(schema.transactions.amountArs),
+          isNull(schema.transactions.amountUsd),
+        ),
+      );
   }
 }
 
