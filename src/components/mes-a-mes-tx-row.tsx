@@ -1,31 +1,42 @@
 "use client";
 
-import { formatArs, formatUsd, formatDateAr } from "@/lib/utils";
+import { cn, formatArs, formatUsd, formatDateAr } from "@/lib/utils";
 
 type CategoryOpt = { id: string; slug: string; name: string };
 
-type Tx = {
+export type MesAMesTx = {
   id: string;
   date: string;
   descriptionNormalized: string;
   amountArs: number | null;
   amountUsd: number | null;
+  isPayment?: boolean;
+  ownership: "personal" | "shared";
   category: CategoryOpt | null;
 };
 
+type HouseholdOption = { id: string; name: string };
+
 /**
  * Expense row for Resumen: name always visible + currency impossible to confuse.
+ * Assign mirrors Consumos Lista (Personal + per-hogar / Reintegro / Transferencia).
  */
 export function MesAMesTxRow({
   t,
   categories,
+  households,
+  activeHouseholdId,
   savingId,
   onChangeCategory,
+  onAssignChange,
 }: {
-  t: Tx;
+  t: MesAMesTx;
   categories: CategoryOpt[];
+  households: HouseholdOption[];
+  activeHouseholdId: string | null;
   savingId: string | null;
   onChangeCategory: (txId: string, categoryId: string) => void;
+  onAssignChange: (tx: MesAMesTx, value: string) => void;
 }) {
   const hasArs =
     t.amountArs != null &&
@@ -35,6 +46,17 @@ export function MesAMesTxRow({
     t.amountUsd != null &&
     Number.isFinite(t.amountUsd) &&
     Math.abs(t.amountUsd) > 0;
+
+  const opts =
+    households.length > 0
+      ? households
+      : activeHouseholdId
+        ? [{ id: activeHouseholdId, name: "Hogar" }]
+        : [];
+  const assignValue =
+    t.ownership === "personal"
+      ? "personal"
+      : activeHouseholdId ?? "shared";
 
   return (
     <li className="rounded-xl border border-zinc-100/80 bg-white px-3 py-2.5 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -73,13 +95,14 @@ export function MesAMesTxRow({
           )}
         </div>
       </div>
-      <div className="mt-2">
+      <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
         <select
           value={t.category?.id ?? ""}
           disabled={savingId === t.id}
           onChange={(e) => onChangeCategory(t.id, e.target.value)}
           onClick={(e) => e.stopPropagation()}
           className="lc-input w-full !px-2 !py-1.5 text-xs"
+          aria-label="Categoría"
         >
           <option value="">Sin categoría</option>
           {categories.map((cat) => (
@@ -87,6 +110,33 @@ export function MesAMesTxRow({
               {cat.name}
             </option>
           ))}
+        </select>
+        <select
+          value={
+            assignValue === "shared" && activeHouseholdId
+              ? activeHouseholdId
+              : assignValue
+          }
+          disabled={savingId === t.id}
+          onChange={(e) => onAssignChange(t, e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "lc-input w-full !px-2 !py-1.5 text-xs font-medium",
+            t.ownership === "shared"
+              ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
+              : "",
+          )}
+          aria-label="Asignar a"
+        >
+          <option value="personal">Personal</option>
+          {opts.map((h) => (
+            <option key={h.id} value={h.id}>
+              {h.name}
+            </option>
+          ))}
+          {opts.length === 0 && <option value="shared">Hogar</option>}
+          <option value="reintegro">Reintegro hogar</option>
+          <option value="internal">Transferencia interna</option>
         </select>
       </div>
     </li>

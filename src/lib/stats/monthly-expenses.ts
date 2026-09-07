@@ -87,6 +87,15 @@ export function visibleExpenseRows<T extends ExpenseTx>(
   );
 }
 
+/** Resumen / charts: Todos | Personal | Hogar (matches Consumos Lista chips). */
+export function filterByOwnership<T extends { ownership: string }>(
+  rows: T[],
+  ownership: "all" | "personal" | "shared",
+): T[] {
+  if (ownership === "all") return rows;
+  return rows.filter((r) => r.ownership === ownership);
+}
+
 export function aggregateByPeriod(
   rows: ExpenseTx[],
   categoryById: Map<string, CategoryRef>,

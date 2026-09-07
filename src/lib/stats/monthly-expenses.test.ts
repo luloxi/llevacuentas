@@ -5,6 +5,7 @@ import {
   aggregateByPeriod,
   buildMonthFromAgg,
   formatGastosHeadline,
+  filterByOwnership,
   isExpenseRow,
   visibleExpenseRows,
   type ExpenseTx,
@@ -174,6 +175,33 @@ describe("visibleExpenseRows", () => {
     assert.deepEqual(
       vis.map((r) => r.descriptionNormalized),
       ["MIO", "HOGAR"],
+    );
+  });
+});
+
+
+describe("filterByOwnership", () => {
+  it("keeps all when ownership is all", () => {
+    const rows = [
+      tx({ date: "2026-08-01", ownership: "personal", descriptionNormalized: "P" }),
+      tx({ date: "2026-08-01", ownership: "shared", descriptionNormalized: "H" }),
+    ];
+    assert.equal(filterByOwnership(rows, "all").length, 2);
+  });
+
+  it("filters Personal and Hogar", () => {
+    const rows = [
+      tx({ date: "2026-08-01", ownership: "personal", descriptionNormalized: "P" }),
+      tx({ date: "2026-08-01", ownership: "shared", descriptionNormalized: "H" }),
+      tx({ date: "2026-08-01", ownership: "personal", descriptionNormalized: "P2" }),
+    ];
+    assert.deepEqual(
+      filterByOwnership(rows, "personal").map((r) => r.descriptionNormalized),
+      ["P", "P2"],
+    );
+    assert.deepEqual(
+      filterByOwnership(rows, "shared").map((r) => r.descriptionNormalized),
+      ["H"],
     );
   });
 });

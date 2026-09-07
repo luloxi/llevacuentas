@@ -7,6 +7,7 @@ import { getMonthEndBuyRates } from "@/lib/fx/month-end-rates";
 import {
   aggregateByPeriod,
   buildMonthFromAgg,
+  filterByOwnership,
   isExpenseRow,
   visibleExpenseRows,
 } from "@/lib/stats/monthly-expenses";
@@ -20,6 +21,11 @@ export async function GET(req: Request) {
     const ctx = await requireHousehold(sessionUser.id);
     const { searchParams } = new URL(req.url);
     const periodParam = searchParams.get("period"); // YYYY-MM | "all" | null (latest)
+    const ownershipRaw = searchParams.get("ownership");
+    const ownershipFilter =
+      ownershipRaw === "personal" || ownershipRaw === "shared"
+        ? ownershipRaw
+        : "all";
 
     const db = getDb();
     const { byId, cats } = await getCategoryMap();
@@ -28,7 +34,10 @@ export async function GET(req: Request) {
       .from(schema.transactions)
       .where(eq(schema.transactions.householdId, ctx.household.id));
 
-    const expenses = visibleExpenseRows(allRows, sessionUser.id);
+    const expenses = filterByOwnership(
+      visibleExpenseRows(allRows, sessionUser.id),
+      ownershipFilter,
+    );
     const { periods, byPeriod } = aggregateByPeriod(expenses, byId);
     const rates = await getMonthEndBuyRates(
       periodParam && periodParam !== "all"

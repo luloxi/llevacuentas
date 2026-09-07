@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ChevronDown,
   ChevronLeft,
@@ -12,7 +12,7 @@ import { cn, formatArs, formatUsd, currentPeriodAr } from "@/lib/utils";
 import { formatPeriodLabel } from "@/lib/period-label";
 import { colorForCategory } from "@/lib/category-colors";
 import { CategoryLinesChart, TotalSpendChart } from "@/components/spend-charts";
-import { MesAMesTxRow } from "@/components/mes-a-mes-tx-row";
+import { MesAMesTxRow, type MesAMesTx } from "@/components/mes-a-mes-tx-row";
 import {
   EmptyState,
   LoadingBlock,
@@ -23,6 +23,11 @@ import {
   ApplyCriterionToast,
   type ApplyCriterionPrompt,
 } from "@/components/apply-criterion-toast";
+import {
+  ReintegroHogarToast,
+  type ReintegroHogarPrompt,
+} from "@/components/reintegro-hogar-toast";
+import { looksLikeHogarReintegroPayee } from "@/lib/reintegro-hogar";
 
 type CategoryOpt = { id: string; slug: string; name: string };
 
@@ -77,15 +82,35 @@ type ChartData = {
   }>;
 };
 
-type Tx = {
-  id: string;
-  date: string;
-  descriptionNormalized: string;
-  amountArs: number | null;
-  amountUsd: number | null;
-  isPayment?: boolean;
-  category: CategoryOpt | null;
-};
+type Tx = MesAMesTx;
+
+type OwnershipFilter = "all" | "personal" | "shared";
+type HouseholdOption = { id: string; name: string };
+
+function OwnershipChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-2.5 py-1 text-xs font-medium transition",
+        active
+          ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand-fg)]"
+          : "border-[var(--border)] text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
 
 function aggregateMonths(months: MonthBlock[]): MonthBlock {
   const bySlug = new Map<
@@ -175,12 +200,59 @@ export function MesAMesView({
   const [applyPrompt, setApplyPrompt] = useState<ApplyCriterionPrompt | null>(null);
   const [applyBusy, setApplyBusy] = useState(false);
   const [periodReady, setPeriodReady] = useState(false);
+  const [ownershipF, setOwnershipF] = useState<OwnershipFilter>("all");
+  const [households, setHouseholds] = useState<HouseholdOption[]>([]);
+  const [activeHouseholdId, setActiveHouseholdId] = useState<string | null>(null);
+  const [reintegroPrompt, setReintegroPrompt] = useState<ReintegroHogarPrompt | null>(null);
+  const [reintegroBusy, setReintegroBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/household/active", { credentials: "include" });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as {
+          households?: HouseholdOption[];
+          activeHouseholdId?: string | null;
+        };
+        if (cancelled) return;
+        setHouseholds(data.households ?? []);
+        setActiveHouseholdId(data.activeHouseholdId ?? null);
+      } catch {
+        /* Tipo falls back to Personal/Hogar */
+      }
+    })();
+    function onSwitch() {
+      void (async () => {
+        try {
+          const res = await fetch("/api/household/active", { credentials: "include" });
+          if (!res.ok) return;
+          const data = (await res.json()) as {
+            households?: HouseholdOption[];
+            activeHouseholdId?: string | null;
+          };
+          setHouseholds(data.households ?? []);
+          setActiveHouseholdId(data.activeHouseholdId ?? null);
+        } catch { /* ignore */ }
+      })();
+    }
+    window.addEventListener("lc:household-switched", onSwitch);
+    window.addEventListener("lc:household-created", onSwitch);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("lc:household-switched", onSwitch);
+      window.removeEventListener("lc:household-created", onSwitch);
+    };
+  }, []);
 
   const loadStats = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/stats/mes-a-mes?period=all`, {
+      const params = new URLSearchParams({ period: "all" });
+      if (ownershipF !== "all") params.set("ownership", ownershipF);
+      const res = await fetch(`/api/stats/mes-a-mes?${params}`, {
         credentials: "include",
       });
       const data = await res.json();
@@ -207,17 +279,17 @@ export function MesAMesView({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [ownershipF]);
 
   useEffect(() => {
     void loadStats();
   }, [loadStats]);
 
   useEffect(() => {
-    if (!toast || applyPrompt) return;
+    if (!toast || applyPrompt || reintegroPrompt) return;
     const t = window.setTimeout(() => setToast(null), 4000);
     return () => window.clearTimeout(t);
-  }, [toast, applyPrompt]);
+  }, [toast, applyPrompt, reintegroPrompt]);
 
   useEffect(() => {
     if (mode !== "resumen" || !periodReady) {
@@ -239,11 +311,17 @@ export function MesAMesView({
         if (cancelled) return;
         if (res.ok) {
           setTxs(
-            (data.transactions as Tx[]).filter(
-              (t) =>
-                !t.isPayment &&
-                (t.amountArs != null || t.amountUsd != null),
-            ),
+            (data.transactions as Tx[])
+              .filter(
+                (t) =>
+                  !t.isPayment &&
+                  (t.amountArs != null || t.amountUsd != null),
+              )
+              .map((t) => ({
+                ...t,
+                ownership:
+                  t.ownership === "shared" ? ("shared" as const) : ("personal" as const),
+              })),
           );
           if (data.categories?.length) setCategories(data.categories);
         }
@@ -265,9 +343,14 @@ export function MesAMesView({
     return months.find((m) => m.period === filterPeriod) ?? null;
   }, [months, filterPeriod]);
 
+  const filteredTxs = useMemo(() => {
+    if (ownershipF === "all") return txs;
+    return txs.filter((t) => t.ownership === ownershipF);
+  }, [txs, ownershipF]);
+
   const txsByCat = useMemo(() => {
     const map = new Map<string, Tx[]>();
-    for (const t of txs) {
+    for (const t of filteredTxs) {
       const slug = t.category?.slug ?? "uncategorized";
       if (!map.has(slug)) map.set(slug, []);
       map.get(slug)!.push(t);
@@ -276,7 +359,7 @@ export function MesAMesView({
       list.sort((a, b) => b.date.localeCompare(a.date));
     }
     return map;
-  }, [txs]);
+  }, [filteredTxs]);
 
   const periodIndex = periods.indexOf(filterPeriod);
   const canPrev = periodIndex >= 0 && periodIndex < periods.length - 1;
@@ -407,6 +490,186 @@ export function MesAMesView({
     }
   }
 
+  async function patchTx(id: string, body: Record<string, unknown>) {
+    setError(null);
+    setSavingId(id);
+    const prev = txs;
+    try {
+      if (body.ownership === "personal" || body.ownership === "shared") {
+        setTxs((list) =>
+          list.map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  ownership:
+                    body.ownership === "shared"
+                      ? ("shared" as const)
+                      : ("personal" as const),
+                }
+              : t,
+          ),
+        );
+      }
+      const res = await fetch("/api/transactions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ id, ...body }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setTxs(prev);
+        setError(data?.error || "No se pudo guardar");
+        return data;
+      }
+
+      if (body.householdReimbursement || body.internalTransfer) {
+        setTxs((list) => list.filter((x) => x.id !== id));
+        const n =
+          typeof data?.reintegroCount === "number"
+            ? data.reintegroCount
+            : typeof data?.similarCount === "number"
+              ? data.similarCount
+              : 1;
+        if (body.householdReimbursement && n > 1 && !body.applyToSimilar) {
+          setToast(null);
+          setReintegroPrompt({ txId: id, count: n, pending: false });
+        } else if (body.householdReimbursement) {
+          setReintegroPrompt(null);
+          setToast(
+            "Marcado como reintegro de servicios (no cuenta en la neta).",
+          );
+        } else {
+          setToast("Marcado como transferencia interna (no cuenta en la neta).");
+        }
+        void loadStats();
+        return data;
+      }
+
+      if (body.applyToSimilar && body.householdReimbursement) {
+        setReintegroPrompt(null);
+      }
+
+      const reintegroCount =
+        typeof data?.reintegroCount === "number" ? data.reintegroCount : 0;
+      const rowDesc =
+        txs.find((r) => r.id === id)?.descriptionNormalized ??
+        prev.find((r) => r.id === id)?.descriptionNormalized ??
+        "";
+      if (
+        !body.skipReintegroOffer &&
+        reintegroCount >= 1 &&
+        looksLikeHogarReintegroPayee(rowDesc) &&
+        body.ownership === "shared"
+      ) {
+        setToast(null);
+        setReintegroPrompt({
+          txId: id,
+          count: reintegroCount,
+          pending: true,
+        });
+        return data;
+      }
+
+      if (body.ownership) setToast("Guardado.");
+      void loadStats();
+      await reloadTxs();
+      return data;
+    } catch {
+      setTxs(prev);
+      setError("Error de red al guardar");
+      return null;
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function onAssignChange(r: Tx, value: string) {
+    if (value === "personal") {
+      if (r.ownership !== "personal") void patchTx(r.id, { ownership: "personal" });
+      return;
+    }
+    if (value === "reintegro") {
+      setApplyPrompt(null);
+      setToast(null);
+      void patchTx(r.id, { householdReimbursement: true });
+      return;
+    }
+    if (value === "internal") {
+      void patchTx(r.id, { internalTransfer: true });
+      return;
+    }
+    if (value === "shared" || value === (activeHouseholdId ?? "")) {
+      if (
+        looksLikeHogarReintegroPayee(r.descriptionNormalized) &&
+        !r.isPayment
+      ) {
+        const n = txs.filter(
+          (x) =>
+            !x.isPayment &&
+            x.descriptionNormalized === r.descriptionNormalized,
+        ).length;
+        setApplyPrompt(null);
+        setToast(null);
+        setReintegroPrompt({
+          txId: r.id,
+          count: Math.max(1, n),
+          pending: true,
+          declineToShared: true,
+        });
+        return;
+      }
+      if (r.ownership !== "shared") void patchTx(r.id, { ownership: "shared" });
+      return;
+    }
+    // Move to another household
+    setError(null);
+    setSavingId(r.id);
+    const prev = txs;
+    setTxs((list) => list.filter((x) => x.id !== r.id));
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ id: r.id, targetHouseholdId: value }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setTxs(prev);
+        setError(data?.error || "No se pudo mover");
+        return;
+      }
+      const dest = households.find((h) => h.id === value)?.name ?? "otro hogar";
+      setToast(`Movido a ${dest}.`);
+      void loadStats();
+    } catch (e) {
+      setTxs(prev);
+      setError(e instanceof Error ? e.message : "Error de red");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function applyReintegro(all: boolean) {
+    if (!reintegroPrompt) return;
+    // Already marked via Tipo → "Reintegro hogar"; Solo este just closes.
+    if (!reintegroPrompt.pending && !all) {
+      setReintegroPrompt(null);
+      setToast("Marcado como reintegro de servicios (no cuenta en la neta).");
+      return;
+    }
+    setReintegroBusy(true);
+    try {
+      await patchTx(reintegroPrompt.txId, {
+        householdReimbursement: true,
+        applyToSimilar: all,
+      });
+    } finally {
+      setReintegroBusy(false);
+    }
+  }
+
   if (loading && months.length === 0 && !chart) {
     return <LoadingBlock label="Calculando análisis…" />;
   }
@@ -430,6 +693,7 @@ export function MesAMesView({
   if (mode === "charts") {
     return (
       <div className="space-y-4">
+        <OwnershipFilterBar ownershipF={ownershipF} setOwnershipF={setOwnershipF} />
         {periods.length === 0 ? emptyHint : <ChartsPanel chart={chart} />}
       </div>
     );
@@ -437,46 +701,67 @@ export function MesAMesView({
 
   return (
     <div className="space-y-3">
-      {periods.length > 0 && (
-        <div className="flex w-full items-center gap-2">
-          <select
-            value={filterPeriod}
-            onChange={(e) => setFilterPeriod(e.target.value)}
-            className="lc-input min-w-0 flex-1"
-          >
-            <option value="all">Todos los meses</option>
-            {periods.map((p) => (
-              <option key={p} value={p}>
-                {formatPeriodLabel(p)}
-              </option>
-            ))}
-          </select>
-          {filterPeriod !== "all" && (
-            <div className="ml-auto flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={goPrev}
-                disabled={!canPrev}
-                aria-label="Mes anterior"
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-30"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={goNext}
-                disabled={!canNext}
-                aria-label="Mes siguiente"
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-30"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+      <div className="space-y-2">
+        {periods.length > 0 && (
+          <div className="flex w-full items-center gap-2">
+            <select
+              value={filterPeriod}
+              onChange={(e) => setFilterPeriod(e.target.value)}
+              className="lc-input min-w-0 flex-1"
+            >
+              <option value="all">Todos los meses</option>
+              {periods.map((p) => (
+                <option key={p} value={p}>
+                  {formatPeriodLabel(p)}
+                </option>
+              ))}
+            </select>
+            {filterPeriod !== "all" && (
+              <div className="ml-auto flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={goPrev}
+                  disabled={!canPrev}
+                  aria-label="Mes anterior"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={goNext}
+                  disabled={!canNext}
+                  aria-label="Mes siguiente"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        <OwnershipFilterBar ownershipF={ownershipF} setOwnershipF={setOwnershipF} />
+      </div>
 
-      {applyPrompt ? (
+      {reintegroPrompt ? (
+        <ReintegroHogarToast
+          prompt={reintegroPrompt}
+          busy={reintegroBusy || savingId === reintegroPrompt.txId}
+          onApply={() => void applyReintegro(true)}
+          onSoloEste={() => void applyReintegro(false)}
+          onDismiss={() => {
+            const prompt = reintegroPrompt;
+            setReintegroPrompt(null);
+            setToast(null);
+            if (prompt.declineToShared) {
+              void patchTx(prompt.txId, {
+                ownership: "shared",
+                skipReintegroOffer: true,
+              });
+            }
+          }}
+        />
+      ) : applyPrompt ? (
         <ApplyCriterionToast
           prompt={applyPrompt}
           busy={applyBusy || savingId === applyPrompt.txId}
@@ -505,9 +790,12 @@ export function MesAMesView({
           onToggle={toggleExpand}
           txsByCat={txsByCat}
           categories={categories}
+          households={households}
+          activeHouseholdId={activeHouseholdId}
           txsLoading={txsLoading}
           savingId={savingId}
           onChangeCategory={changeCategory}
+          onAssignChange={onAssignChange}
         />
       ) : selectedMonth ? (
         <MonthDetail
@@ -516,9 +804,12 @@ export function MesAMesView({
           onToggle={toggleExpand}
           txsByCat={txsByCat}
           categories={categories}
+          households={households}
+          activeHouseholdId={activeHouseholdId}
           txsLoading={txsLoading}
           savingId={savingId}
           onChangeCategory={changeCategory}
+          onAssignChange={onAssignChange}
         />
       ) : (
         <p className="text-sm text-zinc-500">
@@ -526,6 +817,37 @@ export function MesAMesView({
           "Todos los meses".
         </p>
       )}
+    </div>
+  );
+}
+
+function OwnershipFilterBar({
+  ownershipF,
+  setOwnershipF,
+}: {
+  ownershipF: OwnershipFilter;
+  setOwnershipF: (v: OwnershipFilter) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar por tipo">
+      <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-fg)]">
+        Tipo
+      </span>
+      <OwnershipChip active={ownershipF === "all"} onClick={() => setOwnershipF("all")}>
+        Todos
+      </OwnershipChip>
+      <OwnershipChip
+        active={ownershipF === "personal"}
+        onClick={() => setOwnershipF("personal")}
+      >
+        Personal
+      </OwnershipChip>
+      <OwnershipChip
+        active={ownershipF === "shared"}
+        onClick={() => setOwnershipF("shared")}
+      >
+        Hogar
+      </OwnershipChip>
     </div>
   );
 }
@@ -602,9 +924,12 @@ function MonthDetail({
   onToggle,
   txsByCat,
   categories,
+  households,
+  activeHouseholdId,
   txsLoading,
   savingId,
   onChangeCategory,
+  onAssignChange,
 }: {
   month: MonthBlock;
   isGrand?: boolean;
@@ -612,9 +937,12 @@ function MonthDetail({
   onToggle: (slug: string) => void;
   txsByCat: Map<string, Tx[]>;
   categories: CategoryOpt[];
+  households: HouseholdOption[];
+  activeHouseholdId: string | null;
   txsLoading: boolean;
   savingId: string | null;
   onChangeCategory: (txId: string, categoryId: string) => void;
+  onAssignChange: (tx: Tx, value: string) => void;
 }) {
   const combined = monthTotalArs(month);
   const rateLabel = formatUsdRateLabel(month.usdRate);
@@ -694,8 +1022,11 @@ function MonthDetail({
                           key={t.id}
                           t={t}
                           categories={categories}
+                          households={households}
+                          activeHouseholdId={activeHouseholdId}
                           savingId={savingId}
                           onChangeCategory={onChangeCategory}
+                          onAssignChange={onAssignChange}
                         />
                       ))}
                     </ul>
