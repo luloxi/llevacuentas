@@ -42,6 +42,8 @@ export type InvoiceIogFixture = {
   household: string;
   count: number;
   totalUsd: number;
+  totalArs?: number;
+  source?: string;
   items: InvoiceIogGasto[];
 };
 
@@ -90,6 +92,8 @@ export const INVOICE_IOG_TOOL_RULES: Array<{
   { pattern: "DIGITAL OCEAN", rubro: "Infra y cloud", priority: 88 },
   { pattern: "RAILWAY", rubro: "Infra y cloud", priority: 88 },
   { pattern: "VERCEL", rubro: "Infra y cloud", priority: 88 },
+  { pattern: "UBER", rubro: "Movilidad", priority: 85 },
+  { pattern: "UBERX", rubro: "Movilidad", priority: 86 },
 ];
 
 export function money2(value: number | null | undefined): string | null {

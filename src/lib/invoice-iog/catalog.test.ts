@@ -87,3 +87,53 @@ describe("Invoice IOG Gastos fixture", () => {
     assert.equal(statementTypeLabel(INVOICE_IOG_SOURCE, null), "Invoice IOG");
   });
 });
+
+
+const ubersFixture = JSON.parse(
+  readFileSync(
+    join(process.cwd(), "fixtures/invoice-iog/invoice-iog-ubers.json"),
+    "utf8",
+  ),
+) as InvoiceIogFixture;
+
+describe("Invoice IOG Uber receipts fixture", () => {
+  it("has 3 unique Uber rows under Movilidad totaling ~ USD 12.09 / ARS 18320", () => {
+    assert.equal(ubersFixture.household, "Invoice IOG");
+    assert.equal(ubersFixture.count, 3);
+    assert.equal(ubersFixture.items.length, 3);
+    const unique = uniqueInvoiceIogItems(ubersFixture.items);
+    assert.equal(unique.length, 3);
+    const fps = new Set(ubersFixture.items.map(invoiceIogFingerprint));
+    assert.equal(fps.size, 3);
+    assert.ok(
+      Math.abs(sumInvoiceIogUsd(ubersFixture.items) - 12.092409240924093) < 1e-9,
+    );
+    assert.equal(ubersFixture.totalArs, 18320);
+    for (const item of ubersFixture.items) {
+      assert.equal(item.rubro, "Movilidad");
+      assert.equal(item.moneda, "ARS");
+      assert.match(item.invoice, /^uber-[123]\.pdf$/);
+      const amounts = invoiceIogAmounts(item);
+      assert.ok(amounts.amountUsd);
+      assert.ok(amounts.amountArs);
+    }
+  });
+
+  it("does not collide fingerprints with the 68 Gastos rows", () => {
+    const gastoFps = new Set(fixture.items.map(invoiceIogFingerprint));
+    for (const item of ubersFixture.items) {
+      const fp = invoiceIogFingerprint(item);
+      assert.equal(gastoFps.has(fp), false, `collision n=${item.n}`);
+    }
+  });
+
+  it("parses the three sala trip amounts and dates", () => {
+    const byN = Object.fromEntries(ubersFixture.items.map((i) => [i.n, i]));
+    assert.equal(byN[69].date, "2026-07-28");
+    assert.equal(byN[69].importe, 6183);
+    assert.equal(byN[70].date, "2026-07-29");
+    assert.equal(byN[70].importe, 6309);
+    assert.equal(byN[71].date, "2026-08-06");
+    assert.equal(byN[71].importe, 5828);
+  });
+});

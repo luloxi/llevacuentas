@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import gastosJson from "../../../fixtures/invoice-iog/invoice-iog-gastos.json";
+import ubersJson from "../../../fixtures/invoice-iog/invoice-iog-ubers.json";
 import { getDb, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
 import { ensureCategoriesSeeded } from "@/lib/household";
@@ -15,13 +16,15 @@ import {
   invoiceIogFingerprint,
   uniqueInvoiceIogItems,
   type InvoiceIogFixture,
+  type InvoiceIogGasto,
   type InvoiceIogRubro,
 } from "./catalog";
 import type { AppUser } from "@/lib/session";
 
 const inviteCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
 
-const fixture = gastosJson as InvoiceIogFixture;
+const gastosFixture = gastosJson as InvoiceIogFixture;
+const ubersFixture = ubersJson as InvoiceIogFixture;
 
 function isOwnerEmail(email: string | null | undefined): boolean {
   return (email ?? "").trim().toLowerCase() === INVOICE_IOG_OWNER_EMAIL;
@@ -31,7 +34,7 @@ let inflight: Promise<void> | null = null;
 
 /**
  * Idempotent: create household "Invoice IOG" for Luciano and import the 68
- * Gastos rows. Never writes into Casita.
+ * Gastos rows + 3 Uber receipt rows. Never writes into Casita.
  */
 export async function ensureInvoiceIogForUser(user: AppUser): Promise<void> {
   if (!isOwnerEmail(user.email)) return;
@@ -50,8 +53,9 @@ async function seedInvoiceIog(user: AppUser): Promise<void> {
   await ensureCategoriesSeeded();
   const db = getDb();
 
-  const items = uniqueInvoiceIogItems(fixture.items);
-  if (items.length === 0) return;
+  const gastos = uniqueInvoiceIogItems(gastosFixture.items);
+  const ubers = uniqueInvoiceIogItems(ubersFixture.items);
+  if (gastos.length === 0 && ubers.length === 0) return;
 
   const existing = await db
     .select({
@@ -105,6 +109,33 @@ async function seedInvoiceIog(user: AppUser): Promise<void> {
   await ensureToolRules(householdId, categoryIds);
   await hideCasitaSystemCats(householdId, categoryIds);
 
+  await seedMissingBatch({
+    householdId,
+    userId: user.id,
+    items: gastos,
+    fileName: "invoice-iog-gastos.json",
+    categoryIds,
+  });
+  await seedMissingBatch({
+    householdId,
+    userId: user.id,
+    items: ubers,
+    fileName: "invoice-iog-ubers.json",
+    categoryIds,
+  });
+}
+
+async function seedMissingBatch(args: {
+  householdId: string;
+  userId: string;
+  items: InvoiceIogGasto[];
+  fileName: string;
+  categoryIds: Map<InvoiceIogRubro, string>;
+}): Promise<void> {
+  const { householdId, userId, items, fileName, categoryIds } = args;
+  if (items.length === 0) return;
+
+  const db = getDb();
   const fps = items.map(invoiceIogFingerprint);
   const already = await db
     .select({ fp: schema.transactions.externalFingerprint })
@@ -119,9 +150,9 @@ async function seedInvoiceIog(user: AppUser): Promise<void> {
     .values({
       householdId,
       source: INVOICE_IOG_SOURCE,
-      fileName: "invoice-iog-gastos.json",
-      importedBy: user.id,
-      rowCount: items.length,
+      fileName,
+      importedBy: userId,
+      rowCount: missing.length,
     })
     .returning();
 
@@ -143,7 +174,7 @@ async function seedInvoiceIog(user: AppUser): Promise<void> {
         isCredit: false,
         categoryId,
         ownership: "personal",
-        paidByUserId: user.id,
+        paidByUserId: userId,
         splitPct: 50,
         externalFingerprint: invoiceIogFingerprint(item),
         source: INVOICE_IOG_SOURCE,
