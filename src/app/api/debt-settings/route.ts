@@ -17,6 +17,9 @@ function serialize(row: typeof schema.debtSettings.$inferSelect | undefined) {
       minPaymentArs: null as number | null,
       dueDay: null as number | null,
       notes: null as string | null,
+      forceSettled: false,
+      clearedAt: null as string | null,
+      cardLast4: null as string | null,
       updatedAt: null as string | null,
     };
   }
@@ -25,6 +28,9 @@ function serialize(row: typeof schema.debtSettings.$inferSelect | undefined) {
     minPaymentArs: row.minPaymentArs != null ? Number(row.minPaymentArs) : null,
     dueDay: row.dueDay ?? null,
     notes: row.notes ?? null,
+    forceSettled: Boolean(row.forceSettled),
+    clearedAt: row.clearedAt?.toISOString() ?? null,
+    cardLast4: row.cardLast4 ?? null,
     updatedAt: row.updatedAt?.toISOString() ?? null,
   };
 }
@@ -63,6 +69,8 @@ export async function PATCH(req: Request) {
       minPaymentArs?: number | null;
       dueDay?: number | null;
       notes?: string | null;
+      forceSettled?: boolean | null;
+      cardLast4?: string | null;
     };
 
     let dueDay: number | null | undefined = undefined;
@@ -90,6 +98,23 @@ export async function PATCH(req: Request) {
           ? null
           : String(body.notes).trim() || null
         : undefined;
+
+    let forceSettled: boolean | undefined = undefined;
+    let clearedAt: Date | null | undefined = undefined;
+    if (body.forceSettled !== undefined) {
+      forceSettled = Boolean(body.forceSettled);
+      clearedAt = forceSettled ? new Date() : null;
+    }
+
+    let cardLast4: string | null | undefined = undefined;
+    if (body.cardLast4 !== undefined) {
+      if (body.cardLast4 == null || body.cardLast4 === "") {
+        cardLast4 = null;
+      } else {
+        const m = String(body.cardLast4).match(/(\d{4})\s*$/);
+        cardLast4 = m ? m[1] : String(body.cardLast4).trim().slice(-4);
+      }
+    }
 
     if (ratePct != null && (ratePct < 0 || ratePct > 1000)) {
       return NextResponse.json(
@@ -121,6 +146,14 @@ export async function PATCH(req: Request) {
           : existing?.minPaymentArs ?? null,
       dueDay: dueDay !== undefined ? dueDay : existing?.dueDay ?? null,
       notes: notes !== undefined ? notes : existing?.notes ?? null,
+      forceSettled:
+        forceSettled !== undefined
+          ? forceSettled
+          : existing?.forceSettled ?? false,
+      clearedAt:
+        clearedAt !== undefined ? clearedAt : existing?.clearedAt ?? null,
+      cardLast4:
+        cardLast4 !== undefined ? cardLast4 : existing?.cardLast4 ?? null,
       updatedAt: new Date(),
     };
 
@@ -134,6 +167,9 @@ export async function PATCH(req: Request) {
           minPaymentArs: values.minPaymentArs,
           dueDay: values.dueDay,
           notes: values.notes,
+          forceSettled: values.forceSettled,
+          clearedAt: values.clearedAt,
+          cardLast4: values.cardLast4,
           updatedAt: values.updatedAt,
         },
       })

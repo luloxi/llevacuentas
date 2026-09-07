@@ -18,8 +18,8 @@ function DeudaPronto() {
       />
       <Surface className="max-w-lg">
         <p className="text-sm leading-relaxed text-[var(--muted-fg)]">
-          Cancelaste la deuda del banco y de la tarjeta, y acá seguía mostrando
-          números que no cerraban. Mejor esconderla un rato que mentirte.
+          Acá solo van a aparecer cuotas abiertas y cargos chicos de la
+          tarjeta. Si no hay nada pendiente, Casita muestra Saldada.
         </p>
         <Link
           href="/dashboard"

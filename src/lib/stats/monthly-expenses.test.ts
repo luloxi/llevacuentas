@@ -104,6 +104,23 @@ describe("isExpenseRow", () => {
       }),
       true,
     );
+    assert.equal(
+      isExpenseRow({
+        isPayment: false,
+        descriptionNormalized: "DIA TIENDA 536",
+        source: "bbva_period",
+      }),
+      false,
+      "period xls feeds Deuda, not gastos neta",
+    );
+    assert.equal(
+      isExpenseRow({
+        isPayment: false,
+        descriptionNormalized: "DIA TIENDA 536",
+        source: "bbva_pdf",
+      }),
+      false,
+    );
   });
 });
 

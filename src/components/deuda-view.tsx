@@ -1,33 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn, formatArs, formatUsd, formatDateAr } from "@/lib/utils";
-import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
 import {
   FieldLabel,
   ListSkeleton,
   SegmentedControl,
   Surface,
 } from "@/components/ui";
-
-type MonthRow = {
-  period: string;
-  chargesArs: number;
-  chargesUsd: number;
-  chargesCombined: number;
-  paymentsArs: number;
-  paymentsUsd: number;
-  paymentsCombined: number;
-  creditsCombined: number;
-  net: number;
-  balanceArs: number;
-  balanceUsd: number;
-  chargeCount: number;
-  paymentCount: number;
-  creditCount: number;
-  usdRate: { buy: number; asOf: string; source: string } | null;
-};
 
 type PaymentRow = {
   id: string;
@@ -38,6 +19,24 @@ type PaymentRow = {
   kind: "payment" | "credit";
 };
 
+type OpenInstallment = {
+  description: string;
+  current: number;
+  total: number;
+  remainingCount: number;
+  installmentArs: number;
+  remainingArs: number;
+  date: string;
+};
+
+type OpenCharge = {
+  id?: string;
+  date: string;
+  description: string;
+  amountArs: number;
+  amountUsd: number;
+};
+
 type Summary = {
   currentBalanceArs: number;
   currentBalanceUsd: number;
@@ -46,9 +45,10 @@ type Summary = {
   totalPaidUsd: number;
   totalChargesArs: number;
   totalChargesUsd: number;
-  monthCount: number;
-  monthsPaidInFull?: number;
   settled?: boolean;
+  forceSettled?: boolean;
+  mode?: string;
+  primaryCardLast4?: string | null;
 };
 
 type DebtSettings = {
@@ -56,167 +56,14 @@ type DebtSettings = {
   minPaymentArs: number | null;
   dueDay: number | null;
   notes: string | null;
+  forceSettled?: boolean;
+  cardLast4?: string | null;
 };
 
 type DebtTab = "evolucion" | "pagos";
 
 function tabFromParam(raw: string | null): DebtTab {
   return raw === "pagos" ? "pagos" : "evolucion";
-}
-
-const W = 720;
-const H = 220;
-const PAD = { top: 16, right: 12, bottom: 32, left: 52 };
-
-function niceMax(v: number): number {
-  if (v <= 0) return 1000;
-  const exp = Math.pow(10, Math.floor(Math.log10(v)));
-  const n = v / exp;
-  const nice = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
-  return nice * exp;
-}
-
-function DebtChart({ months }: { months: MonthRow[] }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const chartW = W - PAD.left - PAD.right;
-  const chartH = H - PAD.top - PAD.bottom;
-
-  const max = useMemo(() => {
-    const m = Math.max(
-      ...months.map((x) =>
-        Math.max(x.balanceArs, x.chargesCombined, x.paymentsCombined),
-      ),
-      0,
-    );
-    return niceMax(m);
-  }, [months]);
-
-  if (months.length === 0) return null;
-
-  const scaleX = (i: number) =>
-    months.length <= 1
-      ? PAD.left + chartW / 2
-      : PAD.left + (i / (months.length - 1)) * chartW;
-  const scaleY = (v: number) =>
-    PAD.top + chartH - (Math.max(v, 0) / max) * chartH;
-
-  const balPath = months
-    .map(
-      (m, i) =>
-        `${i === 0 ? "M" : "L"} ${scaleX(i).toFixed(1)} ${scaleY(m.balanceArs).toFixed(1)}`,
-    )
-    .join(" ");
-
-  return (
-    <div className="relative">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full">
-        {[0, 0.5, 1].map((f) => {
-          const y = PAD.top + chartH * (1 - f);
-          return (
-            <g key={f}>
-              <line
-                x1={PAD.left}
-                x2={W - PAD.right}
-                y1={y}
-                y2={y}
-                className="stroke-zinc-200 dark:stroke-zinc-800"
-              />
-              <text
-                x={PAD.left - 6}
-                y={y + 3}
-                textAnchor="end"
-                className="fill-zinc-400 text-[10px]"
-              >
-                {max * f >= 1_000_000
-                  ? `${(max * f) / 1_000_000}M`
-                  : max * f >= 1000
-                    ? `${Math.round((max * f) / 1000)}k`
-                    : Math.round(max * f)}
-              </text>
-            </g>
-          );
-        })}
-
-        {months.map((m, i) => {
-          const x = scaleX(i);
-          const barW = Math.max(4, chartW / months.length / 3);
-          const payH = (m.paymentsCombined / max) * chartH;
-          return (
-            <rect
-              key={`p-${m.period}`}
-              x={x - barW / 2}
-              y={PAD.top + chartH - payH}
-              width={barW}
-              height={Math.max(payH, 0)}
-              className="fill-emerald-500/40"
-              rx={2}
-            />
-          );
-        })}
-
-        <path
-          d={balPath}
-          fill="none"
-          stroke="#dc2626"
-          strokeWidth={2.5}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-
-        {months.map((m, i) => (
-          <g key={m.period}>
-            <circle
-              cx={scaleX(i)}
-              cy={scaleY(m.balanceArs)}
-              r={hover === i ? 5 : 3}
-              className="fill-red-600"
-              onMouseEnter={() => setHover(i)}
-              onMouseLeave={() => setHover(null)}
-            />
-            <rect
-              x={scaleX(i) - chartW / months.length / 2}
-              y={PAD.top}
-              width={chartW / Math.max(months.length, 1)}
-              height={chartH}
-              fill="transparent"
-              onMouseEnter={() => setHover(i)}
-              onMouseLeave={() => setHover(null)}
-            />
-            <text
-              x={scaleX(i)}
-              y={H - 10}
-              textAnchor="middle"
-              className="fill-zinc-500 text-[9px]"
-            >
-              {formatPeriodShort(m.period)}
-            </text>
-          </g>
-        ))}
-      </svg>
-
-      <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-zinc-500">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-0.5 w-4 bg-red-600" /> Deuda estimada
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-3 rounded-sm bg-emerald-500/40" /> Pagos del mes
-        </span>
-      </div>
-
-      {hover != null && months[hover] && (
-        <div className="mt-2 rounded-lg border border-zinc-200 bg-white p-2 text-xs dark:border-zinc-700 dark:bg-zinc-900">
-          <p className="font-semibold capitalize">
-            {formatPeriodLabel(months[hover]!.period)}
-          </p>
-          <p>Cargos: {formatArs(months[hover]!.chargesCombined)}</p>
-          <p>Pagos: {formatArs(months[hover]!.paymentsCombined)}</p>
-          <p className="font-medium">
-            Deuda al cierre: {formatArs(Math.max(months[hover]!.balanceArs, 0))}
-          </p>
-        </div>
-      )}
-    </div>
-  );
 }
 
 function MiniStat({
@@ -257,82 +104,11 @@ function MiniStat({
   );
 }
 
-function MonthCard({ m }: { m: MonthRow }) {
-  return (
-    <li className="rounded-2xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-semibold capitalize tracking-tight">
-            {formatPeriodLabel(m.period)}
-          </p>
-          <p className="text-[11px] text-zinc-400">
-            {m.chargeCount} cargos · {m.paymentCount} pagos
-          </p>
-        </div>
-        <div className="shrink-0 text-right">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-            Cierre
-          </p>
-          <p className="text-base font-bold tabular-nums">
-            {formatArs(Math.max(m.balanceArs, 0))}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-xl bg-amber-50 px-2 py-1.5 dark:bg-amber-950/30">
-          <p className="text-[10px] font-medium uppercase text-amber-700/80 dark:text-amber-300/80">
-            Cargos
-          </p>
-          <p className="text-xs font-semibold tabular-nums text-amber-900 dark:text-amber-100">
-            {formatArs(m.chargesCombined)}
-          </p>
-        </div>
-        <div className="rounded-xl bg-emerald-50 px-2 py-1.5 dark:bg-emerald-950/30">
-          <p className="text-[10px] font-medium uppercase text-emerald-700/80 dark:text-emerald-300/80">
-            Pagos
-          </p>
-          <p className="text-xs font-semibold tabular-nums text-emerald-900 dark:text-emerald-100">
-            {formatArs(m.paymentsCombined)}
-          </p>
-        </div>
-        <div
-          className={cn(
-            "rounded-xl px-2 py-1.5",
-            m.net > 0
-              ? "bg-red-50 dark:bg-red-950/30"
-              : m.net < 0
-                ? "bg-emerald-50 dark:bg-emerald-950/30"
-                : "bg-zinc-50 dark:bg-zinc-900",
-          )}
-        >
-          <p className="text-[10px] font-medium uppercase text-zinc-500">Neto</p>
-          <p
-            className={cn(
-              "text-xs font-semibold tabular-nums",
-              m.net > 0
-                ? "text-red-700 dark:text-red-300"
-                : m.net < 0
-                  ? "text-emerald-700 dark:text-emerald-300"
-                  : "text-zinc-600",
-            )}
-          >
-            {m.net > 0 ? "+" : ""}
-            {formatArs(m.net)}
-          </p>
-        </div>
-      </div>
-    </li>
-  );
-}
-
-
 function nextDueLabel(dueDay: number | null): string | null {
   if (dueDay == null || dueDay < 1 || dueDay > 31) return null;
   const now = new Date();
-  // Rough calendar in local TZ is fine for display
   let y = now.getFullYear();
-  let m = now.getMonth(); // 0-based
+  let m = now.getMonth();
   const today = now.getDate();
   if (today > dueDay) {
     m += 1;
@@ -348,7 +124,6 @@ function nextDueLabel(dueDay: number | null): string | null {
   return `${d}/${mo}/${y}`;
 }
 
-/** Estimación simple: (TNA% / 100 / 12) * saldo. */
 function estimateMonthlyInterest(
   balanceArs: number,
   ratePct: number | null,
@@ -360,9 +135,11 @@ function estimateMonthlyInterest(
 export function DeudaView() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [months, setMonths] = useState<MonthRow[]>([]);
-  const [chartMonths, setChartMonths] = useState<MonthRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [openInstallments, setOpenInstallments] = useState<OpenInstallment[]>(
+    [],
+  );
+  const [openCharges, setOpenCharges] = useState<OpenCharge[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -374,6 +151,7 @@ export function DeudaView() {
     minPaymentArs: null,
     dueDay: null,
     notes: null,
+    forceSettled: false,
   });
   const [rateInput, setRateInput] = useState("");
   const [minInput, setMinInput] = useState("");
@@ -394,44 +172,41 @@ export function DeudaView() {
     [router],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const [debtRes, setRes] = await Promise.all([
-          fetch("/api/stats/deuda", { credentials: "include" }),
-          fetch("/api/debt-settings", { credentials: "include" }),
-        ]);
-        const data = await debtRes.json();
-        if (!debtRes.ok) throw new Error(data.error || "Error");
-        const setData = await setRes.json();
-        if (cancelled) return;
-        setMonths(data.months ?? []);
-        setChartMonths(data.chartMonths ?? []);
-        setPayments(data.payments ?? []);
-        setSummary(data.summary ?? null);
-        if (setRes.ok && setData.settings) {
-          const s = setData.settings as DebtSettings;
-          setSettings(s);
-          setRateInput(s.ratePct != null ? String(s.ratePct) : "");
-          setMinInput(s.minPaymentArs != null ? String(s.minPaymentArs) : "");
-          setDueInput(s.dueDay != null ? String(s.dueDay) : "");
-          setNotesInput(s.notes ?? "");
-        }
-      } catch (e) {
-        if (!cancelled)
-          setError(e instanceof Error ? e.message : "Error de red");
-      } finally {
-        if (!cancelled) setLoading(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [debtRes, setRes] = await Promise.all([
+        fetch("/api/stats/deuda", { credentials: "include" }),
+        fetch("/api/debt-settings", { credentials: "include" }),
+      ]);
+      const data = await debtRes.json();
+      if (!debtRes.ok) throw new Error(data.error || "Error");
+      const setData = await setRes.json();
+      setPayments(data.payments ?? []);
+      setOpenInstallments(data.openInstallments ?? []);
+      setOpenCharges(data.openCharges ?? []);
+      setSummary(data.summary ?? null);
+      if (setRes.ok && setData.settings) {
+        const s = setData.settings as DebtSettings;
+        setSettings(s);
+        setRateInput(s.ratePct != null ? String(s.ratePct) : "");
+        setMinInput(s.minPaymentArs != null ? String(s.minPaymentArs) : "");
+        setDueInput(s.dueDay != null ? String(s.dueDay) : "");
+        setNotesInput(s.notes ?? "");
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de red");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  async function saveSettings() {
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function saveSettings(patch?: Partial<DebtSettings>) {
     setSavingSettings(true);
     setSettingsMsg(null);
     try {
@@ -446,6 +221,10 @@ export function DeudaView() {
             : null,
           dueDay: dueInput.trim() ? Number(dueInput) : null,
           notes: notesInput.trim() || null,
+          forceSettled:
+            patch?.forceSettled !== undefined
+              ? patch.forceSettled
+              : settings.forceSettled,
         }),
       });
       const data = await res.json();
@@ -453,6 +232,9 @@ export function DeudaView() {
       const s = data.settings as DebtSettings;
       setSettings(s);
       setSettingsMsg("Guardado");
+      if (patch?.forceSettled !== undefined) {
+        await load();
+      }
     } catch (e) {
       setSettingsMsg(e instanceof Error ? e.message : "Error");
     } finally {
@@ -477,6 +259,7 @@ export function DeudaView() {
   const balance = Math.max(summary?.currentBalanceArs ?? 0, 0);
   const interestEst = estimateMonthlyInterest(balance, settings.ratePct);
   const dueLabel = nextDueLabel(settings.dueDay);
+  const forced = Boolean(settings.forceSettled || summary?.forceSettled);
 
   return (
     <div className="space-y-3">
@@ -484,7 +267,8 @@ export function DeudaView() {
         <div>
           <h2 className="text-sm font-semibold tracking-tight">Tu tarjeta</h2>
           <p className="text-[11px] text-zinc-500">
-            Tasa, mínimo y vencimiento · estimado simple, sin capitalización
+            Solo cuotas abiertas y cargos del último snapshot. El historial
+            incompleto del banco no inventa millones.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -557,7 +341,7 @@ export function DeudaView() {
             )}
           </div>
         )}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             className="lc-btn lc-btn-primary !px-3 !py-1.5 text-sm"
@@ -565,6 +349,14 @@ export function DeudaView() {
             onClick={() => void saveSettings()}
           >
             {savingSettings ? "Guardando…" : "Guardar"}
+          </button>
+          <button
+            type="button"
+            className="lc-btn lc-btn-ghost !px-3 !py-1.5 text-sm"
+            disabled={savingSettings}
+            onClick={() => void saveSettings({ forceSettled: !forced })}
+          >
+            {forced ? "Mostrar saldo real" : "Marcar saldada"}
           </button>
           {settingsMsg && (
             <span className="text-xs text-zinc-500">{settingsMsg}</span>
@@ -577,7 +369,7 @@ export function DeudaView() {
           value={tab}
           onChange={onTab}
           options={[
-            { id: "evolucion", label: "Evolución" },
+            { id: "evolucion", label: "Cuotas" },
             { id: "pagos", label: "Pagos" },
           ]}
         />
@@ -599,77 +391,93 @@ export function DeudaView() {
             value={formatArs(summary.totalPaidArs)}
             tone="brand"
           />
-          <MiniStat label="Pico" value={formatArs(summary.peakBalanceArs)} />
+          <MiniStat
+            label="Cargos abiertos"
+            value={String(openInstallments.length + openCharges.length)}
+          />
         </div>
       )}
 
       {tab === "evolucion" ? (
         <div className="space-y-3">
+          {forced && (
+            <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+              Marcaste la deuda como saldada. Casita y este número quedan en 0.
+            </p>
+          )}
+
           <Surface>
-            <h2 className="mb-2 text-sm font-semibold tracking-tight">
-              Deuda mes a mes
+            <h2 className="mb-1 text-sm font-semibold tracking-tight">
+              Cuotas abiertas
             </h2>
-            <DebtChart months={chartMonths} />
+            <p className="mb-3 text-[11px] text-zinc-500">
+              Solo 4/6, 2/3 y similares. Las 3/3 o 6/6 ya no cuentan.
+            </p>
+            {openInstallments.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-zinc-200 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-800">
+                No hay cuotas abiertas en tu tarjeta.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {openInstallments.map((p) => (
+                  <li
+                    key={`${p.description}|${p.total}|${p.installmentArs}`}
+                    className="flex items-start justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-snug">
+                        {p.description}
+                      </p>
+                      <p className="mt-0.5 text-xs text-zinc-500">
+                        Cuota {p.current}/{p.total} · restan {p.remainingCount}{" "}
+                        de {formatArs(p.installmentArs)}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-sm font-semibold tabular-nums text-red-800 dark:text-red-200">
+                      {formatArs(p.remainingArs)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Surface>
 
-          <ul className="space-y-2 md:hidden">
-            {months.map((m) => (
-              <MonthCard key={m.period} m={m} />
-            ))}
-            {months.length === 0 && (
-              <li className="rounded-2xl border border-dashed border-zinc-200 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-800">
-                Todavía no hay meses con datos.
-              </li>
-            )}
-          </ul>
-
-          <div className="lc-table-wrap hidden md:block">
-            <table>
-              <thead>
-                <tr>
-                  <th className="px-3 py-2.5 text-left">Mes</th>
-                  <th className="px-3 py-2.5 text-right">Cargos</th>
-                  <th className="px-3 py-2.5 text-right">Pagos</th>
-                  <th className="px-3 py-2.5 text-right">Neto</th>
-                  <th className="px-3 py-2.5 text-right">Deuda al cierre</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {months.map((m) => (
-                  <tr key={m.period}>
-                    <td className="px-3 py-2.5 font-medium capitalize">
-                      {formatPeriodLabel(m.period)}
-                      <div className="text-[10px] font-normal text-zinc-400">
-                        {m.chargeCount} cargos · {m.paymentCount} pagos
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-amber-800 dark:text-amber-200">
-                      {formatArs(m.chargesCombined)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700 dark:text-emerald-300">
-                      {formatArs(m.paymentsCombined)}
-                    </td>
-                    <td
-                      className={cn(
-                        "px-3 py-2.5 text-right tabular-nums font-medium",
-                        m.net > 0
-                          ? "text-red-600"
-                          : m.net < 0
-                            ? "text-emerald-600"
-                            : "text-zinc-500",
-                      )}
-                    >
-                      {m.net > 0 ? "+" : ""}
-                      {formatArs(m.net)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums font-semibold">
-                      {formatArs(Math.max(m.balanceArs, 0))}
-                    </td>
-                  </tr>
+          <Surface>
+            <h2 className="mb-1 text-sm font-semibold tracking-tight">
+              Cargos abiertos
+            </h2>
+            <p className="mb-3 text-[11px] text-zinc-500">
+              Del último “Últimos movimientos”: TEMBICI, Ecobici y similares.
+            </p>
+            {openCharges.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-zinc-200 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-800">
+                No hay cargos chicos pendientes.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {openCharges.map((c) => (
+                  <li
+                    key={`${c.date}|${c.description}|${c.amountArs}`}
+                    className="flex items-start justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-snug">
+                        {c.description}
+                      </p>
+                      <p className="mt-0.5 text-xs text-zinc-500">
+                        {formatDateAr(c.date)}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-sm font-semibold tabular-nums">
+                      {c.amountArs > 0
+                        ? formatArs(c.amountArs)
+                        : formatUsd(c.amountUsd)}
+                    </p>
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </ul>
+            )}
+          </Surface>
         </div>
       ) : (
         <>

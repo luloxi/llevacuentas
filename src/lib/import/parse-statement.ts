@@ -21,9 +21,14 @@ function workbookSource(
   fileKind: StatementFileKind,
   classicBbva: boolean,
   detectedBank: string | null,
+  layout?: string,
 ): string {
+  if (layout === "period") return "bbva_period";
   if (fileKind === "csv") return "csv";
-  if (classicBbva && (!detectedBank || detectedBank === "BBVA")) {
+  if (
+    (classicBbva || layout === "ultimos") &&
+    (!detectedBank || detectedBank === "BBVA")
+  ) {
     return "bbva_xlsx";
   }
   if (fileKind === "xls") return "xls";
@@ -123,7 +128,12 @@ export async function parseStatementFile(
   const detectedBank = parsed.detectedBank ?? fromName;
   const kind: StatementFileKind =
     fileKind === "unknown" ? parsed.fileKind : fileKind;
-  const source = workbookSource(kind, parsed.classicBbva, detectedBank);
+  const source = workbookSource(
+    kind,
+    parsed.classicBbva,
+    detectedBank,
+    parsed.layout,
+  );
   const hint =
     parsed.movements.length === 0
       ? emptyParseMessage({ fileName, fileKind: kind }).hint

@@ -159,6 +159,8 @@ export function statementTypeLabel(
       return withBank("Resumen PDF", bankName ? undefined : "BBVA");
     case "bbva_xlsx":
       return withBank("Movimientos Excel", bankName ? undefined : "BBVA");
+    case "bbva_period":
+      return withBank("Movimientos del período", bankName ? undefined : "BBVA");
     case "xlsx":
     case "xls":
       return withBank("Movimientos Excel");
@@ -176,8 +178,17 @@ export function statementTypeLabel(
   }
 }
 
+/** Period xls / resumen PDF feed Deuda / cuotas, not gastos neta. */
+export function isPeriodDebtSource(
+  source: string | null | undefined,
+): boolean {
+  return source === "bbva_period" || source === "bbva_pdf";
+}
+
 export function statementTxSource(source: string): string {
   switch (source) {
+    case "bbva_period":
+      return "bbva_period";
     case "bbva_pdf":
       return "bbva_pdf";
     case "pdf_ai":

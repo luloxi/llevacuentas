@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { requireHousehold } from "@/lib/household";
 import { normalizeBank } from "@/lib/banks";
+import { ensureSchema } from "@/lib/db/ensure-schema";
 import {
   importBbvaFile,
   importTransparenciaConsumos,
@@ -13,6 +14,7 @@ export async function POST(req: Request) {
   const { user: sessionUser } = authResult;
 
   try {
+    await ensureSchema();
     const ctx = await requireHousehold(sessionUser.id);
     const form = await req.formData();
     const file = form.get("file");

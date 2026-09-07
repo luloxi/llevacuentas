@@ -1,5 +1,9 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { parseTransparenciaConsumos } from "@/lib/bbva/parse";
+import {
+  filterToPrimaryCard,
+  pickPrimaryCardLast4,
+} from "@/lib/bbva/card-account";
 import { categoryNameToSlug } from "@/lib/categorize/rules";
 import { matchCategoryWithLearning } from "@/lib/categorize/learn";
 import { getDb, schema } from "@/lib/db";
@@ -7,36 +11,13 @@ import { getCategoryMap } from "@/lib/household";
 import { parseStatementFile } from "@/lib/import/parse-statement";
 import {
   emptyParseMessage,
+  isPeriodDebtSource,
   resolveImportBank,
   statementTxSource,
 } from "@/lib/import/source";
+import { logicalExpenseKey } from "@/lib/import/dedupe";
 
-/** Stable key for “same expense” even if fingerprint algorithm changed. */
-function logicalExpenseKey(m: {
-  date: string;
-  descriptionNormalized: string;
-  amountArs: number | null;
-  amountUsd: number | null;
-  installment: string | null;
-  isPayment?: boolean;
-}): string {
-  const ars =
-    m.amountArs != null && Number.isFinite(m.amountArs)
-      ? Math.abs(m.amountArs).toFixed(2)
-      : "";
-  const usd =
-    m.amountUsd != null && Number.isFinite(m.amountUsd)
-      ? Math.abs(m.amountUsd).toFixed(2)
-      : "";
-  return [
-    m.date,
-    m.descriptionNormalized.trim().toUpperCase(),
-    ars,
-    usd,
-    m.installment ?? "",
-    m.isPayment ? "1" : "0",
-  ].join("|");
-}
+export { logicalExpenseKey };
 
 export type ImportBbvaResult = {
   statementId: string | null;
@@ -46,6 +27,8 @@ export type ImportBbvaResult = {
   alreadyExists: number;
   inserted: number;
   skipped: number;
+  skippedOtherCard: number;
+  primaryCardLast4: string | null;
   learnedHits: number;
   overlapPct: number;
   fullyDuplicate: boolean;
@@ -122,6 +105,18 @@ function buildImportMessage(r: {
   };
 }
 
+function otherCardNote(
+  skippedOtherCard: number,
+  primaryCardLast4: string | null,
+  source: string,
+): string {
+  if (skippedOtherCard <= 0 || !primaryCardLast4) return "";
+  const period = isPeriodDebtSource(source)
+    ? " El período entra en Deuda, no en la neta."
+    : "";
+  return ` Se omitió la otra tarjeta (${skippedOtherCard} filas; tu cuenta es ****${primaryCardLast4}).${period}`;
+}
+
 export async function importBbvaFile(opts: {
   householdId: string;
   userId: string;
@@ -135,10 +130,57 @@ export async function importBbvaFile(opts: {
     detected: parsed.detectedBank,
     fileName: opts.fileName,
   });
-  const { movements, source } = parsed;
-  const total = movements.length;
+  const { source } = parsed;
+  const db = getDb();
 
-  if (total === 0) {
+  const [settingsRow] = await db
+    .select({
+      cardLast4: schema.debtSettings.cardLast4,
+    })
+    .from(schema.debtSettings)
+    .where(eq(schema.debtSettings.userId, opts.userId))
+    .limit(1);
+
+  const existingMine =
+    parsed.movements.length > 0
+      ? await db
+          .select({
+            descriptionNormalized: schema.transactions.descriptionNormalized,
+          })
+          .from(schema.transactions)
+          .where(
+            and(
+              eq(schema.transactions.householdId, opts.householdId),
+              eq(schema.transactions.paidByUserId, opts.userId),
+            ),
+          )
+          .limit(4000)
+      : [];
+
+  const primaryCardLast4 = pickPrimaryCardLast4(parsed.movements, {
+    preferredLast4: settingsRow?.cardLast4,
+    knownDescriptions: existingMine.map((r) => r.descriptionNormalized),
+  });
+  const scoped = filterToPrimaryCard(parsed.movements, primaryCardLast4);
+  const skippedOtherCard = parsed.movements.length - scoped.length;
+  const movements = scoped;
+  const total = parsed.movements.length;
+
+  if (primaryCardLast4 && !settingsRow?.cardLast4) {
+    await db
+      .insert(schema.debtSettings)
+      .values({
+        userId: opts.userId,
+        cardLast4: primaryCardLast4,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: schema.debtSettings.userId,
+        set: { cardLast4: primaryCardLast4, updatedAt: new Date() },
+      });
+  }
+
+  if (movements.length === 0) {
     const empty = emptyParseMessage({
       fileName: opts.fileName,
       fileKind: parsed.fileKind,
@@ -151,17 +193,23 @@ export async function importBbvaFile(opts: {
       alreadyExists: 0,
       inserted: 0,
     });
+    const otherCardNote =
+      skippedOtherCard > 0 && primaryCardLast4
+        ? ` Se omitió la otra tarjeta (no es ****${primaryCardLast4}).`
+        : "";
     return {
       statementId: null,
-      total: 0,
+      total,
       uniqueInFile: 0,
       duplicatesInFile: 0,
       alreadyExists: 0,
       inserted: 0,
-      skipped: 0,
+      skipped: skippedOtherCard,
+      skippedOtherCard,
+      primaryCardLast4,
       learnedHits: 0,
       ...meta,
-      message: empty.message,
+      message: empty.message + otherCardNote,
       hint: parsed.hint ?? empty.hint,
       source,
       bank,
@@ -180,7 +228,6 @@ export async function importBbvaFile(opts: {
     uniqueMovements.push(m);
   }
 
-  const db = getDb();
   const fingerprints = uniqueMovements.map((m) => m.fingerprint);
 
   const existingRows =
@@ -259,9 +306,13 @@ export async function importBbvaFile(opts: {
       duplicatesInFile,
       alreadyExists,
       inserted: 0,
-      skipped: alreadyExists + duplicatesInFile,
+      skipped: alreadyExists + duplicatesInFile + skippedOtherCard,
+      skippedOtherCard,
+      primaryCardLast4,
       learnedHits: 0,
       ...meta,
+      message:
+        meta.message + otherCardNote(skippedOtherCard, primaryCardLast4, source),
       hint: null,
       source,
       bank,
@@ -327,6 +378,7 @@ export async function importBbvaFile(opts: {
         externalFingerprint: m.fingerprint,
         source: txSource,
         bank,
+        cardLast4: m.cardLast4 ?? primaryCardLast4,
       });
       inserted++;
     } catch {
@@ -350,10 +402,16 @@ export async function importBbvaFile(opts: {
     duplicatesInFile,
     alreadyExists: finalAlreadyExists,
     inserted,
-    skipped: finalAlreadyExists + duplicatesInFile,
+    skipped: finalAlreadyExists + duplicatesInFile + skippedOtherCard,
+    skippedOtherCard,
+    primaryCardLast4,
     learnedHits,
     ...meta,
-    hint: null,
+    message:
+      meta.message + otherCardNote(skippedOtherCard, primaryCardLast4, source),
+    hint: isPeriodDebtSource(source)
+      ? "Este Excel es el período de la tarjeta: va a Deuda (cuotas), no a la neta de gastos."
+      : null,
     source,
     bank,
   };

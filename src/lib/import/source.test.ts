@@ -47,6 +47,7 @@ describe("statement source labels", () => {
       "pdf",
       "pdf_ai",
       "statement_pdf",
+      "bbva_period",
     ];
     for (const code of codes) {
       const label = statementTypeLabel(code, "BBVA");
@@ -134,6 +135,11 @@ describe("tx source mapping", () => {
     assert.equal(statementTxSource("xlsx"), "xlsx_import");
     assert.equal(statementTxSource("pdf"), "statement_pdf");
     assert.equal(statementTxSource("bbva_xlsx"), "bbva_import");
+    assert.equal(statementTxSource("bbva_period"), "bbva_period");
+    assert.equal(
+      statementTypeLabel("bbva_period", "BBVA"),
+      "Movimientos del período (BBVA)",
+    );
     assert.equal(statementTxSource("bbva_pdf"), "bbva_pdf");
   });
 });

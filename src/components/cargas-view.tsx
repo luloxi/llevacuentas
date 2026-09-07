@@ -90,7 +90,7 @@ export function CargasView() {
     <PageStack>
       <PageHeader
         title="Cargas"
-        description="Tirale el Excel o el PDF. Los duplicados no entran de nuevo."
+        description="Tirale el Excel o el PDF. Los duplicados no entran de nuevo. El período de la tarjeta va a Deuda, no a la neta."
         actions={
           <button
             type="button"

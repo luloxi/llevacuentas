@@ -177,6 +177,8 @@ export const transactions = pgTable(
     externalFingerprint: text("external_fingerprint").notNull(),
     source: text("source").notNull().default("bbva_import"),
     bank: text("bank"),
+    /** Last 4 of the BBVA card when the period xls lists titular + adicionales. */
+    cardLast4: text("card_last4"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
   },
@@ -273,6 +275,11 @@ export const debtSettings = pgTable("debt_settings", {
   /** Día de vencimiento del mes (1–31). */
   dueDay: integer("due_day"),
   notes: text("notes"),
+  /** User marked the cancelled bank/card as settled — zeros Casita + /deuda. */
+  forceSettled: boolean("force_settled").notNull().default(false),
+  clearedAt: timestamp("cleared_at", { mode: "date" }),
+  /** Last 4 of the card that belongs to this user (period xls may list two). */
+  cardLast4: text("card_last4"),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
 });
 

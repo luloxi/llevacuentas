@@ -419,3 +419,68 @@ describe("amount formats", () => {
     assert.equal(parseBbvaAmount("USD 20,00")?.currency, "USD");
   });
 });
+
+describe("BBVA card fixtures", () => {
+  const dir = join(process.cwd(), "fixtures/bbva-card");
+
+  it("parses period a/b/c xls with cuotas and two cards", async () => {
+    const a = await parseStatementFile(
+      readFileSync(join(dir, "mov-periodo-a.xls")),
+      "mov-periodo-a.xls",
+    );
+    assert.equal(a.source, "bbva_period");
+    assert.ok(a.movements.length >= 40);
+    assert.ok(
+      a.movements.some(
+        (m) => m.installment === "4/6" && /PENGUIN/i.test(m.descriptionNormalized),
+      ),
+    );
+    const last4 = new Set(a.movements.map((m) => m.cardLast4).filter(Boolean));
+    assert.ok(last4.has("7022") && last4.has("8958"));
+
+    const b = await parseStatementFile(
+      readFileSync(join(dir, "mov-periodo-b.xls")),
+      "mov-periodo-b.xls",
+    );
+    assert.equal(b.source, "bbva_period");
+    assert.ok(b.movements.length > a.movements.length);
+
+    const c = await parseStatementFile(
+      readFileSync(join(dir, "mov-periodo-c.xls")),
+      "mov-periodo-c.xls",
+    );
+    assert.equal(c.source, "bbva_period");
+    assert.ok(c.movements.some((m) => m.installment === "1/6"));
+  });
+
+  it("extracts movements from resumen PDFs", async () => {
+    for (const name of ["resumen-a.pdf", "resumen-b.pdf", "resumen-c.pdf"]) {
+      const parsed = await parseStatementFile(
+        readFileSync(join(dir, name)),
+        name,
+      );
+      assert.ok(
+        parsed.movements.length > 10,
+        `${name} got ${parsed.movements.length}`,
+      );
+      assert.equal(parsed.source, "bbva_pdf");
+    }
+  });
+
+  it("parses both Últimos movimientos xlsx files", async () => {
+    const u1 = await parseStatementFile(
+      readFileSync(join(dir, "ultimos-movimientos.xlsx")),
+      "ultimos-movimientos.xlsx",
+    );
+    assert.equal(u1.source, "bbva_xlsx");
+    assert.ok(u1.movements.filter((m) => /TEMBICI/i.test(m.descriptionNormalized)).length >= 2);
+
+    const u2 = await parseStatementFile(
+      readFileSync(join(dir, "ultimos-movimientos-2.xlsx")),
+      "ultimos-movimientos-2.xlsx",
+    );
+    assert.equal(u2.source, "bbva_xlsx");
+    assert.ok(u2.movements.length >= 80);
+    assert.ok(u2.movements.some((m) => m.installment === "2/6"));
+  });
+});

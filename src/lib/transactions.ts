@@ -1,5 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
+import { isPeriodDebtSource } from "@/lib/import/source";
 import { getDb, schema } from "@/lib/db";
 import { getCategoryMap } from "@/lib/household";
 import { periodFromDateString } from "@/lib/utils";
@@ -57,6 +58,9 @@ export async function listTransactions(
       !opts?.includePayments &&
       isBankAccountingEntry(r.descriptionNormalized)
     ) {
+      return false;
+    }
+    if (!opts?.includePayments && isPeriodDebtSource(r.source)) {
       return false;
     }
 

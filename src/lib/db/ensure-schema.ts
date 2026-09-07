@@ -179,6 +179,7 @@ export async function ensureSchema() {
           ON transactions(household_id, category_id)
       `,
       sql`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS bank text`,
+      sql`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS card_last4 text`,
       sql`
         CREATE INDEX IF NOT EXISTS tx_household_bank_idx
           ON transactions(household_id, bank)
@@ -238,6 +239,9 @@ export async function ensureSchema() {
           min_payment_ars numeric(14,2),
           due_day integer,
           notes text,
+          force_settled boolean NOT NULL DEFAULT false,
+          cleared_at timestamp,
+          card_last4 text,
           updated_at timestamp DEFAULT now() NOT NULL
         )
       `,
@@ -256,6 +260,9 @@ export async function ensureSchema() {
           updated_at timestamp DEFAULT now() NOT NULL
         )
       `,
+      sql`ALTER TABLE debt_settings ADD COLUMN IF NOT EXISTS force_settled boolean NOT NULL DEFAULT false`,
+      sql`ALTER TABLE debt_settings ADD COLUMN IF NOT EXISTS cleared_at timestamp`,
+      sql`ALTER TABLE debt_settings ADD COLUMN IF NOT EXISTS card_last4 text`,
       sql`ALTER TABLE incomes ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'variable'`,
       sql`ALTER TABLE incomes ADD COLUMN IF NOT EXISTS frequency text`,
       sql`CREATE INDEX IF NOT EXISTS incomes_user_idx ON incomes(user_id)`,

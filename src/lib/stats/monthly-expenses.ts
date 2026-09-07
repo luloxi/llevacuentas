@@ -1,5 +1,6 @@
 import { convertUsdToArs, type MonthEndRate } from "@/lib/fx/month-end-rates";
 import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
+import { isPeriodDebtSource } from "@/lib/import/source";
 import { isVisibleToUser } from "@/lib/transactions";
 import {
   currentPeriodAr,
@@ -20,6 +21,7 @@ export type ExpenseTx = {
   bank: string | null;
   ownership: string;
   paidByUserId: string | null;
+  source?: string | null;
 };
 
 export type CategoryRef = { slug: string; name: string };
@@ -39,14 +41,16 @@ export function toNumber(
   return Number.isFinite(n) ? n : null;
 }
 
-/** Real consumption only: skip card payments, credits, and bank accounting lines. */
+/** Real consumption only: skip card payments, credits, bank accounting, and period xls. */
 export function isExpenseRow(r: {
   isPayment: boolean;
   isCredit?: boolean;
   descriptionNormalized: string;
+  source?: string | null;
 }): boolean {
   if (r.isPayment || r.isCredit) return false;
   if (isBankAccountingEntry(r.descriptionNormalized)) return false;
+  if (isPeriodDebtSource(r.source)) return false;
   return true;
 }
 

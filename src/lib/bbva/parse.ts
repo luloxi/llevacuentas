@@ -17,6 +17,8 @@ import {
   isDustYield,
 } from "@/lib/import/fiwind";
 
+export type BbvaSheetLayout = "period" | "ultimos" | "table";
+
 export type BbvaMovement = {
   date: string; // YYYY-MM-DD
   descriptionRaw: string;
@@ -29,6 +31,8 @@ export type BbvaMovement = {
   fingerprint: string;
   /** Suggested category slug (Fiwind Tipo: conversiones / crypto / rendimientos). */
   categoryHint?: string;
+  /** Last 4 of the BBVA card when the period xls lists more than one. */
+  cardLast4?: string | null;
 };
 
 function normalizeDescription(raw: string): string {
@@ -76,6 +80,67 @@ function validInstallment(a: number, b: number): string | null {
   // Real cuotas: 1/3, 2/6… not tax codes like 5463/5465
   if (a >= 1 && b >= 1 && a <= b && b <= 60) return `${a}/${b}`;
   return null;
+}
+
+export function detectBbvaSheetLayout(opts: {
+  fileName?: string;
+  sheetName?: string;
+  previewText?: string;
+}): BbvaSheetLayout {
+  const name = `${opts.fileName ?? ""} ${opts.sheetName ?? ""}`
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  const preview = (opts.previewText ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  if (
+    /mov[_-]?periodo/.test(name) ||
+    /movimientos del periodo/.test(preview)
+  ) {
+    return "period";
+  }
+  if (
+    /ultimos[_-]?movimientos/.test(name) ||
+    /ultimos movimientos/.test(preview)
+  ) {
+    return "ultimos";
+  }
+  return "table";
+}
+
+function extractCardLast4FromTotalRow(row: unknown[] | null | undefined): string | null {
+  if (!row) return null;
+  const joined = row.map((c) => String(c ?? "")).join(" ");
+  const m = joined.match(/total\s+tarjeta\s+nro\.?\s*\*{0,8}(\d{4})/i);
+  return m ? m[1] : null;
+}
+
+/** Rows before each “Total Tarjeta Nro ****XXXX” belong to that card. */
+function cardLast4ByRowIndex(rows: unknown[][]): Map<number, string> {
+  const totals: Array<{ idx: number; last4: string }> = [];
+  for (let i = 0; i < rows.length; i++) {
+    const last4 = extractCardLast4FromTotalRow(rows[i]);
+    if (last4) totals.push({ idx: i, last4 });
+  }
+  const map = new Map<number, string>();
+  let start = 0;
+  for (const t of totals) {
+    for (let i = start; i < t.idx; i++) map.set(i, t.last4);
+    start = t.idx + 1;
+  }
+  return map;
+}
+
+function isPeriodTotalRow(description: string, col0: unknown): boolean {
+  const a = String(col0 ?? "");
+  const d = description;
+  if (/^total\s+tarjeta\b/i.test(a) || /^total\s+tarjeta\b/i.test(d)) return true;
+  if (/monto total de los movimientos/i.test(a) || /monto total de los movimientos/i.test(d)) {
+    return true;
+  }
+  return false;
 }
 
 function extractInstallment(description: string, cuotaCol: unknown): string | null {
@@ -335,6 +400,7 @@ export type StatementWorkbookMeta = {
   classicBbva: boolean;
   detectedBank: string | null;
   fileKind: "xlsx" | "xls" | "csv" | "unknown";
+  layout: BbvaSheetLayout;
 };
 
 /**
@@ -363,12 +429,24 @@ export function parseStatementWorkbook(
       wb = XLSX.read(buf, { type: "buffer", cellDates: true });
     }
   } catch {
-    return { movements: [], classicBbva: false, detectedBank: null, fileKind };
+    return {
+      movements: [],
+      classicBbva: false,
+      detectedBank: null,
+      fileKind,
+      layout: "table",
+    };
   }
 
   const sheetName = pickStatementSheet(wb.SheetNames);
   if (!sheetName) {
-    return { movements: [], classicBbva: false, detectedBank: null, fileKind };
+    return {
+      movements: [],
+      classicBbva: false,
+      detectedBank: null,
+      fileKind,
+      layout: "table",
+    };
   }
 
   const rows = XLSX.utils.sheet_to_json<(string | number | Date | null)[]>(
@@ -449,6 +527,13 @@ export function parseStatementWorkbook(
     ? "Fiwind"
     : detectBankFromText(previewText);
 
+  const layout = detectBbvaSheetLayout({
+    fileName,
+    sheetName,
+    previewText,
+  });
+  const last4ByRow = cardLast4ByRowIndex(rows);
+
   const useSplit = colArs < 0 && (colDebit >= 0 || colCredit >= 0);
 
   // Layout fallback for classic BBVA export (no reliable header match):
@@ -474,6 +559,7 @@ export function parseStatementWorkbook(
     // Skip totals / footer rows
     if (/^total\b/i.test(descriptionRaw)) continue;
     if (/monto total/i.test(descriptionRaw)) continue;
+    if (isPeriodTotalRow(descriptionRaw, row[0])) continue;
 
     const date = parseDate(row[dateIdx]);
     if (!date) continue;
@@ -577,12 +663,13 @@ export function parseStatementWorkbook(
       isPayment: payment,
       isCredit: credit,
       categoryHint,
+      cardLast4: last4ByRow.get(i) ?? null,
     };
 
     out.push({ ...partial, fingerprint: makeFingerprint(partial) });
   }
 
-  return { movements: out, classicBbva, detectedBank, fileKind };
+  return { movements: out, classicBbva, detectedBank, fileKind, layout };
 }
 
 /**

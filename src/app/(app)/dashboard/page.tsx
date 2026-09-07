@@ -5,10 +5,6 @@ import { redirect } from "next/navigation";
 import { getDb, schema } from "@/lib/db";
 import { eq } from "drizzle-orm";
 import { DashboardHome } from "@/components/dashboard-home";
-import {
-  isBankAccountingEntry,
-  isCardPaymentEntry,
-} from "@/lib/bbva/bank-entries";
 import { isExpenseRow } from "@/lib/stats/monthly-expenses";
 import {
   convertUsdToArs,
@@ -19,6 +15,7 @@ import { currentPeriodAr, periodFromDateString } from "@/lib/utils";
 import { sumPeriodIncomeArs } from "@/lib/incomes";
 import { isVisibleToUser } from "@/lib/transactions";
 import { ensureSchema } from "@/lib/db/ensure-schema";
+import { computeCardDebt } from "@/lib/stats/debt";
 
 const FIXED_HOUSEHOLD_SERVICES: Array<{ slug: string; name: string }> = [
   { slug: "alquiler", name: "Alquiler" },
@@ -27,14 +24,6 @@ const FIXED_HOUSEHOLD_SERVICES: Array<{ slug: string; name: string }> = [
   { slug: "gas", name: "Gas" },
   { slug: "internet", name: "Internet" },
 ];
-
-function isPrivateToUser(
-  r: { ownership: string | null; paidByUserId: string | null },
-  userId: string,
-): boolean {
-  if (r.paidByUserId) return r.paidByUserId === userId;
-  return r.ownership === "personal" || r.ownership == null;
-}
 
 function n(v: unknown): number {
   if (v == null) return 0;
@@ -88,18 +77,24 @@ export default async function DashboardPage() {
     (t) => periodFromDateString(t.date) === prevPeriod,
   );
 
-  const [rates, liveRatesResult, savingsRows, incomeRows] = await Promise.all([
-    getMonthEndBuyRates([period, prevPeriod]),
-    getLiveRates(),
-    db
-      .select()
-      .from(schema.savingsAssets)
-      .where(eq(schema.savingsAssets.userId, user.id)),
-    db
-      .select()
-      .from(schema.incomes)
-      .where(eq(schema.incomes.userId, user.id)),
-  ]);
+  const [rates, liveRatesResult, savingsRows, incomeRows, debtSettingsRows] =
+    await Promise.all([
+      getMonthEndBuyRates([period, prevPeriod]),
+      getLiveRates(),
+      db
+        .select()
+        .from(schema.savingsAssets)
+        .where(eq(schema.savingsAssets.userId, user.id)),
+      db
+        .select()
+        .from(schema.incomes)
+        .where(eq(schema.incomes.userId, user.id)),
+      db
+        .select()
+        .from(schema.debtSettings)
+        .where(eq(schema.debtSettings.userId, user.id))
+        .limit(1),
+    ]);
   const rateNow = rates.get(period)?.buy ?? 0;
   const ratePrev = rates.get(prevPeriod)?.buy ?? 0;
 
@@ -155,53 +150,16 @@ export default async function DashboardPage() {
     savingsArs +
     (blueRate != null && blueRate > 0 ? savingsUsd * blueRate : 0);
 
-  const debtRows = txs.filter((t) => isPrivateToUser(t, user.id));
-  const debtPeriods = [
-    ...new Set(debtRows.map((r) => periodFromDateString(r.date))),
-  ].sort();
-  const debtRates = await getMonthEndBuyRates(debtPeriods);
-  let balanceArs = 0;
-  for (const p of debtPeriods) {
-    let chargesArs = 0;
-    let chargesUsd = 0;
-    let paymentsArs = 0;
-    let paymentsUsd = 0;
-    let creditsArs = 0;
-    let creditsUsd = 0;
-    for (const r of debtRows) {
-      if (periodFromDateString(r.date) !== p) continue;
-      const desc = r.descriptionNormalized ?? "";
-      if (isBankAccountingEntry(desc)) continue;
-      const ars = r.amountArs != null ? Math.abs(Number(r.amountArs)) : 0;
-      const usd = r.amountUsd != null ? Math.abs(Number(r.amountUsd)) : 0;
-      const looksPay = isCardPaymentEntry(desc);
-      const isPay = Boolean(r.isPayment);
-      const isCredit = Boolean(r.isCredit);
-      if (looksPay || (isPay && !isCredit)) {
-        paymentsArs += ars;
-        paymentsUsd += usd;
-      } else if (isPay || isCredit) {
-        creditsArs += ars;
-        creditsUsd += usd;
-      } else {
-        if (r.ownership === "shared") continue;
-        chargesArs += ars;
-        chargesUsd += usd;
-      }
-    }
-    const rate = debtRates.get(p)?.buy ?? 0;
-    const charges =
-      chargesArs + convertUsdToArs(chargesUsd, rate);
-    const reductions =
-      paymentsArs +
-      convertUsdToArs(paymentsUsd, rate) +
-      creditsArs +
-      convertUsdToArs(creditsUsd, rate);
-    balanceArs += charges - reductions;
-    if (balanceArs < 0) balanceArs = 0;
-  }
-  const debtBalanceArs = balanceArs < 50 ? 0 : balanceArs;
-  const debtSettled = debtBalanceArs === 0 && debtPeriods.length > 0;
+  const debt = computeCardDebt(txs, {
+    userId: user.id,
+    settings: {
+      forceSettled: debtSettingsRows[0]?.forceSettled ?? false,
+      cardLast4: debtSettingsRows[0]?.cardLast4 ?? null,
+    },
+    usdRate: rateNow,
+  });
+  const debtBalanceArs = debt.currentBalanceArs;
+  const debtSettled = debt.settled;
 
   const { byId } = await getCategoryMap();
 

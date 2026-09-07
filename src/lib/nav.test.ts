@@ -38,12 +38,13 @@ describe("slim 5-item nav", () => {
 });
 
 describe("DEUDA_ENABLED flag", () => {
-  it("is on only with NEXT_PUBLIC_DEUDA_ENABLED=1", () => {
+  it("is on by default; only 0/false hides it", () => {
     assert.equal(isDeudaEnabled("1"), true);
-    assert.equal(isDeudaEnabled("true"), false);
+    assert.equal(isDeudaEnabled("true"), true);
     assert.equal(isDeudaEnabled("0"), false);
-    assert.equal(isDeudaEnabled(""), false);
-    assert.equal(isDeudaEnabled(undefined), false);
+    assert.equal(isDeudaEnabled("false"), false);
+    assert.equal(isDeudaEnabled(""), true);
+    assert.equal(isDeudaEnabled(undefined), true);
   });
 
   it("keeps swipe on the slim path when the flag is off", () => {
@@ -107,12 +108,12 @@ describe("swipe index (flag off path)", () => {
     assert.equal(resolveSwipeIndex("/consumos", "charts"), 3);
   });
 
-  it("does not land on Deuda from a deep link when the flag is off", () => {
-    assert.equal(resolveSwipeIndex("/deuda", "evolucion"), -1);
-    assert.equal(resolveSwipeIndex("/deuda", "pagos"), -1);
+  it("does not land on Deuda from a deep link when the swipe path is off", () => {
+    const hrefs = swipePathFor(false).map(stepToHref);
+    assert.ok(!hrefs.some((h) => h.includes("/deuda")));
   });
 
-  it("builds hrefs without Deuda on the default path", () => {
+  it("builds hrefs without Deuda on the slim path", () => {
     const hrefs = swipePathFor(false).map(stepToHref);
     assert.ok(!hrefs.some((h) => h.includes("/deuda")));
   });
