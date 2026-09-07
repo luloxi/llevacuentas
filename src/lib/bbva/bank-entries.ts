@@ -3,8 +3,10 @@ import { isFiwindNonExpenseTipo } from "@/lib/import/fiwind";
 /**
  * Statement lines that are accounting (not real consumption).
  * BBVA: pesificación, debt transfers, USD interest credits.
- * Fiwind: USDC↔ARS conversions, Compra/Venta KO, yields, deposits, crypto out.
+ * Fiwind: USDC↔ARS conversions, Compra/Venta KO, yields, deposits, crypto out,
+ * wallet TRANSFERENCIA ARS, and amount-only Tipo (legacy parse used the monto).
  * They must not inflate “gastos” totals in Análisis / Consumos.
+ * COMPRA SUPER ARS is grocery spend, not an investment.
  */
 export function isBankAccountingEntry(description: string): boolean {
   const u = description.toUpperCase();

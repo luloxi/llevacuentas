@@ -12,6 +12,9 @@ import {
   flagsForFiwindKind,
   isDustYield,
   isFiwindNonExpenseTipo,
+  isFiwindNumericTipo,
+  isFiwindWalletTransferTipo,
+  reclassifyTargetForDescription,
 } from "@/lib/import/fiwind";
 
 describe("Fiwind Tipo classification", () => {
@@ -56,6 +59,81 @@ describe("Fiwind Tipo classification", () => {
     assert.equal(isFiwindNonExpenseTipo("Conversión"), true);
   });
 
+  it("skips TRANSFERENCIA ARS and amount-only Tipo; keeps COMPRA SUPER / Pago a", () => {
+    const transfers = [
+      "TRANSFERENCIA ARS",
+      "Transferencia ARS",
+      "TRANSFERENCIA USDC",
+      "TRANSFERENCIA USDT",
+      "TRANSFERENCIA USD",
+      "TRANSFERENCIA",
+    ];
+    for (const t of transfers) {
+      assert.equal(classifyFiwindTipo(t), "transfer", t);
+      assert.equal(isFiwindWalletTransferTipo(t), true, t);
+      assert.equal(isFiwindNonExpenseTipo(t), true, t);
+      assert.equal(isBankAccountingEntry(t), true, t);
+      assert.equal(
+        isExpenseRow({ isPayment: false, descriptionNormalized: t }),
+        false,
+        t,
+      );
+      assert.equal(reclassifyTargetForDescription(t), "conversiones", t);
+    }
+    assert.equal(
+      isFiwindWalletTransferTipo("TRANSFERENCIA A Elena Paco Coro"),
+      false,
+    );
+    assert.equal(
+      classifyFiwindTipo("TRANSFERENCIA A Elena Paco Coro"),
+      "spend",
+    );
+
+    const amounts = ["12800", "79.66", "34.7", "35.69", "2.47", "120000", " 79.66 "];
+    for (const t of amounts) {
+      assert.equal(isFiwindNumericTipo(t), true, t);
+      assert.equal(classifyFiwindTipo(t), "numeric", t);
+      assert.equal(isFiwindNonExpenseTipo(t), true, t);
+      assert.equal(isBankAccountingEntry(t), true, t);
+      assert.equal(
+        isExpenseRow({ isPayment: false, descriptionNormalized: t.trim() }),
+        false,
+        t,
+      );
+      assert.equal(reclassifyTargetForDescription(t), "conversiones", t);
+    }
+    assert.equal(isFiwindNumericTipo("Pago a 0002"), false);
+    assert.equal(classifyFiwindTipo("Pago a 0002"), "spend");
+
+    const groceries = ["COMPRA SUPER ARS", "Compra Super ARS", "COMPRA SUPER"];
+    for (const t of groceries) {
+      assert.equal(classifyFiwindTipo(t), "spend", t);
+      assert.equal(isFiwindNonExpenseTipo(t), false, t);
+      assert.equal(isBankAccountingEntry(t), false, t);
+      assert.equal(
+        isExpenseRow({ isPayment: false, descriptionNormalized: t }),
+        true,
+        t,
+      );
+      assert.equal(matchCategory(t).slug, "supermercado", t);
+    }
+
+    assert.equal(classifyFiwindTipo("Pago a DIA"), "spend");
+    assert.equal(classifyFiwindTipo("Pago a PAYU*AR*UBER"), "spend");
+    assert.equal(
+      isExpenseRow({
+        isPayment: false,
+        descriptionNormalized: "Pago a PAYU*AR*UBER",
+      }),
+      true,
+    );
+    assert.equal(classifyFiwindTipo("Compra KO"), "investment");
+    assert.equal(classifyFiwindTipo("Compra USDC"), "investment");
+    assert.equal(classifyFiwindTipo("Venta KO"), "investment");
+    assert.equal(reclassifyTargetForDescription("Pago a DIA"), undefined);
+    assert.equal(reclassifyTargetForDescription("Compra KO"), "crypto-inversiones");
+  });
+
   it("pairs convert-then-pay so the conversion is not a second expense", () => {
     const rows = [
       {
@@ -93,6 +171,8 @@ describe("Fiwind Tipo classification", () => {
     assert.equal(categoryHintForFiwindKind("conversion"), "conversiones");
     assert.equal(categoryHintForFiwindKind("investment"), "crypto-inversiones");
     assert.equal(categoryHintForFiwindKind("yield"), "rendimientos");
+    assert.equal(categoryHintForFiwindKind("transfer"), "conversiones");
+    assert.equal(categoryHintForFiwindKind("numeric"), "conversiones");
     assert.equal(categoryHintForFiwindKind("spend"), undefined);
   });
 
@@ -109,5 +189,9 @@ describe("Fiwind Tipo classification", () => {
     assert.equal(matchCategory("Conversión").slug, "conversiones");
     assert.equal(matchCategory("Compra KO").slug, "crypto-inversiones");
     assert.equal(matchCategory("Ganancia diaria").slug, "rendimientos");
+    assert.equal(matchCategory("COMPRA SUPER ARS").slug, "supermercado");
+    assert.equal(matchCategory("TRANSFERENCIA ARS").slug, "conversiones");
+    assert.equal(matchCategory("12800").slug, "conversiones");
+    assert.equal(matchCategory("79.66").slug, "conversiones");
   });
 });

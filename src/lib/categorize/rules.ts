@@ -1,4 +1,6 @@
 import {
+  categoryHintForFiwindKind,
+  classifyFiwindTipo,
   exactFiwindMerchantSlug,
   extractFiwindMerchant,
 } from "@/lib/import/fiwind";
@@ -53,7 +55,14 @@ export const CATEGORY_SEEDS: CategorySeed[] = [
     name: "Conversiones",
     kind: "interest",
     defaultOwnership: "personal",
-    patterns: ["CONVERSIÓN", "CONVERSION"],
+    patterns: [
+      "CONVERSIÓN",
+      "CONVERSION",
+      "TRANSFERENCIA ARS",
+      "TRANSFERENCIA USDC",
+      "TRANSFERENCIA USDT",
+      "TRANSFERENCIA USD",
+    ],
     priority: 95,
   },
   {
@@ -145,6 +154,7 @@ export const CATEGORY_SEEDS: CategorySeed[] = [
     patterns: [
       "DIA TIENDA",
       "PAGO A DIA",
+      "COMPRA SUPER",
       "COTO",
       "EXPRESS AV",
       "SUPERCHANGO",
@@ -397,7 +407,24 @@ export function matchCategory(description: string): CategoryMatch {
   const hit =
     matchAgainst(description) ??
     (merchant !== description ? matchAgainst(merchant) : null);
-  return hit ?? uncategorized;
+  if (hit) return hit;
+
+  const fiwindHint = categoryHintForFiwindKind(
+    classifyFiwindTipo(description),
+  );
+  if (fiwindHint) {
+    const cat = CATEGORY_SEEDS.find((c) => c.slug === fiwindHint);
+    if (cat) {
+      return {
+        slug: cat.slug,
+        name: cat.name,
+        kind: cat.kind,
+        defaultOwnership: cat.defaultOwnership,
+      };
+    }
+  }
+
+  return uncategorized;
 }
 
 /** Normalize legacy Transparencia category names to slugs */

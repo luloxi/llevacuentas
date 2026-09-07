@@ -83,6 +83,27 @@ describe("isExpenseRow", () => {
       }),
       false,
     );
+    assert.equal(
+      isExpenseRow({
+        isPayment: false,
+        descriptionNormalized: "TRANSFERENCIA ARS",
+      }),
+      false,
+    );
+    assert.equal(
+      isExpenseRow({
+        isPayment: false,
+        descriptionNormalized: "12800",
+      }),
+      false,
+    );
+    assert.equal(
+      isExpenseRow({
+        isPayment: false,
+        descriptionNormalized: "COMPRA SUPER ARS",
+      }),
+      true,
+    );
   });
 });
 

@@ -13,7 +13,9 @@ export type FiwindKind =
   | "yield"
   | "deposit"
   | "refund"
-  | "crypto_out";
+  | "crypto_out"
+  | "transfer"
+  | "numeric";
 
 export function foldFiwind(s: string): string {
   return s
@@ -48,16 +50,34 @@ export function exactFiwindMerchantSlug(
   return EXACT_MERCHANT_SLUG[merchant];
 }
 
-export function classifyFiwindTipo(tipo: string): FiwindKind {
+/** Tipo that is only an amount (legacy parse used Monto as Descripción). */
+export function isFiwindNumericTipo(tipo: string): boolean {
+  return /^\d+(\.\d+)?$/.test(String(tipo ?? "").trim());
+}
+
+/**
+ * Wallet TRANSFERENCIA ARS / USDC / … — not a household spend.
+ * Does not match “TRANSFERENCIA A Nombre” (person payment).
+ */
+export function isFiwindWalletTransferTipo(tipo: string): boolean {
   const u = foldFiwind(tipo);
+  return /^TRANSFERENCIA(\s+[A-Z0-9.]{2,10})*$/.test(u);
+}
+
+export function classifyFiwindTipo(tipo: string): FiwindKind {
+  if (isFiwindNumericTipo(tipo)) return "numeric";
+  const u = foldFiwind(tipo);
+  // Grocery (“COMPRA SUPER ARS”), not Compra KO / Compra USDC.
+  if (/^COMPRA\s+SUPER\b/.test(u)) return "spend";
   if (/^CONVERSION\b/.test(u)) return "conversion";
   if (/^(GANANCIA|RENDIMIENTO)\b/.test(u)) return "yield";
   if (
-    /^(COMPRA|VENTA)\s+[A-Z0-9.]{1,10}$/.test(u) ||
+    /^(COMPRA|VENTA)\s+(?!SUPER\b)[A-Z0-9.]{1,10}$/.test(u) ||
     /^(COMPRA|VENTA)\s+KO\b/.test(u)
   ) {
     return "investment";
   }
+  if (isFiwindWalletTransferTipo(u)) return "transfer";
   if (/^DEPOSITO\b/.test(u)) return "deposit";
   if (/^DEVOLUCION\b/.test(u)) return "refund";
   // Bare “Retiro” (no “a Nombre”) = crypto/cash out of the wallet, not a gasto.
@@ -71,7 +91,9 @@ export function isFiwindNonExpenseKind(kind: FiwindKind): boolean {
     kind === "investment" ||
     kind === "yield" ||
     kind === "deposit" ||
-    kind === "crypto_out"
+    kind === "crypto_out" ||
+    kind === "transfer" ||
+    kind === "numeric"
   );
 }
 
@@ -93,13 +115,23 @@ export function isDustYield(
 }
 
 export const FIWIND_CATEGORY_SLUG: Record<
-  Extract<FiwindKind, "conversion" | "investment" | "yield" | "crypto_out">,
+  Extract<
+    FiwindKind,
+    | "conversion"
+    | "investment"
+    | "yield"
+    | "crypto_out"
+    | "transfer"
+    | "numeric"
+  >,
   string
 > = {
   conversion: "conversiones",
   investment: "crypto-inversiones",
   yield: "rendimientos",
   crypto_out: "conversiones",
+  transfer: "conversiones",
+  numeric: "conversiones",
 };
 
 export function categoryHintForFiwindKind(kind: FiwindKind): string | undefined {
@@ -107,11 +139,23 @@ export function categoryHintForFiwindKind(kind: FiwindKind): string | undefined 
     kind === "conversion" ||
     kind === "investment" ||
     kind === "yield" ||
-    kind === "crypto_out"
+    kind === "crypto_out" ||
+    kind === "transfer" ||
+    kind === "numeric"
   ) {
     return FIWIND_CATEGORY_SLUG[kind];
   }
   return undefined;
+}
+
+/**
+ * Category slug for a one-shot cleanup of already-imported Fiwind noise.
+ * Spends / refunds / deposits are left alone. Does not delete rows.
+ */
+export function reclassifyTargetForDescription(
+  description: string,
+): string | undefined {
+  return categoryHintForFiwindKind(classifyFiwindTipo(description));
 }
 
 export function flagsForFiwindKind(kind: FiwindKind): {

@@ -371,6 +371,44 @@ describe("Fiwind Actividad fixtures", () => {
     assert.equal(isExpenseRow(pairSpend!), true);
     assert.equal(isExpenseRow(pairConv!), false);
   });
+
+  it("keeps COMPRA SUPER as gasto and hides TRANSFERENCIA / amount-only Tipo", () => {
+    const buf = workbookBuffer(
+      [
+        ["Fecha", "Tipo", "Monto", "Moneda", "Monto Origen", "Moneda Origen", "Precio"],
+        ["18/08/2026 12:00:00", "COMPRA SUPER ARS", 8900, "ARS", null, null, null],
+        ["18/08/2026 12:01:00", "TRANSFERENCIA ARS", 5000, "ARS", null, null, null],
+        ["18/08/2026 12:02:00", "12800", 12800, "ARS", null, null, null],
+        ["18/08/2026 12:03:00", "Pago a DIA", 15420.5, "ARS", null, null, null],
+        ["18/08/2026 12:04:00", "Compra KO", 20, "USDC", null, null, null],
+      ],
+      "Actividad",
+    );
+    const parsed = parseStatementWorkbook(buf, "actividad-jurio.xlsx");
+    const superRow = parsed.movements.find((m) =>
+      /COMPRA SUPER/i.test(m.descriptionNormalized),
+    );
+    const transfer = parsed.movements.find((m) =>
+      /TRANSFERENCIA ARS/i.test(m.descriptionNormalized),
+    );
+    const numeric = parsed.movements.find(
+      (m) => m.descriptionNormalized.trim() === "12800",
+    );
+    const dia = parsed.movements.find((m) => /PAGO A DIA/i.test(m.descriptionNormalized));
+    const ko = parsed.movements.find((m) => /COMPRA KO/i.test(m.descriptionNormalized));
+
+    assert.equal(isExpenseRow(superRow!), true);
+    assert.equal(superRow?.categoryHint, undefined);
+    assert.equal(isExpenseRow(transfer!), false);
+    assert.equal(transfer?.categoryHint, "conversiones");
+    assert.equal(isExpenseRow(numeric!), false);
+    assert.equal(numeric?.categoryHint, "conversiones");
+    assert.equal(isExpenseRow(dia!), true);
+    assert.equal(isExpenseRow(ko!), false);
+    assert.equal(isBankAccountingEntry("TRANSFERENCIA ARS"), true);
+    assert.equal(isBankAccountingEntry("12800"), true);
+    assert.equal(isBankAccountingEntry("COMPRA SUPER ARS"), false);
+  });
 });
 
 describe("amount formats", () => {
