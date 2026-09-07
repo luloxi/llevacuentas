@@ -7,9 +7,12 @@ import { getDb, schema } from "@/lib/db";
 import { getMonthEndBuyRates } from "@/lib/fx/month-end-rates";
 import {
   aggregateByPeriod,
+  aggregateCubiertoByPeriod,
   buildMonthFromAgg,
   filterByOwnership,
   isExpenseRow,
+  mergePeriodLists,
+  visibleCubiertoRows,
   visibleExpenseRows,
 } from "@/lib/stats/monthly-expenses";
 
@@ -40,11 +43,22 @@ export async function GET(req: Request) {
       .from(schema.transactions)
       .where(eq(schema.transactions.householdId, ctx.household.id));
 
-    const expenses = filterByOwnership(
-      visibleExpenseRows(allRows, sessionUser.id),
-      ownershipFilter,
+    const ownedForViewer = filterByOwnership(allRows, ownershipFilter);
+    const expenses = visibleExpenseRows(ownedForViewer, sessionUser.id);
+    const cubiertos = visibleCubiertoRows(
+      ownedForViewer,
+      sessionUser.id,
+      byId,
     );
-    const { periods, byPeriod } = aggregateByPeriod(expenses, byId);
+    const { periods: expensePeriods, byPeriod } = aggregateByPeriod(
+      expenses,
+      byId,
+    );
+    const cubiertoByPeriod = aggregateCubiertoByPeriod(cubiertos);
+    const periods = mergePeriodLists(
+      expensePeriods,
+      [...cubiertoByPeriod.keys()],
+    );
     const rates = await getMonthEndBuyRates(
       periodParam && periodParam !== "all"
         ? [...new Set([...periods, periodParam])]
@@ -52,7 +66,12 @@ export async function GET(req: Request) {
     );
 
     function buildMonth(p: string) {
-      return buildMonthFromAgg(p, byPeriod.get(p), rates.get(p));
+      return buildMonthFromAgg(
+        p,
+        byPeriod.get(p),
+        rates.get(p),
+        cubiertoByPeriod.get(p),
+      );
     }
 
     let selected: string[];

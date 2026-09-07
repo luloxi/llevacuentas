@@ -1,6 +1,8 @@
 import { convertUsdToArs, type MonthEndRate } from "@/lib/fx/month-end-rates";
 import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
+import { isHogarUtilityCategory } from "@/lib/gasto-cubierto";
 import { isPeriodDebtSource } from "@/lib/import/source";
+import { isHogarReintegroDescription } from "@/lib/reintegro-hogar";
 import { isVisibleToUser } from "@/lib/transactions";
 import {
   currentPeriodAr,
@@ -146,6 +148,22 @@ export type MonthCategory = {
   pct: number;
 };
 
+export type CubiertoTotals = {
+  amountArs: number;
+  amountUsd: number;
+  amountArsFromUsd: number;
+  amountArsCombined: number;
+  count: number;
+};
+
+export const EMPTY_CUBIERTO: CubiertoTotals = {
+  amountArs: 0,
+  amountUsd: 0,
+  amountArsFromUsd: 0,
+  amountArsCombined: 0,
+  count: 0,
+};
+
 export type MonthView = {
   period: string;
   totalArs: number;
@@ -155,12 +173,15 @@ export type MonthView = {
   totalCount: number;
   usdRate: { buy: number; asOf: string; source: string } | null;
   categories: MonthCategory[];
+  /** Utility bills marked Cubierto (isPayment) — accounted outside neta. */
+  cubierto: CubiertoTotals;
 };
 
 export function buildMonthFromAgg(
   period: string,
   map: Map<string, Agg> | undefined,
   fx: MonthEndRate | undefined,
+  cubiertoAgg?: { amountArs: number; amountUsd: number; count: number },
 ): MonthView {
   const usdRate = fx?.buy ?? 0;
 
@@ -191,6 +212,17 @@ export function buildMonthFromAgg(
   const totalArsCombined = totalArs + totalArsFromUsd;
   const totalCount = categories.reduce((s, c) => s + c.count, 0);
 
+  const cubiertoArs = cubiertoAgg?.amountArs ?? 0;
+  const cubiertoUsd = cubiertoAgg?.amountUsd ?? 0;
+  const cubiertoArsFromUsd = convertUsdToArs(cubiertoUsd, usdRate);
+  const cubierto: CubiertoTotals = {
+    amountArs: cubiertoArs,
+    amountUsd: cubiertoUsd,
+    amountArsFromUsd: cubiertoArsFromUsd,
+    amountArsCombined: cubiertoArs + cubiertoArsFromUsd,
+    count: cubiertoAgg?.count ?? 0,
+  };
+
   return {
     period,
     totalArs,
@@ -208,7 +240,70 @@ export function buildMonthFromAgg(
           ? (c.amountArsCombined / totalArsCombined) * 100
           : 0,
     })),
+    cubierto,
   };
+}
+
+/**
+ * Utility bill marked Cubierto / Pagado: isPayment + hogar utility category.
+ * Distinct from roommate Reintegro hogar (payee description).
+ * These stay out of neta (isExpenseRow) but are tallied for Resumen transparency.
+ */
+export function isCubiertoUtilityRow(
+  r: {
+    isPayment: boolean;
+    descriptionNormalized: string;
+    categoryId: string | null;
+  },
+  categoryById: Map<string, CategoryRef>,
+): boolean {
+  if (!r.isPayment) return false;
+  if (isHogarReintegroDescription(r.descriptionNormalized)) return false;
+  const cat = r.categoryId ? categoryById.get(r.categoryId) : undefined;
+  return isHogarUtilityCategory({
+    slug: cat?.slug,
+    name: cat?.name,
+  });
+}
+
+export function visibleCubiertoRows<T extends ExpenseTx>(
+  rows: T[],
+  viewerUserId: string,
+  categoryById: Map<string, CategoryRef>,
+): T[] {
+  return rows.filter(
+    (r) =>
+      isVisibleToUser(r, viewerUserId) &&
+      isCubiertoUtilityRow(r, categoryById),
+  );
+}
+
+/** Sum Cubierto (fuera de neta) amounts by YYYY-MM period. */
+export function aggregateCubiertoByPeriod(
+  rows: ExpenseTx[],
+): Map<string, { amountArs: number; amountUsd: number; count: number }> {
+  const byPeriod = new Map<
+    string,
+    { amountArs: number; amountUsd: number; count: number }
+  >();
+  for (const r of rows) {
+    const p = periodFromDateString(r.date);
+    const cur = byPeriod.get(p) ?? { amountArs: 0, amountUsd: 0, count: 0 };
+    const split = splitExpenseAmounts(r.amountArs, r.amountUsd);
+    cur.amountArs += split.amountArs;
+    cur.amountUsd += split.amountUsd;
+    cur.count += 1;
+    byPeriod.set(p, cur);
+  }
+  return byPeriod;
+}
+
+export function mergePeriodLists(...lists: string[][]): string[] {
+  const set = new Set<string>();
+  for (const list of lists) {
+    for (const p of list) set.add(p);
+  }
+  return [...set].sort().reverse();
 }
 
 export type BankAgg = {

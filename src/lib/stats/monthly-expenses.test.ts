@@ -3,10 +3,14 @@ import { describe, it } from "node:test";
 import {
   aggregateByBank,
   aggregateByPeriod,
+  aggregateCubiertoByPeriod,
   buildMonthFromAgg,
   formatGastosHeadline,
   filterByOwnership,
+  isCubiertoUtilityRow,
   isExpenseRow,
+  mergePeriodLists,
+  visibleCubiertoRows,
   visibleExpenseRows,
   type ExpenseTx,
 } from "./monthly-expenses";
@@ -30,6 +34,8 @@ function tx(
 const cats = new Map([
   ["cat-super", { slug: "supermercado", name: "Supermercado" }],
   ["cat-saas", { slug: "tecnologia", name: "Tecnología" }],
+  ["cat-luz", { slug: "luz", name: "Luz" }],
+  ["cat-internet", { slug: "internet", name: "Internet" }],
 ]);
 
 const augustRate: MonthEndRate = {
@@ -304,5 +310,147 @@ describe("aggregate monthly expenses from stored rows", () => {
     assert.equal(bbva?.count, 2);
     assert.equal(fiwind?.amountUsd, 20);
     assert.equal(fiwind?.count, 1);
+  });
+});
+
+
+describe("Cubierto fuera de neta", () => {
+  it("isExpenseRow excludes isPayment Cubierto utilities", () => {
+    assert.equal(
+      isExpenseRow({
+        isPayment: true,
+        descriptionNormalized: "EDESUR FACTURA",
+      }),
+      false,
+    );
+  });
+
+  it("isCubiertoUtilityRow matches utility isPayment, not card payments or reintegro", () => {
+    assert.equal(
+      isCubiertoUtilityRow(
+        {
+          isPayment: true,
+          descriptionNormalized: "EDESUR",
+          categoryId: "cat-luz",
+        },
+        cats,
+      ),
+      true,
+    );
+    assert.equal(
+      isCubiertoUtilityRow(
+        {
+          isPayment: true,
+          descriptionNormalized: "SU PAGO EN PESOS",
+          categoryId: null,
+        },
+        cats,
+      ),
+      false,
+    );
+    assert.equal(
+      isCubiertoUtilityRow(
+        {
+          isPayment: true,
+          descriptionNormalized: "Katherine Fernanda Sanchez Carrasco",
+          categoryId: "cat-luz",
+        },
+        cats,
+      ),
+      false,
+      "roommate reintegro must not count as Cubierto even if miscategorized",
+    );
+    assert.equal(
+      isCubiertoUtilityRow(
+        {
+          isPayment: false,
+          descriptionNormalized: "EDESUR",
+          categoryId: "cat-luz",
+        },
+        cats,
+      ),
+      false,
+    );
+  });
+
+  it("aggregateCubiertoByPeriod sums ARS/USD and buildMonth exposes cubierto", () => {
+    const rows: ExpenseTx[] = [
+      tx({
+        date: "2026-09-01",
+        descriptionNormalized: "EDESUR",
+        amountArs: 15000,
+        isPayment: true,
+        categoryId: "cat-luz",
+      }),
+      tx({
+        date: "2026-09-02",
+        descriptionNormalized: "FIBRA",
+        amountUsd: 40,
+        isPayment: true,
+        categoryId: "cat-internet",
+      }),
+      tx({
+        date: "2026-09-03",
+        descriptionNormalized: "DIA",
+        amountArs: 5000,
+        categoryId: "cat-super",
+      }),
+    ];
+    const cubiertos = rows.filter((r) => isCubiertoUtilityRow(r, cats));
+    const byP = aggregateCubiertoByPeriod(cubiertos);
+    const sep = byP.get("2026-09");
+    assert.equal(sep?.amountArs, 15000);
+    assert.equal(sep?.amountUsd, 40);
+    assert.equal(sep?.count, 2);
+
+    const expenses = rows.filter(isExpenseRow);
+    const { byPeriod } = aggregateByPeriod(expenses, cats);
+    const month = buildMonthFromAgg(
+      "2026-09",
+      byPeriod.get("2026-09"),
+      { period: "2026-09", buy: 1400, asOf: "2026-09-01", source: "oficial_compra" },
+      sep,
+    );
+    assert.equal(month.totalArs, 5000, "neta excludes Cubierto ARS");
+    assert.equal(month.cubierto.count, 2);
+    assert.equal(month.cubierto.amountArs, 15000);
+    assert.equal(month.cubierto.amountUsd, 40);
+    assert.equal(month.cubierto.amountArsFromUsd, 56000);
+    assert.equal(month.cubierto.amountArsCombined, 71000);
+  });
+
+  it("mergePeriodLists includes Cubierto-only months", () => {
+    assert.deepEqual(mergePeriodLists(["2026-08"], ["2026-09", "2026-08"]), [
+      "2026-09",
+      "2026-08",
+    ]);
+  });
+
+  it("visibleCubiertoRows respects personal privacy", () => {
+    const rows = [
+      tx({
+        date: "2026-09-01",
+        descriptionNormalized: "EDESUR",
+        amountArs: 1,
+        isPayment: true,
+        categoryId: "cat-luz",
+        paidByUserId: "user-1",
+        ownership: "personal",
+      }),
+      tx({
+        date: "2026-09-01",
+        descriptionNormalized: "AYSA",
+        amountArs: 2,
+        isPayment: true,
+        categoryId: "cat-luz",
+        paidByUserId: "user-2",
+        ownership: "personal",
+      }),
+    ];
+    const vis = visibleCubiertoRows(rows, "user-1", cats);
+    assert.deepEqual(
+      vis.map((r) => r.descriptionNormalized),
+      ["EDESUR"],
+    );
   });
 });

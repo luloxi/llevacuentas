@@ -58,6 +58,14 @@ type MonthCat = {
   pct: number;
 };
 
+type CubiertoBlock = {
+  amountArs: number;
+  amountUsd: number;
+  amountArsFromUsd?: number;
+  amountArsCombined?: number;
+  count: number;
+};
+
 type MonthBlock = {
   period: string;
   totalArs: number;
@@ -67,6 +75,7 @@ type MonthBlock = {
   totalCount: number;
   usdRate?: UsdRate;
   categories: MonthCat[];
+  cubierto?: CubiertoBlock;
 };
 
 function monthTotalArs(m: MonthBlock): number {
@@ -138,12 +147,22 @@ function aggregateMonths(months: MonthBlock[]): MonthBlock {
   let totalUsd = 0;
   let totalArsFromUsd = 0;
   let totalCount = 0;
+  let cubiertoArs = 0;
+  let cubiertoUsd = 0;
+  let cubiertoArsFromUsd = 0;
+  let cubiertoCount = 0;
 
   for (const m of months) {
     totalArs += m.totalArs;
     totalUsd += m.totalUsd;
     totalArsFromUsd += m.totalArsFromUsd ?? 0;
     totalCount += m.totalCount;
+    if (m.cubierto) {
+      cubiertoArs += m.cubierto.amountArs;
+      cubiertoUsd += m.cubierto.amountUsd;
+      cubiertoArsFromUsd += m.cubierto.amountArsFromUsd ?? 0;
+      cubiertoCount += m.cubierto.count;
+    }
     for (const c of m.categories) {
       const fromUsd = c.amountArsFromUsd ?? 0;
       const combined = c.amountArsCombined ?? c.amountArs + fromUsd;
@@ -186,6 +205,13 @@ function aggregateMonths(months: MonthBlock[]): MonthBlock {
     totalArsCombined,
     totalCount,
     categories,
+    cubierto: {
+      amountArs: cubiertoArs,
+      amountUsd: cubiertoUsd,
+      amountArsFromUsd: cubiertoArsFromUsd,
+      amountArsCombined: cubiertoArs + cubiertoArsFromUsd,
+      count: cubiertoCount,
+    },
   };
 }
 
@@ -1045,10 +1071,12 @@ function TotalRow({
   label,
   value,
   tone,
+  hint,
 }: {
   label: string;
   value: string;
-  tone: "pesos" | "dolares" | "neto";
+  tone: "pesos" | "dolares" | "neto" | "cubierto";
+  hint?: string;
 }) {
   return (
     <div
@@ -1059,14 +1087,37 @@ function TotalRow({
           "bg-emerald-600 text-white shadow-sm shadow-emerald-600/25",
         tone === "neto" &&
           "bg-gradient-to-r from-amber-500 to-yellow-500 text-amber-950 shadow-sm shadow-amber-500/30",
+        tone === "cubierto" &&
+          "bg-violet-600/90 text-white shadow-sm shadow-violet-600/25",
       )}
     >
-      <span className="text-xs font-semibold uppercase tracking-wide opacity-90">
-        {label}
+      <span className="min-w-0">
+        <span className="block text-xs font-semibold uppercase tracking-wide opacity-90">
+          {label}
+        </span>
+        {hint ? (
+          <span className="mt-0.5 block text-[10px] font-medium leading-snug opacity-80">
+            {hint}
+          </span>
+        ) : null}
       </span>
-      <span className="text-sm font-bold tabular-nums tracking-tight">{value}</span>
+      <span className="shrink-0 text-sm font-bold tabular-nums tracking-tight">
+        {value}
+      </span>
     </div>
   );
+}
+
+function formatCubiertoValue(c: CubiertoBlock): string {
+  const parts: string[] = [];
+  if (c.amountArs > 0) parts.push(formatArs(c.amountArs));
+  if (c.amountUsd > 0) parts.push(formatUsd(c.amountUsd));
+  if (parts.length === 0) {
+    const combined =
+      c.amountArsCombined ?? c.amountArs + (c.amountArsFromUsd ?? 0);
+    return combined > 0 ? formatArs(combined) : formatArs(0);
+  }
+  return parts.join(" · ");
 }
 
 function MonthDetail({
@@ -1105,8 +1156,19 @@ function MonthDetail({
         <TotalRow label="Pesos" value={formatArs(month.totalArs)} tone="pesos" />
         <TotalRow label="Dólares" value={formatUsd(month.totalUsd)} tone="dolares" />
         <TotalRow label="Neto" value={formatArs(combined)} tone="neto" />
+        {month.cubierto && month.cubierto.count > 0 ? (
+          <TotalRow
+            label="Cubiertos"
+            value={formatCubiertoValue(month.cubierto)}
+            tone="cubierto"
+            hint={`${month.cubierto.count} fuera de neta · no inflan el gasto`}
+          />
+        ) : null}
         <p className="px-1 text-[10px] leading-snug text-[var(--muted-fg)]">
           Neto = pesos + dólares convertidos al TC del mes
+          {month.cubierto && month.cubierto.count > 0
+            ? " · Cubiertos = servicios hogar ya liquidados (Tipo Cubierto)"
+            : ""}
         </p>
       </div>
 
