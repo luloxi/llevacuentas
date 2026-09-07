@@ -12,6 +12,7 @@ import {
   importBbvaFile,
   importTransparenciaConsumos,
 } from "@/lib/import/bbva";
+import { resolvePersonalHouseholdId } from "@/lib/personal-household";
 import {
   parseStatementMovements,
   summarizeParsedMovements,
@@ -273,17 +274,19 @@ export async function importAgentStatement(
     });
     const fileSummary = summarizeParsedMovements(movements, source);
 
+    const personalId =
+      (await resolvePersonalHouseholdId(user.id)) ?? ctx.household.id;
     const result =
       kind === "transparencia"
         ? await importTransparenciaConsumos({
-            householdId: ctx.household.id,
+            householdId: personalId,
             userId: user.id,
             fileName,
             buffer: input.buffer,
             bank,
           })
         : await importBbvaFile({
-            householdId: ctx.household.id,
+            householdId: personalId,
             userId: user.id,
             fileName,
             buffer: input.buffer,

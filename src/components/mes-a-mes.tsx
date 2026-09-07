@@ -602,7 +602,41 @@ export function MesAMesView({
 
   async function onAssignChange(r: Tx, value: string) {
     if (value === "personal") {
-      if (r.ownership !== "personal") void patchTx(r.id, { ownership: "personal" });
+      if (r.ownership === "personal") return;
+      setError(null);
+      setSavingId(r.id);
+      const prev = txs;
+      try {
+        const res = await fetch("/api/transactions", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ id: r.id, ownership: "personal" }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          setError(data?.error || "No se pudo asignar");
+          return;
+        }
+        if (data?.moved) {
+          setTxs((list) => list.filter((x) => x.id !== r.id));
+          setToast("Movido a Personal.");
+          void loadStats();
+        } else {
+          setTxs((list) =>
+            list.map((x) =>
+              x.id === r.id ? { ...x, ownership: "personal" as const } : x,
+            ),
+          );
+          setToast("Guardado.");
+          void loadStats();
+        }
+      } catch (e) {
+        setTxs(prev);
+        setError(e instanceof Error ? e.message : "Error de red");
+      } finally {
+        setSavingId(null);
+      }
       return;
     }
     if (value === "reintegro") {

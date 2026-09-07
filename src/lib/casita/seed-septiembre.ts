@@ -5,8 +5,12 @@ import { getDb, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
 import { ensureCategoriesSeeded, getCategoryMap } from "@/lib/household";
 import { matchCategoryWithLearning } from "@/lib/categorize/learn";
-import { INVOICE_IOG_HOUSEHOLD_NAME } from "@/lib/invoice-iog/catalog";
+import { INVOICE_IOG_HOUSEHOLD_NAME, INVOICE_IOG_SOURCE } from "@/lib/invoice-iog/catalog";
 import { isOwnAccountTransferDescription } from "@/lib/bbva/bank-entries";
+import {
+  isPersonalHouseholdName,
+  resolvePersonalHouseholdId,
+} from "@/lib/personal-household";
 import { isHogarReintegroDescription } from "@/lib/reintegro-hogar";
 import type { AppUser } from "@/lib/session";
 import {
@@ -48,8 +52,9 @@ function loadFixtureRows(): CasitaSeptRow[] {
 let inflight: Promise<void> | null = null;
 
 /**
- * Idempotent: import septiembre CSV into Casita (NOT Invoice IOG).
- * tipo=gasto → transactions; tipo=ingreso → incomes.
+ * Idempotent: import septiembre Fiwind CSV as Personal consumos/ingresos.
+ * Casita / Invoice IOG are assignment labels — not dump destinations.
+ * Also migrates any prior Casita-seeded fingerprints → Personal.
  */
 export async function ensureCasitaSeptiembreForUser(
   user: AppUser,
@@ -84,7 +89,11 @@ async function resolveCasitaHouseholdId(userId: string): Promise<string | null> 
   if (casita) return casita.id;
 
   const nonIog = rows
-    .filter((r) => r.name !== INVOICE_IOG_HOUSEHOLD_NAME)
+    .filter(
+      (r) =>
+        r.name !== INVOICE_IOG_HOUSEHOLD_NAME &&
+        !isPersonalHouseholdName(r.name),
+    )
     .sort((a, b) => {
       const at = a.joinedAt ? a.joinedAt.getTime() : 0;
       const bt = b.joinedAt ? b.joinedAt.getTime() : 0;
@@ -99,16 +108,22 @@ async function seedCasitaSeptiembre(user: AppUser): Promise<void> {
   await ensureCategoriesSeeded();
   const db = getDb();
 
-  const householdId = await resolveCasitaHouseholdId(user.id);
-  if (!householdId) return;
+  const personalId = await resolvePersonalHouseholdId(user.id);
+  if (!personalId) return;
 
-  // Never write into Invoice IOG
+  // Never write into Invoice IOG / Casita as dump destinations
   const [hh] = await db
     .select({ name: schema.households.name })
     .from(schema.households)
-    .where(eq(schema.households.id, householdId))
+    .where(eq(schema.households.id, personalId))
     .limit(1);
-  if (!hh || hh.name === INVOICE_IOG_HOUSEHOLD_NAME) return;
+  if (
+    !hh ||
+    hh.name === INVOICE_IOG_HOUSEHOLD_NAME ||
+    hh.name === CASITA_HOUSEHOLD_NAME
+  ) {
+    return;
+  }
 
   const rows = loadFixtureRows();
   if (rows.length === 0) return;
@@ -116,11 +131,172 @@ async function seedCasitaSeptiembre(user: AppUser): Promise<void> {
   const gastos = rows.filter((r) => r.tipo === "gasto");
   const ingresos = rows.filter((r) => r.tipo === "ingreso");
 
-  await seedGastos(user, householdId, gastos);
-  await seedIngresos(user, householdId, ingresos);
-  await backfillCasitaSeptOwnAccountTransfers(householdId, user.id);
-  await backfillCasitaSeptHogarReintegros(householdId);
-  await purgeCasitaSep3ServicesCoveredByReintegro(householdId);
+  // Re-home any prior Casita dump of these fingerprints first (idempotent).
+  const casitaId = await resolveCasitaHouseholdId(user.id);
+  if (casitaId && casitaId !== personalId) {
+    await migrateCasitaSeptDumpToPersonal({
+      userId: user.id,
+      casitaId,
+      personalId,
+      rows,
+    });
+  }
+
+  await seedGastos(user, personalId, gastos);
+  await seedIngresos(user, personalId, ingresos);
+  await backfillCasitaSeptOwnAccountTransfers(personalId, user.id);
+  await backfillCasitaSeptHogarReintegros(personalId);
+
+  // Sep3 service purge stays on Casita (live/manual hogar bills, not CSV).
+  if (casitaId) {
+    await purgeCasitaSep3ServicesCoveredByReintegro(casitaId);
+  }
+}
+
+/**
+ * Move previously seeded Casita Fiwind/CSV rows → Personal.
+ * Keeps Invoice IOG seed and non-seed user-assigned Casita rows.
+ */
+export async function migrateCasitaSeptDumpToPersonal(opts: {
+  userId: string;
+  casitaId: string;
+  personalId: string;
+  rows: CasitaSeptRow[];
+}): Promise<{ movedTxs: number; movedIncomes: number; movedStatements: number }> {
+  const { casitaId, personalId, userId, rows } = opts;
+  if (casitaId === personalId) {
+    return { movedTxs: 0, movedIncomes: 0, movedStatements: 0 };
+  }
+  const db = getDb();
+  const fps = rows.map(casitaSeptFingerprint);
+  const fpSet = new Set(fps);
+
+  const casitaTxs = await db
+    .select({
+      id: schema.transactions.id,
+      externalFingerprint: schema.transactions.externalFingerprint,
+      source: schema.transactions.source,
+      statementId: schema.transactions.statementId,
+    })
+    .from(schema.transactions)
+    .where(eq(schema.transactions.householdId, casitaId));
+
+  const toMove = casitaTxs.filter(
+    (t) =>
+      t.source !== INVOICE_IOG_SOURCE &&
+      (t.source === CASITA_SEPT_SOURCE ||
+        fpSet.has(t.externalFingerprint)),
+  );
+  if (toMove.length === 0) {
+    // Still move orphan casita_csv statements if any
+  }
+
+  const personalFps = await db
+    .select({ fp: schema.transactions.externalFingerprint })
+    .from(schema.transactions)
+    .where(eq(schema.transactions.householdId, personalId));
+  const havePersonal = new Set(personalFps.map((r) => r.fp));
+
+  let movedTxs = 0;
+  const statementIds = new Set<string>();
+  for (const t of toMove) {
+    if (t.statementId) statementIds.add(t.statementId);
+    if (havePersonal.has(t.externalFingerprint)) {
+      // Already seeded on Personal — drop Casita duplicate, keep links cleared.
+      await db
+        .update(schema.transactions)
+        .set({ linkedTransactionId: null, updatedAt: new Date() })
+        .where(eq(schema.transactions.linkedTransactionId, t.id));
+      await db.delete(schema.transactions).where(eq(schema.transactions.id, t.id));
+      continue;
+    }
+    let fingerprint = t.externalFingerprint;
+    const clash = havePersonal.has(fingerprint);
+    if (clash) {
+      fingerprint = `${fingerprint}:moved:${Date.now().toString(36)}`.slice(0, 64);
+    }
+    await db
+      .update(schema.transactions)
+      .set({
+        householdId: personalId,
+        ownership: "personal",
+        paidByUserId: userId,
+        externalFingerprint: fingerprint,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.transactions.id, t.id));
+    havePersonal.add(fingerprint);
+    movedTxs++;
+  }
+
+  // Incomes with seed fingerprints
+  const casitaIncomes = await db
+    .select({
+      id: schema.incomes.id,
+      externalFingerprint: schema.incomes.externalFingerprint,
+    })
+    .from(schema.incomes)
+    .where(
+      and(
+        eq(schema.incomes.householdId, casitaId),
+        eq(schema.incomes.userId, userId),
+      ),
+    );
+  const personalIncomeFps = await db
+    .select({ fp: schema.incomes.externalFingerprint })
+    .from(schema.incomes)
+    .where(
+      and(
+        eq(schema.incomes.householdId, personalId),
+        eq(schema.incomes.userId, userId),
+      ),
+    );
+  const haveInc = new Set(
+    personalIncomeFps.map((r) => r.fp).filter((fp): fp is string => Boolean(fp)),
+  );
+
+  let movedIncomes = 0;
+  for (const inc of casitaIncomes) {
+    const fp = inc.externalFingerprint;
+    if (!fp || !fpSet.has(fp)) continue;
+    if (haveInc.has(fp)) {
+      await db.delete(schema.incomes).where(eq(schema.incomes.id, inc.id));
+      continue;
+    }
+    await db
+      .update(schema.incomes)
+      .set({ householdId: personalId, updatedAt: new Date() })
+      .where(eq(schema.incomes.id, inc.id));
+    haveInc.add(fp);
+    movedIncomes++;
+  }
+
+  // Re-home casita_csv statements (+ any statements only used by moved txs)
+  const statements = await db
+    .select({
+      id: schema.cardStatements.id,
+      source: schema.cardStatements.source,
+    })
+    .from(schema.cardStatements)
+    .where(eq(schema.cardStatements.householdId, casitaId));
+
+  let movedStatements = 0;
+  for (const s of statements) {
+    const fromSeed = s.source === CASITA_SEPT_SOURCE || statementIds.has(s.id);
+    if (!fromSeed) continue;
+    await db
+      .update(schema.cardStatements)
+      .set({ householdId: personalId })
+      .where(eq(schema.cardStatements.id, s.id));
+    movedStatements++;
+  }
+
+  if (movedTxs || movedIncomes || movedStatements) {
+    console.info(
+      `[personal] migrated Casita sept dump → Personal: txs=${movedTxs} incomes=${movedIncomes} statements=${movedStatements}`,
+    );
+  }
+  return { movedTxs, movedIncomes, movedStatements };
 }
 
 async function seedGastos(

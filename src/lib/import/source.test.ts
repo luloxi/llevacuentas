@@ -13,6 +13,18 @@ import {
 } from "./source";
 
 describe("statement source labels", () => {
+  it("never labels casita_csv seed as Casita hogar dump", () => {
+    assert.equal(
+      statementTypeLabel("casita_csv", "Fiwind"),
+      "Movimientos CSV (Fiwind)",
+    );
+    assert.equal(
+      statementTypeLabel("casita_csv", null),
+      "Movimientos CSV (Fiwind)",
+    );
+    assert.ok(!statementTypeLabel("casita_csv", "Fiwind").includes("Casita"));
+  });
+
   it("does not call a Fiwind Excel a BBVA statement", () => {
     assert.equal(
       statementTypeLabel("xlsx", "Fiwind"),

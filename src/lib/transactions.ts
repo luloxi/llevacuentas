@@ -172,8 +172,16 @@ export async function moveTransactionToHousehold(opts: {
   toHouseholdId: string;
   txId: string;
   userId: string;
+  /** Default shared (assign to hogar). Personal bank space uses "personal". */
+  ownership?: "personal" | "shared";
 }) {
-  const { fromHouseholdId, toHouseholdId, txId, userId } = opts;
+  const {
+    fromHouseholdId,
+    toHouseholdId,
+    txId,
+    userId,
+    ownership = "shared",
+  } = opts;
   if (fromHouseholdId === toHouseholdId) {
     throw new Error("Ya está en ese hogar");
   }
@@ -230,7 +238,7 @@ export async function moveTransactionToHousehold(opts: {
     .update(schema.transactions)
     .set({
       householdId: toHouseholdId,
-      ownership: "shared",
+      ownership,
       categoryId: nextCategoryId,
       externalFingerprint: fingerprint,
       paidByUserId: before.paidByUserId ?? userId,

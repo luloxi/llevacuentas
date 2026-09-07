@@ -46,7 +46,7 @@ export function parseCasitaSeptiembreCsv(text: string): CasitaSeptRow[] {
 
   const header = lines[0]!.toLowerCase();
   if (!header.includes("fecha") || !header.includes("tipo")) {
-    throw new Error("CSV Casita: faltan columnas fecha/tipo");
+    throw new Error("CSV Fiwind: faltan columnas fecha/tipo");
   }
 
   const out: CasitaSeptRow[] = [];

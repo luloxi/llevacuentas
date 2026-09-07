@@ -4,6 +4,7 @@ import { requireApiUser } from "@/lib/api-auth";
 import { getDb, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
 import { getUserHousehold } from "@/lib/household";
+import { resolvePersonalHouseholdId } from "@/lib/personal-household";
 import {
   isIncomeFrequency,
   isIncomeKind,
@@ -170,7 +171,8 @@ export async function POST(req: Request) {
       .insert(schema.incomes)
       .values({
         userId: user.id,
-        householdId: ctx.household.id,
+        householdId:
+          (await resolvePersonalHouseholdId(user.id)) ?? ctx.household.id,
         kind,
         frequency,
         date,

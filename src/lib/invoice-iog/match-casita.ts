@@ -1,10 +1,7 @@
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
-import {
-  CASITA_HOUSEHOLD_NAME,
-  CASITA_OWNER_EMAIL,
-} from "@/lib/casita/septiembre-csv";
+import { CASITA_OWNER_EMAIL } from "@/lib/casita/septiembre-csv";
 import { isPeriodDebtSource } from "@/lib/import/source";
 import { amountsClose } from "@/lib/money";
 import {
@@ -224,10 +221,10 @@ export type MatchCasitaResult = {
 let inflight: Promise<MatchCasitaResult> | null = null;
 
 /**
- * Link Invoice IOG gastos ↔ Casita BBVA/Fiwind by same amount.
- * Leaves IOG as source of truth; tags Casita rows via linkedTransactionId
- * (excluded from Casita neta to avoid double-count). Does not delete history.
- * Idempotent: never clears existing links; only fills nulls.
+ * Link Invoice IOG gastos ↔ Personal/Casita BBVA/Fiwind by same amount.
+ * Bank loads live as Personal; Casita is an assign label. Leaves IOG as
+ * source of truth; tags bank rows via linkedTransactionId (excluded from
+ * Personal/Casita neta). Idempotent: never clears existing links; only fills nulls.
  */
 export async function ensureInvoiceIogCasitaMatchesForUser(
   user: AppUser,
@@ -264,53 +261,32 @@ async function householdIdByName(
   return row?.id ?? null;
 }
 
-/** Prefer exact "Casita"; if renamed, oldest non–Invoice IOG hogar. */
-async function resolveCasitaHouseholdId(userId: string): Promise<string | null> {
-  const exact = await householdIdByName(userId, CASITA_HOUSEHOLD_NAME);
-  if (exact) return exact;
-
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: schema.households.id,
-      name: schema.households.name,
-      joinedAt: schema.householdMembers.joinedAt,
-    })
-    .from(schema.householdMembers)
-    .innerJoin(
-      schema.households,
-      eq(schema.households.id, schema.householdMembers.householdId),
-    )
-    .where(eq(schema.householdMembers.userId, userId));
-
-  const nonIog = rows
-    .filter((r) => r.name !== INVOICE_IOG_HOUSEHOLD_NAME)
-    .sort((a, b) => {
-      const at = a.joinedAt ? a.joinedAt.getTime() : 0;
-      const bt = b.joinedAt ? b.joinedAt.getTime() : 0;
-      if (at !== bt) return at - bt;
-      return a.id.localeCompare(b.id);
-    });
-  return nonIog[0]?.id ?? null;
-}
 
 async function runMatch(user: AppUser): Promise<MatchCasitaResult> {
   await ensureSchema();
   const db = getDb();
 
   const iogId = await householdIdByName(user.id, INVOICE_IOG_HOUSEHOLD_NAME);
-  const casitaId = await resolveCasitaHouseholdId(user.id);
-  if (!iogId || !casitaId) {
+  if (!iogId) {
     return { matched: 0, total: 0, pairs: [] };
   }
 
-  // Never link into Invoice IOG as the Casita side
-  const [casitaHh] = await db
-    .select({ name: schema.households.name })
-    .from(schema.households)
-    .where(eq(schema.households.id, casitaId))
-    .limit(1);
-  if (!casitaHh || casitaHh.name === INVOICE_IOG_HOUSEHOLD_NAME) {
+  // Bank candidates: all non–Invoice IOG hogares (Personal dump + Casita assigns).
+  const memberHh = await db
+    .select({
+      id: schema.households.id,
+      name: schema.households.name,
+    })
+    .from(schema.householdMembers)
+    .innerJoin(
+      schema.households,
+      eq(schema.households.id, schema.householdMembers.householdId),
+    )
+    .where(eq(schema.householdMembers.userId, user.id));
+  const bankHouseholdIds = memberHh
+    .filter((h) => h.name !== INVOICE_IOG_HOUSEHOLD_NAME)
+    .map((h) => h.id);
+  if (bankHouseholdIds.length === 0) {
     return { matched: 0, total: 0, pairs: [] };
   }
 
@@ -336,6 +312,7 @@ async function runMatch(user: AppUser): Promise<MatchCasitaResult> {
   const casitaTxs = await db
     .select({
       id: schema.transactions.id,
+      householdId: schema.transactions.householdId,
       date: schema.transactions.date,
       descriptionNormalized: schema.transactions.descriptionNormalized,
       amountArs: schema.transactions.amountArs,
@@ -347,7 +324,7 @@ async function runMatch(user: AppUser): Promise<MatchCasitaResult> {
       isCredit: schema.transactions.isCredit,
     })
     .from(schema.transactions)
-    .where(eq(schema.transactions.householdId, casitaId));
+    .where(inArray(schema.transactions.householdId, bankHouseholdIds));
 
   const iogCandidates: MatchCandidate[] = iogTxs.map((t) => ({
     id: t.id,
@@ -387,7 +364,7 @@ async function runMatch(user: AppUser): Promise<MatchCasitaResult> {
   const newPairs = matchInvoiceIogToCasita(unmatchedIog, casitaCandidates);
 
   for (const pair of newPairs) {
-    // Casita → IOG (source of truth for work). Excluded from Casita neta.
+    // Bank (Personal/Casita) → IOG. Excluded from bank-side neta.
     await db
       .update(schema.transactions)
       .set({
@@ -397,7 +374,7 @@ async function runMatch(user: AppUser): Promise<MatchCasitaResult> {
       .where(
         and(
           eq(schema.transactions.id, pair.casitaId),
-          eq(schema.transactions.householdId, casitaId),
+          inArray(schema.transactions.householdId, bankHouseholdIds),
           isNull(schema.transactions.linkedTransactionId),
         ),
       );

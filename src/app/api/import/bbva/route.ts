@@ -7,6 +7,7 @@ import {
   importBbvaFile,
   importTransparenciaConsumos,
 } from "@/lib/import/bbva";
+import { resolvePersonalHouseholdId } from "@/lib/personal-household";
 
 export async function POST(req: Request) {
   const authResult = await requireApiUser();
@@ -25,18 +26,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Falta el archivo" }, { status: 400 });
     }
 
+    // Bank / Fiwind loads always land as Personal — Casita & IOG are assign labels.
+    const personalId =
+      (await resolvePersonalHouseholdId(sessionUser.id)) ?? ctx.household.id;
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const result =
       kind === "transparencia"
         ? await importTransparenciaConsumos({
-            householdId: ctx.household.id,
+            householdId: personalId,
             userId: sessionUser.id,
             fileName: file.name,
             buffer,
             bank,
           })
         : await importBbvaFile({
-            householdId: ctx.household.id,
+            householdId: personalId,
             userId: sessionUser.id,
             fileName: file.name,
             buffer,

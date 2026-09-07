@@ -9,6 +9,7 @@ import {
   moveTransactionToHousehold,
   updateTransaction,
 } from "@/lib/transactions";
+import { resolvePersonalHouseholdId } from "@/lib/personal-household";
 import { getDb, schema } from "@/lib/db";
 import { normalizeBank } from "@/lib/banks";
 
@@ -370,6 +371,29 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     }
 
+    // Assign → Personal space (bank dump hogar), not merely ownership flip in-place.
+    if (body.ownership === "personal" && !body.targetHouseholdId) {
+      const personalId = await resolvePersonalHouseholdId(sessionUser.id);
+      if (personalId && personalId !== ctx.household.id) {
+        const moved = await moveTransactionToHousehold({
+          fromHouseholdId: ctx.household.id,
+          toHouseholdId: personalId,
+          txId: body.id,
+          userId: sessionUser.id,
+          ownership: "personal",
+        });
+        return NextResponse.json({
+          transaction: moved,
+          moved: true,
+          targetHouseholdId: personalId,
+          learned: 0,
+          similarUpdated: 0,
+          similarCount: 0,
+          appliedToSimilar: false,
+        });
+      }
+    }
+
     const targetHouseholdId =
       typeof body.targetHouseholdId === "string"
         ? body.targetHouseholdId.trim()
@@ -382,11 +406,19 @@ export async function PATCH(req: Request) {
           { status: 403 },
         );
       }
+      const dest = households.find((h) => h.id === targetHouseholdId);
+      const destOwnership =
+        dest &&
+        (dest.name === "Personal" ||
+          dest.name === "Mi espacio")
+          ? ("personal" as const)
+          : ("shared" as const);
       const moved = await moveTransactionToHousehold({
         fromHouseholdId: ctx.household.id,
         toHouseholdId: targetHouseholdId,
         txId: body.id,
         userId: sessionUser.id,
+        ownership: destOwnership,
       });
       return NextResponse.json({
         transaction: moved,
