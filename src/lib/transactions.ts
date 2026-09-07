@@ -5,6 +5,7 @@ import { getDb, schema } from "@/lib/db";
 import { getCategoryMap } from "@/lib/household";
 import { periodFromDateString } from "@/lib/utils";
 import { isConsumosHiddenPayment } from "@/lib/reintegro-hogar";
+import { resolveAmountUpdates } from "@/lib/transaction-amounts";
 
 /**
  * Visibility:
@@ -98,6 +99,7 @@ export async function listTransactions(
   });
 }
 
+
 export async function updateTransaction(
   householdId: string,
   id: string,
@@ -134,23 +136,17 @@ export async function updateTransaction(
     updatedAt: Date;
   } = { ...rest, updatedAt: new Date() };
 
-  if ("amountArs" in patch) {
-    if (amountArs == null) {
-      set.amountArs = null;
-    } else {
-      const n = Number(amountArs);
-      if (Number.isNaN(n)) throw new Error("Monto $ inválido");
-      set.amountArs = String(Math.abs(n));
-    }
-  }
-  if ("amountUsd" in patch) {
-    if (amountUsd == null) {
-      set.amountUsd = null;
-    } else {
-      const n = Number(amountUsd);
-      if (Number.isNaN(n)) throw new Error("Monto USD inválido");
-      set.amountUsd = String(Math.abs(n));
-    }
+  // undefined = leave unchanged. null = explicit clear.
+  // Important: `"amountArs" in { amountArs: undefined }` is true — Cubierto /
+  // Reintegro PATCH used to pass undefined amounts and wipe montos to null,
+  // so Resumen Cubiertos summed $0 while neta still dropped (isPayment).
+  const amountUpdates = resolveAmountUpdates({ amountArs, amountUsd });
+  if ("amountArs" in amountUpdates) set.amountArs = amountUpdates.amountArs;
+  if ("amountUsd" in amountUpdates) set.amountUsd = amountUpdates.amountUsd;
+
+  // Drop undefined keys so drizzle does not write NULLs for omitted fields.
+  for (const key of Object.keys(set) as Array<keyof typeof set>) {
+    if (set[key] === undefined) delete set[key];
   }
 
   const [row] = await db

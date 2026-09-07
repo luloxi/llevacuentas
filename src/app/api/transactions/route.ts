@@ -480,23 +480,27 @@ export async function PATCH(req: Request) {
             ? true
             : undefined;
 
-    const row = await updateTransaction(ctx.household.id, body.id, {
-      categoryId: body.categoryId,
-      ownership: nextOwnership,
-      paidByUserId: nextPaidBy !== undefined ? nextPaidBy : body.paidByUserId,
-      splitPct: body.splitPct,
-      bank:
-        "bank" in body
-          ? normalizeBank(body.bank as string | null | undefined)
-          : undefined,
-      date:
-        "date" in body && body.date != null && body.date !== ""
-          ? String(body.date).trim()
-          : undefined,
-      amountArs,
-      amountUsd,
+    // Only include fields the client sent. Passing amountArs: undefined still
+    // puts the key on the patch object ("in" === true) and used to NULL montos
+    // on Cubierto / Reintegro marks — Resumen Cubiertos then showed $0.
+    const patch: Parameters<typeof updateTransaction>[2] = {
       isPayment: nextIsPayment,
-    });
+    };
+    if ("categoryId" in body) patch.categoryId = body.categoryId;
+    if (nextOwnership !== undefined) patch.ownership = nextOwnership;
+    if (nextPaidBy !== undefined) patch.paidByUserId = nextPaidBy;
+    else if ("paidByUserId" in body) patch.paidByUserId = body.paidByUserId;
+    if ("splitPct" in body) patch.splitPct = body.splitPct;
+    if ("bank" in body) {
+      patch.bank = normalizeBank(body.bank as string | null | undefined);
+    }
+    if ("date" in body && body.date != null && body.date !== "") {
+      patch.date = String(body.date).trim();
+    }
+    if ("amountArs" in body) patch.amountArs = amountArs ?? null;
+    if ("amountUsd" in body) patch.amountUsd = amountUsd ?? null;
+
+    const row = await updateTransaction(ctx.household.id, body.id, patch);
 
     let learned = 0;
     let similarUpdated = 0;
