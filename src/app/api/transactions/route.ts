@@ -421,12 +421,17 @@ export async function PATCH(req: Request) {
           : Number(body.amountUsd)
         : undefined;
 
+    const wantsHouseholdReimbursement =
+      body.householdReimbursement === true ||
+      body.householdReimbursement === 1 ||
+      body.householdReimbursement === "true";
+
     const nextIsPayment =
       body.isPayment === true
         ? true
         : body.isPayment === false
           ? false
-          : body.internalTransfer === true
+          : body.internalTransfer === true || wantsHouseholdReimbursement
             ? true
             : undefined;
 
@@ -451,6 +456,7 @@ export async function PATCH(req: Request) {
     let learned = 0;
     let similarUpdated = 0;
     let similarCount = 0;
+    let reintegroCount = 0;
 
     const categoryId =
       body.categoryId && typeof body.categoryId === "string"
@@ -468,7 +474,8 @@ export async function PATCH(req: Request) {
     const shouldOfferOrApply =
       Boolean(categoryId) &&
       Boolean(before.descriptionNormalized) &&
-      (categoryChanged || applyToSimilar);
+      (categoryChanged || applyToSimilar) &&
+      !wantsHouseholdReimbursement;
 
     if (shouldOfferOrApply && categoryId && before.descriptionNormalized) {
       const {
@@ -499,12 +506,62 @@ export async function PATCH(req: Request) {
       }
     }
 
+    // Reintegro hogar (servicios): isPayment, optional bulk to same payee.
+    if (wantsHouseholdReimbursement && before.descriptionNormalized) {
+      const { looksLikeHogarReintegroPayee } = await import(
+        "@/lib/reintegro-hogar"
+      );
+      const {
+        countHogarReintegroByMerchant,
+        applyHogarReintegroToSimilar,
+      } = await import("@/lib/reintegro-hogar-db");
+      if (looksLikeHogarReintegroPayee(before.descriptionNormalized)) {
+        reintegroCount = await countHogarReintegroByMerchant({
+          householdId: ctx.household.id,
+          description: before.descriptionNormalized,
+        });
+        if (applyToSimilar) {
+          similarUpdated = await applyHogarReintegroToSimilar({
+            householdId: ctx.household.id,
+            description: before.descriptionNormalized,
+            excludeTxId: body.id,
+          });
+        }
+        // Surface N for the toast even when only this row was marked.
+        similarCount = reintegroCount;
+      }
+    } else if (
+      before.descriptionNormalized &&
+      !wantsHouseholdReimbursement &&
+      body.skipReintegroOffer !== true &&
+      (categoryChanged ||
+        nextOwnership === "shared" ||
+        body.offerReintegro === true)
+    ) {
+      // Offer count so Consumos can show the reintegro toast after an edit.
+      const { looksLikeHogarReintegroPayee } = await import(
+        "@/lib/reintegro-hogar"
+      );
+      const { countHogarReintegroByMerchant } = await import(
+        "@/lib/reintegro-hogar-db"
+      );
+      if (looksLikeHogarReintegroPayee(before.descriptionNormalized)) {
+        reintegroCount = await countHogarReintegroByMerchant({
+          householdId: ctx.household.id,
+          description: before.descriptionNormalized,
+          onlyUnset: true,
+        });
+      }
+    }
+
     return NextResponse.json({
       transaction: row,
       learned,
       similarUpdated,
       similarCount,
+      reintegroCount,
       appliedToSimilar: Boolean(applyToSimilar),
+      householdReimbursement: Boolean(wantsHouseholdReimbursement),
     });
   } catch (e) {
     return NextResponse.json(

@@ -13,6 +13,11 @@ import {
   ApplyCriterionToast,
   type ApplyCriterionPrompt,
 } from "@/components/apply-criterion-toast";
+import {
+  ReintegroHogarToast,
+  type ReintegroHogarPrompt,
+} from "@/components/reintegro-hogar-toast";
+import { looksLikeHogarReintegroPayee } from "@/lib/reintegro-hogar";
 
 type Category = { id: string; slug: string; name: string };
 type Member = { userId: string; name: string };
@@ -155,6 +160,8 @@ export function TransactionsTable() {
   const [toast, setToast] = useState<string | null>(null);
   const [applyPrompt, setApplyPrompt] = useState<ApplyCriterionPrompt | null>(null);
   const [applyBusy, setApplyBusy] = useState(false);
+  const [reintegroPrompt, setReintegroPrompt] = useState<ReintegroHogarPrompt | null>(null);
+  const [reintegroBusy, setReintegroBusy] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
@@ -172,10 +179,10 @@ export function TransactionsTable() {
   ].filter(Boolean).length;
 
   useEffect(() => {
-    if (!toast || applyPrompt) return;
+    if (!toast || applyPrompt || reintegroPrompt) return;
     const t = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(t);
-  }, [toast, applyPrompt]);
+  }, [toast, applyPrompt, reintegroPrompt]);
 
   useEffect(() => {
     let cancelled = false;
@@ -375,8 +382,46 @@ export function TransactionsTable() {
       const data = await res.json().catch(() => null);
       if (!res.ok) { setRows(prev); setError(data?.error || "No se pudo guardar"); return; }
 
+      if (body.householdReimbursement) {
+        setApplyPrompt(null);
+        if (body.applyToSimilar) {
+          setReintegroPrompt(null);
+          const n = typeof data?.similarUpdated === "number" ? data.similarUpdated : 0;
+          setToast(
+            n > 0
+              ? `Reintegro aplicado a ${n + 1} pago${n + 1 === 1 ? "" : "s"} (no duplica Hogar).`
+              : "Marcado como reintegro de servicios (no cuenta en la neta).",
+          );
+          void load();
+          return;
+        }
+        const n =
+          typeof data?.reintegroCount === "number"
+            ? data.reintegroCount
+            : typeof data?.similarCount === "number"
+              ? data.similarCount
+              : 1;
+        // Row already isPayment — drop from list like Transferencia interna.
+        setRows((list) => list.filter((x) => x.id !== id));
+        if (n > 1 && !body.applyToSimilar) {
+          setToast(null);
+          setReintegroPrompt({
+            txId: id,
+            count: n,
+            pending: false,
+          });
+        } else {
+          setReintegroPrompt(null);
+          setToast(
+            "Marcado como reintegro de servicios (no cuenta en la neta).",
+          );
+        }
+        return;
+      }
+
       if (body.applyToSimilar) {
         setApplyPrompt(null);
+        setReintegroPrompt(null);
         const n = typeof data?.similarUpdated === "number" ? data.similarUpdated : 0;
         setToast(
           n > 0
@@ -389,11 +434,37 @@ export function TransactionsTable() {
 
       const similarCount =
         typeof data?.similarCount === "number" ? data.similarCount : 0;
+      const reintegroCount =
+        typeof data?.reintegroCount === "number" ? data.reintegroCount : 0;
+      const rowDesc =
+        rows.find((r) => r.id === id)?.descriptionNormalized ??
+        prev.find((r) => r.id === id)?.descriptionNormalized ??
+        "";
+
+      // Option C: editing a roommate service reimbursement → ask before double-loading.
+      if (
+        !body.skipReintegroOffer &&
+        reintegroCount >= 1 &&
+        looksLikeHogarReintegroPayee(rowDesc) &&
+        (categoryChanged || body.ownership === "shared")
+      ) {
+        setApplyPrompt(null);
+        setToast(null);
+        setReintegroPrompt({
+          txId: id,
+          count: reintegroCount,
+          pending: true,
+        });
+        return;
+      }
+
       if (categoryChanged && similarCount >= 2 && catId) {
         setToast(null);
+        setReintegroPrompt(null);
         setApplyPrompt({ txId: id, categoryId: catId, count: similarCount });
       } else if (body.ownership || categoryChanged) {
         setApplyPrompt(null);
+        setReintegroPrompt(null);
         setToast("Guardado.");
       }
     } catch {
@@ -413,6 +484,25 @@ export function TransactionsTable() {
       });
     } finally {
       setApplyBusy(false);
+    }
+  }
+
+  async function applyReintegro(all: boolean) {
+    if (!reintegroPrompt) return;
+    // Already marked via Tipo → "Reintegro hogar"; Solo este just closes.
+    if (!reintegroPrompt.pending && !all) {
+      setReintegroPrompt(null);
+      setToast("Marcado como reintegro de servicios (no cuenta en la neta).");
+      return;
+    }
+    setReintegroBusy(true);
+    try {
+      await patch(reintegroPrompt.txId, {
+        householdReimbursement: true,
+        applyToSimilar: all,
+      });
+    } finally {
+      setReintegroBusy(false);
     }
   }
 
@@ -469,6 +559,12 @@ export function TransactionsTable() {
       if (r.ownership !== "personal") void patch(r.id, { ownership: "personal" });
       return;
     }
+    if (value === "reintegro") {
+      setApplyPrompt(null);
+      setToast(null);
+      void patch(r.id, { householdReimbursement: true });
+      return;
+    }
     if (value === "internal") {
       // Hide from Consumos + neta (isPayment); keep history in statements.
       setError(null);
@@ -499,6 +595,26 @@ export function TransactionsTable() {
     }
     // value is a household id (or legacy "shared")
     if (value === "shared" || value === (activeHouseholdId ?? "")) {
+      // Roommate service reimbursements must not become a second Hogar bill.
+      if (
+        looksLikeHogarReintegroPayee(r.descriptionNormalized) &&
+        !r.isPayment
+      ) {
+        const n = rows.filter(
+          (x) =>
+            !x.isPayment &&
+            x.descriptionNormalized === r.descriptionNormalized,
+        ).length;
+        setApplyPrompt(null);
+        setToast(null);
+        setReintegroPrompt({
+          txId: r.id,
+          count: Math.max(1, n),
+          pending: true,
+          declineToShared: true,
+        });
+        return;
+      }
       if (r.ownership !== "shared") void patch(r.id, { ownership: "shared" });
       return;
     }
@@ -558,6 +674,7 @@ export function TransactionsTable() {
           </option>
         ))}
         {opts.length === 0 && <option value="shared">Hogar</option>}
+        <option value="reintegro">Reintegro hogar</option>
         <option value="internal">Transferencia interna</option>
       </select>
     );
@@ -821,7 +938,25 @@ export function TransactionsTable() {
       )}
 
       {error && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
-      {applyPrompt ? (
+      {reintegroPrompt ? (
+        <ReintegroHogarToast
+          prompt={reintegroPrompt}
+          busy={reintegroBusy || savingId === reintegroPrompt.txId}
+          onApply={() => void applyReintegro(true)}
+          onSoloEste={() => void applyReintegro(false)}
+          onDismiss={() => {
+            const prompt = reintegroPrompt;
+            setReintegroPrompt(null);
+            setToast(null);
+            if (prompt?.declineToShared) {
+              void patch(prompt.txId, {
+                ownership: "shared",
+                skipReintegroOffer: true,
+              });
+            }
+          }}
+        />
+      ) : applyPrompt ? (
         <ApplyCriterionToast
           prompt={applyPrompt}
           busy={applyBusy || savingId === applyPrompt.txId}
