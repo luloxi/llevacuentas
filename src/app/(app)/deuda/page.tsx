@@ -14,7 +14,7 @@ function DeudaPronto() {
       <PageHeader
         eyebrow="En pausa"
         title="Deuda, más adelante"
-        description="Esta pantalla quedó desactualizada. La estamos acomodando — pronto vuelve."
+        description="La escondimos un rato. Cuando vuelva, va a cerrar con lo que realmente deben."
       />
       <Surface className="max-w-lg">
         <p className="text-sm leading-relaxed text-[var(--muted-fg)]">

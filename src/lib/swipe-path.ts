@@ -28,9 +28,17 @@ const DEUDA_PATH: readonly SwipeStep[] = [
   { href: "/deuda", tab: "pagos" },
 ];
 
-export const SWIPE_PATH: readonly SwipeStep[] = DEUDA_ENABLED
-  ? [...BASE_PATH, ...DEUDA_PATH]
-  : BASE_PATH;
+export function swipePathFor(deudaEnabled: boolean): readonly SwipeStep[] {
+  return deudaEnabled ? [...BASE_PATH, ...DEUDA_PATH] : BASE_PATH;
+}
+
+export const SWIPE_PATH: readonly SwipeStep[] = swipePathFor(DEUDA_ENABLED);
+
+export function swipeIncludesDeuda(
+  path: readonly SwipeStep[] = SWIPE_PATH,
+): boolean {
+  return path.some((s) => s.href === "/deuda");
+}
 
 export function stepToHref(step: SwipeStep): string {
   if ("tab" in step) return `${step.href}?tab=${step.tab}`;

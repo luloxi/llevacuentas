@@ -370,8 +370,8 @@ export function MesAMesView({
   const emptyHint = (
     <EmptyState
       icon={<LayoutList className="h-7 w-7" />}
-      title="Todavía no hay datos"
-      description="Importá el resumen de la tarjeta o cargá gastos para ver el análisis."
+      title="Todavía no hay nada para armar"
+      description="Cargá un resumen y acá se ordena solo, mes a mes."
     />
   );
 
@@ -471,8 +471,8 @@ function ChartsPanel({ chart }: { chart: ChartData | null }) {
     return (
       <EmptyState
         icon={<LineChart className="h-7 w-7" />}
-        title="Sin datos para graficar"
-        description="Cuando haya movimientos, vas a ver la evolución acá."
+        title="Todavía no hay curva"
+        description="Cuando haya movimientos, acá se ve cómo viene el mes."
       />
     );
   }

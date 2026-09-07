@@ -15,14 +15,20 @@ import {
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth/client";
 import { BrandLogo } from "@/components/brand-logo";
+import { NAV_LINKS, type NavHref } from "@/lib/nav";
 
-const links = [
-  { href: "/dashboard", label: "Inicio", icon: Home },
-  { href: "/consumos", label: "Consumos", icon: List },
-  { href: "/cargas", label: "Cargas", icon: Upload },
-  { href: "/ingresos", label: "Ingresos", icon: Banknote },
-  { href: "/compartido", label: "Hogar", icon: Users },
-];
+const NAV_ICONS: Record<NavHref, typeof Home> = {
+  "/dashboard": Home,
+  "/consumos": List,
+  "/cargas": Upload,
+  "/ingresos": Banknote,
+  "/compartido": Users,
+};
+
+const links = NAV_LINKS.map((l) => ({
+  ...l,
+  icon: NAV_ICONS[l.href],
+}));
 
 function openAddExpense() {
   window.dispatchEvent(new Event("lc:open-add-expense"));

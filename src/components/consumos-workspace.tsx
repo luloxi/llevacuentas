@@ -84,11 +84,19 @@ export function ConsumosWorkspace() {
         ]}
       />
 
-      {toast && <Toast>{toast}</Toast>}
+      {toast && (
+        <Toast>
+          {toast === "Importación lista."
+            ? "El resumen ya está. Acá abajo están los movimientos."
+            : toast === "Gasto agregado."
+              ? "Sumado."
+              : toast}
+        </Toast>
+      )}
 
       <div className="min-h-[40vh]">
         {tab === "lista" ? (
-          <TransactionsTable key={tableKey} compactToolbar />
+          <TransactionsTable key={tableKey} />
         ) : (
           <MesAMesView mode={tab === "charts" ? "charts" : "resumen"} />
         )}

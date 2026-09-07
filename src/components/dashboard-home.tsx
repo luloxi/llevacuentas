@@ -12,7 +12,6 @@ import {
   Eye,
   EyeOff,
   LayoutGrid,
-  CreditCard,
   Minus,
   Moon,
   Sun,
@@ -24,6 +23,7 @@ import { CategoryIcon } from "@/lib/category-icons";
 import { colorForCategory } from "@/lib/category-colors";
 import { useTheme } from "@/components/theme-provider";
 import { DEUDA_ENABLED } from "@/lib/features";
+import { homeNextAction } from "@/lib/nav";
 
 type CategorySummary = {
   id: string;
@@ -474,7 +474,7 @@ function HomeLayoutEditor({
         </button>
       </div>
       <p className="mb-2 text-[11px] text-[var(--muted-fg)]">
-        Ordená y mostrá u ocultá las tarjetas del home.
+        Ordená y mostrá u ocultá las tarjetas. Lo demás queda en la barra de abajo.
       </p>
       <ul className="space-y-1.5 md:grid md:grid-cols-2 md:gap-2 md:space-y-0">
         {order.map((id, i) => {
@@ -527,6 +527,12 @@ function HomeLayoutEditor({
           );
         })}
       </ul>
+      <Link
+        href="/suscripcion"
+        className="mt-3 inline-flex text-[11px] font-medium text-[var(--muted-fg)] underline-offset-2 hover:text-[var(--foreground)] hover:underline"
+      >
+        Plan y suscripción
+      </Link>
     </div>
   );
 }
@@ -630,81 +636,68 @@ export function DashboardHome({
     saveHidden(nextHidden);
   }
 
+  const next = homeNextAction(monthTxCount);
+  const emptyMonth = monthTxCount <= 0 && !hasIncomes;
+
   const sections = useMemo(() => {
     const map: Record<HomeSectionId, React.ReactNode> = {
       gastos: (
-        <div className="space-y-2">
-          <Link
-            href="/consumos?tab=lista"
-            className="group relative block h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-5 py-5 transition active:scale-[0.99] md:px-7 md:py-7"
+        <div className="relative overflow-hidden rounded-[1.25rem] border border-[var(--border)] bg-[var(--surface)] px-5 py-7 md:px-8 md:py-10">
+          <SpendBurst active={burst} />
+          <p className="text-[13px] font-medium tracking-wide text-[var(--brand-fg)]">
+            Neta
+          </p>
+          <p
+            className={cn(
+              "mt-3 font-semibold leading-[0.92] tabular-nums tracking-[-0.04em] text-[var(--foreground)]",
+              "text-[2.85rem] sm:text-6xl md:text-8xl",
+              pop && "lc-amount-pop",
+              hasIncomes && heroAmount < 0 && "text-red-800 dark:text-red-300",
+            )}
             aria-label={
               hasIncomes
                 ? `Neta del mes, ${formatArs(Math.round(heroAmount))}`
                 : `Gastos del mes, ${formatArs(Math.round(displayTotal))}`
             }
           >
-            <SpendBurst active={burst} />
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--brand-fg)]">
-                  Neta del mes
-                </p>
-                <p
-                  className={cn(
-                    "mt-1 text-5xl font-semibold leading-none tabular-nums tracking-tight text-[var(--foreground)] md:text-7xl",
-                    pop && "lc-amount-pop",
-                    hasIncomes && heroAmount < 0 && "text-red-700 dark:text-red-300",
-                  )}
-                >
-                  {formatArs(Math.round(heroAmount))}
-                </p>
-                <p className="mt-2 text-[11px] text-[var(--muted-fg)]">
-                  {hasIncomes
-                    ? "ingresos − gastos · pesos + USD al TC del mes"
-                    : "pesos + dólares al TC del mes"}
-                </p>
-                {hasIncomes && (
-                  <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--muted-fg)]">
-                    <span>
-                      Ingresos{" "}
-                      <span className="tabular-nums font-medium text-[var(--brand-fg)]">
-                        {formatArs(Math.round(incomeArs))}
-                      </span>
-                    </span>
-                    <span>
-                      Gastos{" "}
-                      <span className="tabular-nums font-medium text-[var(--foreground)]/80">
-                        {formatArs(Math.round(liveTotal))}
-                      </span>
-                    </span>
-                  </div>
-                )}
-              </div>
-              <TapHint />
+            {formatArs(Math.round(heroAmount))}
+          </p>
+          <p className="mt-3 max-w-sm text-sm leading-relaxed text-[var(--muted-fg)]">
+            {emptyMonth
+              ? "Este mes todavía está en blanco."
+              : hasIncomes
+                ? "Ingresos menos gastos, pesos y dólares al tipo de cambio del mes."
+                : "Lo que salió este mes. Cargá ingresos si querés ver la neta."}
+          </p>
+          {hasIncomes && (
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-[var(--muted-fg)]">
+              <span>
+                Ingresos{" "}
+                <span className="tabular-nums font-medium text-[var(--brand-fg)]">
+                  {formatArs(Math.round(incomeArs))}
+                </span>
+              </span>
+              <span>
+                Gastos{" "}
+                <span className="tabular-nums font-medium text-[var(--foreground)]/80">
+                  {formatArs(Math.round(liveTotal))}
+                </span>
+              </span>
             </div>
+          )}
+          {!emptyMonth && (
             <VsPrevMeter
               total={liveTotal}
               prevTotal={prevTotalArs}
               prevPeriod={prevPeriod}
               inProgressMonth={isCurrentCalendarMonth(period)}
             />
-          </Link>
+          )}
           <Link
-            href="/ingresos"
-            className="group flex items-center justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 transition active:scale-[0.99]"
-            aria-label="Ingresos del mes"
+            href={next.href}
+            className="lc-btn lc-btn-primary mt-6 !rounded-2xl !px-5 !py-2.5 text-[15px]"
           >
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-fg)]">
-                Ingresos del mes
-              </p>
-              <p className="text-sm font-semibold tabular-nums text-[var(--foreground)]">
-                {hasIncomes
-                  ? formatArs(Math.round(incomeArs))
-                  : "Cargá sueldos u otros ingresos"}
-              </p>
-            </div>
-            <TapHint />
+            {next.label}
           </Link>
         </div>
       ),
@@ -753,7 +746,7 @@ export function DashboardHome({
             </ul>
           </Link>
         ) : null,
-      ahorros: (
+      ahorros: hasSavings ? (
         <Link
           href="/ahorros"
           className="group block h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3.5 transition active:scale-[0.99] md:px-5 md:py-4"
@@ -765,45 +758,37 @@ export function DashboardHome({
             </p>
             <TapHint />
           </div>
-          {hasSavings ? (
-            <>
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <p className="text-2xl font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-3xl">
-                  {formatArs(Math.round(savingsNetArs))}
-                </p>
-                <p className="text-[11px] text-[var(--muted-fg)]">
-                  en pesos
-                </p>
-              </div>
-              <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--muted-fg)]">
-                <span>
-                  Pesos{" "}
-                  <span className="tabular-nums font-medium text-[var(--foreground)]/80">
-                    {formatArs(savingsArs)}
-                  </span>
-                </span>
-                <span>
-                  USD{" "}
-                  <span className="tabular-nums font-medium text-[var(--foreground)]/80">
-                    {formatUsd(savingsUsd)}
-                  </span>
-                </span>
-                <span>
-                  USDC{" "}
-                  <span className="tabular-nums font-medium text-[var(--brand-fg)]">
-                    {formatUsd(savingsUsdc)}
-                  </span>
-                </span>
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-[var(--muted-fg)]">
-              Agregá wallets y bancos
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <p className="text-2xl font-semibold tabular-nums tracking-tight text-[var(--foreground)] md:text-3xl">
+              {formatArs(Math.round(savingsNetArs))}
             </p>
-          )}
+            <p className="text-[11px] text-[var(--muted-fg)]">
+              en pesos
+            </p>
+          </div>
+          <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--muted-fg)]">
+            <span>
+              Pesos{" "}
+              <span className="tabular-nums font-medium text-[var(--foreground)]/80">
+                {formatArs(savingsArs)}
+              </span>
+            </span>
+            <span>
+              USD{" "}
+              <span className="tabular-nums font-medium text-[var(--foreground)]/80">
+                {formatUsd(savingsUsd)}
+              </span>
+            </span>
+            <span>
+              USDC{" "}
+              <span className="tabular-nums font-medium text-[var(--brand-fg)]">
+                {formatUsd(savingsUsdc)}
+              </span>
+            </span>
+          </div>
         </Link>
-      ),
-      hogar: (
+      ) : null,
+      hogar: sharedTotalArs > 0 || visibleServices.some((s) => s.paid) ? (
         <Link
           href="/compartido"
           className="group block h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99] md:px-5 md:py-4"
@@ -845,8 +830,8 @@ export function DashboardHome({
             <TapHint />
           </div>
         </Link>
-      ),
-      deuda: (
+      ) : null,
+      deuda: DEUDA_ENABLED ? (
         <Link
           href="/deuda"
           className="group flex h-full items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 transition active:scale-[0.99] md:px-5 md:py-4"
@@ -873,7 +858,7 @@ export function DashboardHome({
           </div>
           <TapHint />
         </Link>
-      ),
+      ) : null,
       cotizaciones: <RatesStrip rates={liveRates} />,
     };
 
@@ -920,16 +905,19 @@ export function DashboardHome({
     debtBalanceArs,
     liveRates,
     period,
+    monthTxCount,
+    next,
+    emptyMonth,
   ]);
 
   return (
-    <div className="animate-fade-up mx-auto flex w-full max-w-lg flex-col gap-3 md:max-w-5xl md:gap-4">
-      <div className="flex items-center justify-between gap-3 md:mb-1">
+    <div className="animate-fade-up mx-auto flex w-full max-w-lg flex-col gap-5 md:max-w-5xl md:gap-6">
+      <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm text-[var(--muted-fg)] md:text-base">
+          <p className="text-[17px] font-medium tracking-tight text-[var(--foreground)] md:text-xl">
             Hola, {firstName}
           </p>
-          <p className="text-xs font-medium capitalize text-[var(--muted-fg)]/80">
+          <p className="mt-0.5 text-sm capitalize text-[var(--muted-fg)]">
             {formatPeriodLabel(period)}
           </p>
         </div>
@@ -948,15 +936,6 @@ export function DashboardHome({
           >
             <LayoutGrid className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
-          <Link
-            href="/suscripcion"
-            className="inline-flex h-8 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 text-[11px] font-medium text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
-            aria-label="Suscripción"
-            title="Suscripción"
-          >
-            <CreditCard className="h-3.5 w-3.5" strokeWidth={1.75} />
-            Plan
-          </Link>
           <ThemeToggle />
         </div>
       </div>
@@ -969,7 +948,7 @@ export function DashboardHome({
         onChange={onLayoutChange}
       />
 
-      <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-stretch md:gap-4">
+      <div className="flex flex-col gap-4 md:grid md:grid-cols-2 md:items-stretch md:gap-5">
         {sections}
       </div>
     </div>

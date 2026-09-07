@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FileSpreadsheet,
@@ -8,9 +7,10 @@ import {
   PenLine,
   Receipt,
   RefreshCw,
+  Upload,
 } from "lucide-react";
 import { ImportForm } from "@/components/import-form";
-import { PageHeader, PageStack, Surface } from "@/components/ui";
+import { EmptyState, PageHeader, PageStack, Surface } from "@/components/ui";
 import { formatDateAr, cn } from "@/lib/utils";
 
 type CargaItem = {
@@ -88,9 +88,8 @@ export function CargasView() {
   return (
     <PageStack>
       <PageHeader
-        eyebrow="Historial"
         title="Cargas"
-        description="Resúmenes de tarjeta (PDF/Excel), tickets escaneados y cargas manuales. Los duplicados no se vuelven a importar."
+        description="Tirale el Excel o el PDF. Los duplicados no entran de nuevo."
         actions={
           <button
             type="button"
@@ -118,44 +117,12 @@ export function CargasView() {
         />
       </Surface>
 
-      <Surface>
-        <p className="text-sm font-medium text-[var(--foreground)]">
-          Cómo sacar el resumen
-        </p>
-        <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-[var(--muted-fg)]">
-          <li>
-            <span className="font-medium text-[var(--foreground)]">BBVA:</span>{" "}
-            home banking → Tarjetas → <em>Últimos movimientos</em> (Excel) o{" "}
-            <em>Resumen con vencimiento</em> (PDF).
-          </li>
-          <li>
-            <span className="font-medium text-[var(--foreground)]">Fiwind:</span>{" "}
-            app → Actividad o Tarjeta → exportar / compartir (Excel, CSV o PDF).
-          </li>
-          <li>
-            <span className="font-medium text-[var(--foreground)]">
-              Si el banco no da archivo:
-            </span>{" "}
-            en la web, Imprimir → Guardar como PDF (no una foto). CSV/Excel entra
-            mejor. Desde el celu, “Compartir” el PDF a LlevaCuentas.
-          </li>
-        </ul>
-      </Surface>
-
-      <Surface className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-[var(--foreground)]">
-            MCP / agentes
-          </p>
-          <p className="mt-0.5 text-xs text-[var(--muted-fg)]">
-            Conectá grok.com o Cursor con el token de este hogar (se genera en
-            /mcp).
-          </p>
-        </div>
-        <Link href="/mcp" className="lc-btn lc-btn-ghost !px-3 !py-2 text-sm shrink-0">
-          Cómo conectar MCP
-        </Link>
-      </Surface>
+      <p className="text-[13px] leading-relaxed text-[var(--muted-fg)]">
+        <span className="font-medium text-[var(--foreground)]">Fiwind:</span>{" "}
+        Actividad → compartir Excel o CSV.{" "}
+        <span className="font-medium text-[var(--foreground)]">BBVA:</span>{" "}
+        Tarjetas → Últimos movimientos (Excel).
+      </p>
 
 
       <div className="flex flex-wrap gap-1.5">
@@ -188,9 +155,19 @@ export function CargasView() {
           Cargando historial…
         </Surface>
       ) : filtered.length === 0 ? (
-        <Surface className="py-10 text-center text-sm text-[var(--muted-fg)]">
-          Todavía no hay cargas{filter !== "all" ? " de este tipo" : ""}.
-        </Surface>
+        <EmptyState
+          icon={<Upload className="h-7 w-7" />}
+          title={
+            filter === "all"
+              ? "Todavía no cargaste nada"
+              : "Nada de este tipo"
+          }
+          description={
+            filter === "all"
+              ? "El primer resumen es el que prende la luz. Subilo arriba y listo."
+              : "Probá otra pestaña, o subí un archivo nuevo."
+          }
+        />
       ) : (
         <Surface padding={false} className="overflow-hidden">
           <ul className="divide-y divide-[var(--border)]">

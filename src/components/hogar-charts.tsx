@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { periodFromDateString } from "@/lib/utils";
-import { LoadingBlock, Surface } from "@/components/ui";
+import { EmptyState, LoadingBlock, Surface } from "@/components/ui";
 import { CategoryLinesChart, TotalSpendChart } from "@/components/spend-charts";
 import { LineChart } from "lucide-react";
 
@@ -93,12 +93,11 @@ export function HogarCharts() {
   }
   if (chart.periods.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-zinc-200 px-4 py-12 text-center dark:border-zinc-800">
-        <LineChart className="mx-auto h-8 w-8 text-zinc-400" />
-        <p className="mt-2 text-sm text-zinc-500">
-          Todavía no hay gastos de hogar para graficar.
-        </p>
-      </div>
+      <EmptyState
+        icon={<LineChart className="h-7 w-7" />}
+        title="Todavía no hay curva del hogar"
+        description="Cuando marquen gastos como Hogar, acá se ve cómo viene el mes."
+      />
     );
   }
 

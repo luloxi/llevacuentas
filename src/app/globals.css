@@ -3,64 +3,70 @@
 /* Class-based dark mode (ThemeProvider toggles .dark on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ─── Zen Fintech tokens ─── */
+/* ─── Warm paper + sage ─── */
 :root,
 html.light {
-  --background: #f7f6f3;
-  --foreground: #1c1b19;
-  --surface: #ffffff;
-  --surface-muted: #f0eeea;
-  --border: #e6e3dc;
-  --border-strong: #d4d0c8;
-  --input-bg: #ffffff;
-  --input-fg: #1c1b19;
-  --option-bg: #ffffff;
-  --option-fg: #1c1b19;
-  --brand: #3d7a6a;
-  --brand-soft: #e8f2ef;
-  --brand-fg: #2f5f52;
-  --shadow-color: 28 27 25;
+  --background: #f8f3ea;
+  --foreground: #1c1915;
+  --surface: #fffdf8;
+  --surface-muted: #f3eee4;
+  --border: #e6dfd3;
+  --border-strong: #d4ccbe;
+  --input-bg: #fffdf8;
+  --input-fg: #1c1915;
+  --option-bg: #fffdf8;
+  --option-fg: #1c1915;
+  --brand: #3d7362;
+  --brand-soft: #e7efe8;
+  --brand-fg: #2c5a4c;
+  --warm: #c4a06a;
+  --warm-soft: #f4ead8;
+  --shadow-color: 28 25 20;
   --ring: #5a9a88;
-  --muted-fg: #6b6860;
+  --muted-fg: #6e675c;
 }
 
 html.dark {
-  --background: #121110;
-  --foreground: #eceae6;
-  --surface: #1a1917;
-  --surface-muted: #22201d;
-  --border: #2e2c28;
-  --border-strong: #3d3a35;
-  --input-bg: #1a1917;
-  --input-fg: #eceae6;
-  --option-bg: #1a1917;
-  --option-fg: #eceae6;
-  --brand: #7eb8a8;
-  --brand-soft: #1c2e29;
-  --brand-fg: #a8d4c8;
+  --background: #141210;
+  --foreground: #ece8e0;
+  --surface: #1c1a17;
+  --surface-muted: #24211d;
+  --border: #322e28;
+  --border-strong: #433e36;
+  --input-bg: #1c1a17;
+  --input-fg: #ece8e0;
+  --option-bg: #1c1a17;
+  --option-fg: #ece8e0;
+  --brand: #86b8a8;
+  --brand-soft: #1e2c27;
+  --brand-fg: #b3d4c8;
+  --warm: #c4a06a;
+  --warm-soft: #2a241c;
   --shadow-color: 0 0 0;
-  --ring: #7eb8a8;
-  --muted-fg: #9a968c;
+  --ring: #86b8a8;
+  --muted-fg: #9c968a;
 }
 
 @media (prefers-color-scheme: dark) {
   html:not(.light):not(.dark) {
-    --background: #121110;
-    --foreground: #eceae6;
-    --surface: #1a1917;
-    --surface-muted: #22201d;
-    --border: #2e2c28;
-    --border-strong: #3d3a35;
-    --input-bg: #1a1917;
-    --input-fg: #eceae6;
-    --option-bg: #1a1917;
-    --option-fg: #eceae6;
-    --brand: #7eb8a8;
-    --brand-soft: #1c2e29;
-    --brand-fg: #a8d4c8;
+    --background: #141210;
+    --foreground: #ece8e0;
+    --surface: #1c1a17;
+    --surface-muted: #24211d;
+    --border: #322e28;
+    --border-strong: #433e36;
+    --input-bg: #1c1a17;
+    --input-fg: #ece8e0;
+    --option-bg: #1c1a17;
+    --option-fg: #ece8e0;
+    --brand: #86b8a8;
+    --brand-soft: #1e2c27;
+    --brand-fg: #b3d4c8;
+    --warm: #c4a06a;
+    --warm-soft: #2a241c;
     --shadow-color: 0 0 0;
-    --ring: #7eb8a8;
-    --muted-fg: #9a968c;
+    --ring: #86b8a8;
+    --muted-fg: #9c968a;
   }
 }
 
@@ -141,7 +147,8 @@ textarea::placeholder {
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(ellipse 70% 40% at 50% -5%, color-mix(in srgb, var(--brand) 6%, transparent), transparent 60%),
+    radial-gradient(ellipse 80% 42% at 50% -8%, color-mix(in srgb, var(--warm) 14%, transparent), transparent 62%),
+    radial-gradient(ellipse 50% 30% at 100% 0%, color-mix(in srgb, var(--brand) 8%, transparent), transparent 55%),
     var(--background);
 }
 

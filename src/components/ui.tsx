@@ -32,11 +32,11 @@ export function PageHeader({
             {eyebrow}
           </p>
         )}
-        <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-[var(--foreground)]">
+        <h1 className="mt-0.5 text-[1.65rem] font-semibold tracking-tight text-[var(--foreground)]">
           {title}
         </h1>
         {description && (
-          <p className="mt-1 max-w-xl text-sm leading-relaxed text-[var(--muted-fg)]">
+          <p className="mt-1.5 max-w-xl text-[15px] leading-relaxed text-[var(--muted-fg)]">
             {description}
           </p>
         )}
@@ -171,19 +171,19 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="lc-card flex flex-col items-center px-6 py-12 text-center">
+    <div className="lc-card flex flex-col items-center px-6 py-14 text-center">
       {icon && (
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand-fg)]">
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--warm-soft)] text-[var(--warm)]">
           {icon}
         </div>
       )}
-      <h3 className="text-base font-semibold tracking-tight">{title}</h3>
+      <h3 className="text-[17px] font-semibold tracking-tight">{title}</h3>
       {description && (
-        <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-[var(--muted-fg)]">
+        <p className="mt-2 max-w-sm text-[15px] leading-relaxed text-[var(--muted-fg)]">
           {description}
         </p>
       )}
-      {action && <div className="mt-5">{action}</div>}
+      {action && <div className="mt-6">{action}</div>}
     </div>
   );
 }
@@ -222,7 +222,7 @@ export function DashboardSkeleton() {
           <div className="skeleton h-8 w-8 !rounded-full" />
         </div>
       </div>
-      <div className="skeleton h-36 w-full !rounded-2xl md:h-44" />
+      <div className="skeleton h-48 w-full !rounded-[1.25rem] md:h-56" />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
         <div className="skeleton h-28 w-full !rounded-2xl" />
         <div className="skeleton h-28 w-full !rounded-2xl" />

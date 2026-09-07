@@ -6,6 +6,7 @@ import {
   EmptyState,
   FieldLabel,
   ListSkeleton,
+  PageHeader,
   PageStack,
   SegmentedControl,
   Surface,
@@ -148,12 +149,10 @@ export function IngresosView() {
 
   return (
     <PageStack className="!space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight">Ingresos</h1>
-        <p className="text-xs text-[var(--muted-fg)]">
-          Sueldos recurrentes e ingresos del día · {formatPeriodLabel(period)}
-        </p>
-      </div>
+      <PageHeader
+        title="Ingresos"
+        description={`Sueldos y cobros · ${formatPeriodLabel(period)}. La neta del inicio es esto menos los gastos.`}
+      />
 
       {error && (
         <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40">
@@ -173,12 +172,12 @@ export function IngresosView() {
 
       <Surface className="space-y-3 !p-4">
         <p className="text-sm font-semibold">
-          {mode === "recurring" ? "Nuevo sueldo recurrente" : "Agregar ingreso variable"}
+          {mode === "recurring" ? "Sueldo" : "Cobro puntual"}
         </p>
         <p className="text-xs text-[var(--muted-fg)]">
           {mode === "recurring"
-            ? "Definís frecuencia y monto. En el mes mostramos las fechas esperadas (no inventamos cobros antes de la fecha ancla)."
-            : "Ventas, ingreso del día u otros cobros puntuales."}
+            ? "Frecuencia y monto. En el mes aparecen las fechas que caen, no inventamos cobros."
+            : "Una venta, un extra, un cobro del día."}
         </p>
 
         <div>
@@ -355,7 +354,7 @@ export function IngresosView() {
         {clientEntries.length === 0 ? (
           <EmptyState
             title="Todavía no hay ingresos"
-            description="Cargá un sueldo recurrente o un ingreso variable. La neta del home usa ingresos − gastos."
+            description="Cargá el sueldo y el inicio deja de mostrar solo gastos: aparece la neta de verdad."
           />
         ) : (
           <ul className="space-y-2">

@@ -9,8 +9,9 @@ export function HouseholdSetup() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const inviteFromUrl = (searchParams.get("invite") || "").toUpperCase();
+  const invited = inviteFromUrl.length >= 6;
 
-  const [name, setName] = useState("Mi espacio");
+  const [name, setName] = useState("Nuestro hogar");
   const [code, setCode] = useState(inviteFromUrl);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<
@@ -35,7 +36,7 @@ export function HouseholdSetup() {
         return;
       }
       router.refresh();
-      router.push("/dashboard");
+      router.push("/compartido");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error de red");
     } finally {
@@ -96,85 +97,116 @@ export function HouseholdSetup() {
   }
 
   return (
-    <div className="app-shell mx-auto w-full max-w-md animate-fade-up space-y-6 px-1">
+    <div className="app-shell mx-auto w-full max-w-md animate-fade-up space-y-5 px-1">
       <div className="text-center">
         <div className="mb-4 flex justify-center">
           <BrandLogo size={48} />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight">Tu espacio</h1>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-          Empezá solo, creá un espacio o unite a uno compartido. Después podés
-          unirte a un hogar cuando quieras.
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {invited ? "Te invitaron al hogar" : "Tu espacio"}
+        </h1>
+        <p className="mt-2 text-[15px] leading-relaxed text-[var(--muted-fg)]">
+          {invited
+            ? "Entrá con el código y quedás en las cuentas compartidas."
+            : "Creá el hogar, invitá a Jurio desde Hogar, o uníte con un código."}
         </p>
       </div>
 
-      <button
-        type="button"
-        disabled={loading !== null}
-        onClick={() => void continueSolo()}
-        className="lc-card-elevated flex w-full items-center gap-3 p-5 text-left transition hover:bg-[var(--surface-muted)] disabled:opacity-60"
-      >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300">
-          <User className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="font-semibold tracking-tight">Continuar solo</h2>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            {loading === "solo"
-              ? "Preparando…"
-              : "Usá la app sin unirte a un hogar. Podés sumarte después."}
-          </p>
-        </div>
-      </button>
-
-      <div className="lc-card-elevated space-y-3 p-5">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-            <Home className="h-4 w-4" />
+      {invited ? (
+        <div className="lc-card-elevated space-y-3 p-5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand-fg)]">
+              <UserPlus className="h-4 w-4" />
+            </div>
+            <h2 className="font-semibold tracking-tight">Unirme al hogar</h2>
           </div>
-          <h2 className="font-semibold tracking-tight">Crear espacio</h2>
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            className="lc-input w-full uppercase tracking-widest"
+            placeholder="ABCD1234"
+            maxLength={8}
+            disabled={loading !== null}
+            autoFocus
+          />
+          <button
+            type="button"
+            disabled={loading !== null || code.length < 6}
+            onClick={() => void join()}
+            className="lc-btn lc-btn-primary w-full"
+          >
+            {loading === "join" ? "Uniéndome…" : "Unirme"}
+          </button>
         </div>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="lc-input w-full"
-          placeholder="Nombre del espacio"
-          disabled={loading !== null}
-        />
-        <button
-          type="button"
-          disabled={loading !== null}
-          onClick={() => void create()}
-          className="lc-btn lc-btn-primary w-full"
-        >
-          {loading === "create" ? "Creando…" : "Crear y continuar"}
-        </button>
-      </div>
-
-      <div className="lc-card space-y-3 p-5">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
-            <UserPlus className="h-4 w-4" />
+      ) : (
+        <>
+          <div className="lc-card-elevated space-y-3 p-5">
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand-fg)]">
+                <Home className="h-4 w-4" />
+              </div>
+              <h2 className="font-semibold tracking-tight">Crear el hogar</h2>
+            </div>
+            <p className="text-xs leading-relaxed text-[var(--muted-fg)]">
+              Después, desde Hogar, invitá a Jurio con un código.
+            </p>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="lc-input w-full"
+              placeholder="Nombre del hogar"
+              disabled={loading !== null}
+            />
+            <button
+              type="button"
+              disabled={loading !== null}
+              onClick={() => void create()}
+              className="lc-btn lc-btn-primary w-full"
+            >
+              {loading === "create" ? "Creando…" : "Crear e invitar"}
+            </button>
           </div>
-          <h2 className="font-semibold tracking-tight">Unirme con código</h2>
-        </div>
-        <input
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          className="lc-input w-full uppercase tracking-widest"
-          placeholder="ABCD1234"
-          maxLength={8}
-          disabled={loading !== null}
-        />
-        <button
-          type="button"
-          disabled={loading !== null || code.length < 6}
-          onClick={() => void join()}
-          className="lc-btn lc-btn-secondary w-full"
-        >
-          {loading === "join" ? "Uniéndome…" : "Unirme"}
-        </button>
-      </div>
+
+          <div className="lc-card space-y-3 p-5">
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--warm-soft)] text-[var(--warm)]">
+                <UserPlus className="h-4 w-4" />
+              </div>
+              <h2 className="font-semibold tracking-tight">Unirme con código</h2>
+            </div>
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              className="lc-input w-full uppercase tracking-widest"
+              placeholder="ABCD1234"
+              maxLength={8}
+              disabled={loading !== null}
+            />
+            <button
+              type="button"
+              disabled={loading !== null || code.length < 6}
+              onClick={() => void join()}
+              className="lc-btn lc-btn-secondary w-full"
+            >
+              {loading === "join" ? "Uniéndome…" : "Unirme"}
+            </button>
+          </div>
+
+          <button
+            type="button"
+            disabled={loading !== null}
+            onClick={() => void continueSolo()}
+            className="flex w-full items-center gap-3 px-2 py-2 text-left text-sm text-[var(--muted-fg)] transition hover:text-[var(--foreground)] disabled:opacity-60"
+          >
+            <User className="h-4 w-4 shrink-0" />
+            <span>
+              {loading === "solo"
+                ? "Preparando…"
+                : "Seguir solo por ahora — después se puede sumar Jurio"}
+            </span>
+          </button>
+        </>
+      )}
 
       {error && (
         <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">

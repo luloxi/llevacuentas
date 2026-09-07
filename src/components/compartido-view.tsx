@@ -14,11 +14,9 @@ import { HogarSkeleton, PageStack, SegmentedControl } from "@/components/ui";
 import { HogarCharts } from "@/components/hogar-charts";
 import { CategoryIcon } from "@/lib/category-icons";
 import { colorForCategory } from "@/lib/category-colors";
-import Link from "next/link";
 import {
   ArrowDownRight,
   ArrowUpRight,
-  Bot,
   Check,
   ChevronDown,
   ChevronRight,
@@ -28,7 +26,6 @@ import {
   LineChart,
   Link2,
   Minus,
-  Plus,
   UserPlus,
   X,
 } from "lucide-react";
@@ -356,10 +353,10 @@ export function CompartidoView() {
 
       <div className="min-h-[40vh] space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">
+          <h1 className="min-w-0 truncate text-[1.65rem] font-semibold tracking-tight">
             {householdName || "Hogar"}
           </h1>
-          {inviteCode && (
+          {inviteCode && members.length >= 2 && (
             <button
               type="button"
               onClick={() => setInviteOpen(true)}
@@ -369,14 +366,27 @@ export function CompartidoView() {
               Invitar
             </button>
           )}
-          <Link
-            href="/mcp"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--muted-fg)] transition hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)]"
-          >
-            <Bot className="h-3.5 w-3.5" />
-            Token MCP
-          </Link>
         </div>
+
+        {inviteCode && members.length < 2 && (
+          <div className="rounded-[1.15rem] border border-[var(--brand)]/25 bg-[var(--brand-soft)] px-4 py-4 sm:px-5">
+            <p className="text-[15px] font-semibold tracking-tight text-[var(--brand-fg)]">
+              Este hogar todavía es de a uno
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--foreground)]/80">
+              Invitá a Jurio con el código. Entra con Google y queda en las
+              cuentas compartidas.
+            </p>
+            <button
+              type="button"
+              onClick={() => setInviteOpen(true)}
+              className="lc-btn lc-btn-primary mt-3 !rounded-2xl !px-4 !py-2"
+            >
+              <UserPlus className="h-4 w-4" />
+              Invitá a Jurio
+            </button>
+          </div>
+        )}
 
         {viewTab === "charts" ? (
           <HogarCharts />
@@ -579,9 +589,9 @@ export function CompartidoView() {
                 </p>
               </div>
               {categories.length === 0 ? (
-                <p className="p-6 text-center text-sm text-[var(--muted-fg)]">
-                  No hay gastos marcados como <strong>Hogar</strong> en este
-                  período. En Gastos cambiá el tipo a “Hogar”.
+                <p className="p-6 text-center text-[15px] leading-relaxed text-[var(--muted-fg)]">
+                  Todavía no hay gastos de hogar este período. En Consumos,
+                  marcá el tipo como <strong>Hogar</strong>.
                 </p>
               ) : (
                 <ul className="divide-y divide-[var(--border)]">
@@ -787,10 +797,10 @@ export function CompartidoView() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--muted-fg)]">
-                  Invitar
+                  Hogar
                 </p>
                 <h2 className="mt-0.5 text-lg font-semibold tracking-tight">
-                  Sumá alguien al hogar
+                  Invitá a Jurio
                 </h2>
               </div>
               <button
@@ -836,8 +846,8 @@ export function CompartidoView() {
               )}
 
               <p className="text-xs leading-relaxed text-[var(--muted-fg)]">
-                Quien se una con el código o el link entra a este hogar y puede
-                ver los gastos compartidos.
+                Mandale el código o el link. Entra con Google y queda en este
+                hogar, viendo lo compartido.
               </p>
             </div>
           </div>

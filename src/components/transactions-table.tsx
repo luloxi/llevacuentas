@@ -1,13 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ChevronDown, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, Search, SlidersHorizontal, X,
+  ChevronDown, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, Search, SlidersHorizontal, X, List,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { formatArs, cn, currentPeriodAr, periodFromDateString } from "@/lib/utils";
 import { formatPeriodLabel } from "@/lib/period-label";
-import { ListSkeleton, Toast } from "@/components/ui";
+import { EmptyState, ListSkeleton, Toast } from "@/components/ui";
 
 type Category = { id: string; slug: string; name: string };
 type Member = { userId: string; name: string };
@@ -85,7 +86,7 @@ function toSheet(rows: Tx[], members: Member[]) {
   }));
 }
 
-export function TransactionsTable({ compactToolbar = false }: { compactToolbar?: boolean } = {}) {
+export function TransactionsTable() {
   const [rows, setRows] = useState<Tx[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -103,7 +104,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
   const [savingId, setSavingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(10);
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLDivElement>(null);
@@ -352,8 +353,8 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
         className={cn(
           "rounded-full border px-2.5 py-1 text-xs font-medium transition",
           active
-            ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-100"
-            : "border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900",
+            ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand-fg)]"
+            : "border-[var(--border)] text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]",
         )}
       >
         {children}
@@ -417,8 +418,8 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
             className={cn(
               "inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition",
               activeFilterCount > 0 || filterOpen
-                ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-100"
-                : "border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900",
+                ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand-fg)]"
+                : "border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-muted)]",
             )}
             aria-expanded={filterOpen}
             aria-label="Filtros"
@@ -426,7 +427,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
             <SlidersHorizontal className="h-4 w-4" />
             Filtros
             {activeFilterCount > 0 && (
-              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold text-white">
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--brand)] px-1.5 text-[10px] font-bold text-white dark:text-[#121110]">
                 {activeFilterCount}
               </span>
             )}
@@ -536,15 +537,34 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
       {loading && !rows.length ? (
         <ListSkeleton label="Cargando consumos…" />
       ) : !sorted.length ? (
-        <p className="rounded-2xl border border-dashed border-zinc-200 px-4 py-12 text-center text-sm text-zinc-500 dark:border-zinc-800">
-          {activeFilterCount > 0
-            ? "Ningún gasto coincide con los filtros."
-            : period
-              ? `No hay gastos en ${formatPeriodLabel(period)}. Probá otro mes o "Todos los meses".`
-              : compactToolbar
-                ? "No hay consumos. Usá Agregar o importá el resumen de la tarjeta."
-                : "No hay consumos."}
-        </p>
+        <EmptyState
+          icon={<List className="h-7 w-7" />}
+          title={
+            activeFilterCount > 0
+              ? "Nada con esos filtros"
+              : period
+                ? `Nada en ${formatPeriodLabel(period)}`
+                : "Todavía no hay consumos"
+          }
+          description={
+            activeFilterCount > 0
+              ? "Sacá un filtro o limpiá todo. Seguro está, escondido."
+              : period
+                ? "Probá otro mes, o cargá el resumen de la tarjeta."
+                : "Cargá el Excel o el PDF, o sumá un gasto con el botón de abajo."
+          }
+          action={
+            activeFilterCount > 0 ? (
+              <button type="button" onClick={clearFilters} className="lc-btn lc-btn-secondary">
+                Limpiar filtros
+              </button>
+            ) : (
+              <Link href="/cargas" className="lc-btn lc-btn-primary">
+                Cargá el resumen
+              </Link>
+            )
+          }
+        />
       ) : (
         <>
           <ul className="space-y-2 md:hidden">
@@ -552,7 +572,7 @@ export function TransactionsTable({ compactToolbar = false }: { compactToolbar?:
               const isTicket = r.hasTicket;
               const isOpen = expanded.has(r.id);
               return (
-                <li key={r.id} className={cn("rounded-2xl border p-3", isTicket ? "border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/30" : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950")}>
+                <li key={r.id} className={cn("rounded-2xl border p-3.5", isTicket ? "lc-ticket" : "border-[var(--border)] bg-[var(--surface)]")}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">

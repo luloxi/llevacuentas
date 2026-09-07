@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
 import {
   Upload,
@@ -183,8 +184,8 @@ export function ImportForm({
       <div
         className={
           compact
-            ? "rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/40 p-4 dark:border-emerald-800 dark:bg-emerald-950/20"
-            : "rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/40 p-8 dark:border-emerald-800 dark:bg-emerald-950/20"
+            ? "rounded-2xl border border-dashed border-[var(--brand)]/35 bg-[var(--brand-soft)]/50 p-4"
+            : "rounded-2xl border border-dashed border-[var(--brand)]/35 bg-[var(--brand-soft)]/50 p-8"
         }
       >
         <div
@@ -195,7 +196,7 @@ export function ImportForm({
           }
         >
           {!compact && (
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-white">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--brand)] text-white dark:text-[#121110]">
               <FileSpreadsheet className="h-7 w-7" />
             </div>
           )}
@@ -208,27 +209,27 @@ export function ImportForm({
             <p
               className={
                 compact
-                  ? "mt-0.5 text-xs text-zinc-500"
-                  : "mt-1 max-w-md text-sm text-zinc-600 dark:text-zinc-400"
+                  ? "mt-0.5 text-xs text-[var(--muted-fg)]"
+                  : "mt-1 max-w-md text-sm text-[var(--muted-fg)]"
               }
             >
               {compact
-                ? "Excel, CSV o PDF · BBVA y Fiwind · arrastrá o elegí"
-                : "Excel, CSV o PDF de BBVA, Fiwind u otro banco. Arrastrá el archivo o elegilo. Sin duplicados."}
+                ? "Excel, CSV o PDF · BBVA y Fiwind"
+                : "Excel, CSV o PDF de BBVA o Fiwind. Arrastrá o elegí. Sin duplicados."}
             </p>
           </div>
           <label
             className={`block w-full ${compact ? "text-left" : "text-left max-w-md"}`}
             onClick={(e) => e.stopPropagation()}
           >
-            <span className="mb-1 block text-xs font-medium text-zinc-500">
+            <span className="mb-1 block text-xs font-medium text-[var(--muted-fg)]">
               Banco
             </span>
             <select
               value={bank}
               onChange={(e) => setBank(e.target.value)}
               disabled={loading}
-              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              className="lc-input w-full"
             >
               {BANKS.map((b) => (
                 <option key={b} value={b}>
@@ -273,22 +274,22 @@ export function ImportForm({
               "flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-all",
               compact ? "" : "max-w-md",
               dragOver
-                ? "scale-[1.01] border-emerald-500 bg-emerald-50 shadow-inner dark:bg-emerald-950/40"
-                : "border-emerald-300/80 bg-white/60 dark:border-emerald-800 dark:bg-zinc-900/40",
+                ? "scale-[1.01] border-[var(--brand)] bg-[var(--brand-soft)] shadow-inner"
+                : "border-[var(--brand)]/35 bg-[var(--surface)]",
               loading && "pointer-events-none opacity-80",
             )}
           >
             {loading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-emerald-700" />
+              <Loader2 className="h-6 w-6 animate-spin text-[var(--brand-fg)]" />
             ) : (
-              <Upload className="h-6 w-6 text-emerald-700" />
+              <Upload className="h-6 w-6 text-[var(--brand-fg)]" />
             )}
             <p className="text-sm font-semibold">
               {loading
                 ? "Importando…"
                 : dragOver
                   ? "Soltá el archivo acá"
-                  : "Arrastrá el Excel acá"}
+                  : "Arrastrá el archivo acá"}
             </p>
             {fileLabel && loading && (
               <p className="max-w-full truncate text-xs text-zinc-500">
@@ -299,7 +300,7 @@ export function ImportForm({
               type="button"
               disabled={loading}
               onClick={() => inputRef.current?.click()}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+              className="lc-btn lc-btn-primary"
             >
               {loading ? "Importando…" : "Elegir archivos"}
             </button>
@@ -326,36 +327,53 @@ export function ImportForm({
         </div>
       </div>
 
-      {result && (
-        <div
-          className={
-            result.fullyDuplicate || result.warning
-              ? "flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/40"
-              : "flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/40"
-          }
-        >
-          {result.fullyDuplicate || result.warning ? (
-            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-          ) : (
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
-          )}
+      {result && result.inserted > 0 && !result.fullyDuplicate && (
+        <div className="relative overflow-hidden rounded-2xl border border-[var(--brand)]/25 bg-[var(--brand-soft)] px-4 py-5">
+          <div
+            className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-[var(--warm)]/25"
+            aria-hidden
+          />
+          <div className="relative flex items-start gap-3">
+            <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-[var(--brand-fg)]" />
+            <div className="min-w-0">
+              <p className="text-lg font-semibold tracking-tight text-[var(--brand-fg)]">
+                ¡Listo!
+              </p>
+              <p className="mt-0.5 text-sm leading-relaxed text-[var(--foreground)]">
+                Entraron {result.inserted} movimiento
+                {result.inserted === 1 ? "" : "s"}
+                {result.bank ? ` de ${result.bank}` : ""}.
+                {result.alreadyExists > 0
+                  ? ` ${result.alreadyExists} ya estaban.`
+                  : ""}
+              </p>
+              <Link
+                href="/consumos"
+                className="lc-btn lc-btn-primary mt-3 !px-4 !py-2 text-sm"
+              >
+                Ver consumos
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {result && (result.inserted === 0 || result.fullyDuplicate) && (
+        <div className="flex items-start gap-3 rounded-xl border border-[color-mix(in_srgb,var(--warm)_45%,var(--border))] bg-[var(--warm-soft)] p-4">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-[var(--warm)]" />
           <div className="text-sm">
             <p className="font-medium">
               {result.fullyDuplicate
-                ? "Resumen ya cargado"
-                : result.inserted > 0
-                  ? "Importación completa"
-                  : "Sin cambios"}
+                ? "Este resumen ya estaba"
+                : "Sin cambios"}
             </p>
-            <p className="text-zinc-700 dark:text-zinc-300">
+            <p className="mt-0.5 text-[var(--muted-fg)]">
               {result.message ||
-                `${result.inserted} nuevos · ${result.alreadyExists} coincidencias · ${result.total} filas`}
+                `${result.alreadyExists} coincidencias · ${result.total} filas`}
               {result.bank ? ` · ${result.bank}` : ""}
             </p>
             {result.warning && !result.fullyDuplicate && (
-              <p className="mt-1 text-amber-800 dark:text-amber-200">
-                {result.warning}
-              </p>
+              <p className="mt-1 text-[var(--foreground)]">{result.warning}</p>
             )}
           </div>
         </div>
