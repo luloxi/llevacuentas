@@ -6,6 +6,7 @@ import { ensureSchema } from "@/lib/db/ensure-schema";
 import { ensureCategoriesSeeded, getCategoryMap } from "@/lib/household";
 import { matchCategoryWithLearning } from "@/lib/categorize/learn";
 import { INVOICE_IOG_HOUSEHOLD_NAME } from "@/lib/invoice-iog/catalog";
+import { isOwnAccountTransferDescription } from "@/lib/bbva/bank-entries";
 import type { AppUser } from "@/lib/session";
 import {
   CASITA_HOUSEHOLD_NAME,
@@ -106,6 +107,7 @@ async function seedCasitaSeptiembre(user: AppUser): Promise<void> {
 
   await seedGastos(user, householdId, gastos);
   await seedIngresos(user, householdId, ingresos);
+  await backfillCasitaSeptOwnAccountTransfers(householdId, user.id);
 }
 
 async function seedGastos(
@@ -158,7 +160,7 @@ async function seedGastos(
           amountArs: abs,
           amountUsd: null,
           installment: null,
-          isPayment: false,
+          isPayment: isOwnAccountTransferDescription(row.description),
           isCredit: false,
           categoryId: category?.id,
           ownership: "personal",
@@ -258,6 +260,7 @@ async function seedIngresos(
   );
 
   for (const row of ingresos) {
+    if (isOwnAccountTransferDescription(row.description)) continue;
     const fp = casitaSeptFingerprint(row);
     if (have.has(fp)) continue;
     const key = `${row.date}|${row.description.trim().toUpperCase()}|${moneyAbs2(row.amountArs)}`;
@@ -280,5 +283,51 @@ async function seedIngresos(
       const msg = e instanceof Error ? e.message : String(e);
       if (!/unique|duplicate/i.test(msg)) throw e;
     }
+  }
+}
+
+/**
+ * Mark “A/De una cuenta tuya” (and similar) gastos as Transferencia interna,
+ * and drop matching ingresos so they never inflate neta.
+ */
+async function backfillCasitaSeptOwnAccountTransfers(
+  householdId: string,
+  userId: string,
+) {
+  const db = getDb();
+  const txs = await db
+    .select({
+      id: schema.transactions.id,
+      descriptionNormalized: schema.transactions.descriptionNormalized,
+      isPayment: schema.transactions.isPayment,
+    })
+    .from(schema.transactions)
+    .where(eq(schema.transactions.householdId, householdId));
+
+  for (const r of txs) {
+    if (!isOwnAccountTransferDescription(r.descriptionNormalized)) continue;
+    if (r.isPayment) continue;
+    await db
+      .update(schema.transactions)
+      .set({ isPayment: true, updatedAt: new Date() })
+      .where(eq(schema.transactions.id, r.id));
+  }
+
+  const incomes = await db
+    .select({
+      id: schema.incomes.id,
+      label: schema.incomes.label,
+    })
+    .from(schema.incomes)
+    .where(
+      and(
+        eq(schema.incomes.householdId, householdId),
+        eq(schema.incomes.userId, userId),
+      ),
+    );
+
+  for (const r of incomes) {
+    if (!isOwnAccountTransferDescription(r.label)) continue;
+    await db.delete(schema.incomes).where(eq(schema.incomes.id, r.id));
   }
 }

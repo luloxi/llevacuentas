@@ -33,8 +33,8 @@ export function parseCasitaCsvAmount(raw: string): number | null {
 }
 
 /**
- * Luciano: follow the tipo column (include “A/De una cuenta tuya”).
- * Fiwind own-account filter does not cover those strings anyway.
+ * Luciano: follow the tipo column. Rows described as “A/De una cuenta tuya”
+ * still parse here; seed + isOwnAccountTransferDescription keep them out of neta.
  */
 export function parseCasitaSeptiembreCsv(text: string): CasitaSeptRow[] {
   const lines = text

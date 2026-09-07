@@ -1,14 +1,40 @@
 import { isFiwindNonExpenseTipo } from "@/lib/import/fiwind";
 
+/** Fold accents / whitespace for transfer phrase matching. */
+function foldDesc(s: string): string {
+  return s
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Own-account / internal wallet moves — not gasto nor ingreso.
+ * Covers Fiwind “A/De una cuenta tuya”, BBVA entre-cuentas / cuenta propia, etc.
+ */
+export function isOwnAccountTransferDescription(description: string): boolean {
+  const u = foldDesc(description);
+  if (!u) return false;
+  if (/\b(A|DE)\s+(UNA\s+)?CUENTA\s+TUYA\b/.test(u)) return true;
+  if (u.includes("CUENTA PROPIA")) return true;
+  if (u.includes("ENTRE CUENTAS") || u.includes("TRANSF ENTRE CUENTAS")) return true;
+  if (u.includes("CTA A CTA") || u.includes("CUENTA A CUENTA")) return true;
+  if (u.startsWith("TRANSFERENCIA INTERNA")) return true;
+  return false;
+}
+
 /**
  * Statement lines that are accounting (not real consumption).
  * BBVA: pesificación, debt transfers, USD interest credits.
  * Fiwind: USDC↔ARS conversions, Compra/Venta KO, yields, deposits, crypto out,
- * wallet TRANSFERENCIA ARS, and amount-only Tipo (legacy parse used the monto).
+ * wallet TRANSFERENCIA ARS, own-account “cuenta tuya”, and amount-only Tipo.
  * They must not inflate “gastos” totals in Análisis / Consumos.
  * COMPRA SUPER ARS is grocery spend, not an investment.
  */
 export function isBankAccountingEntry(description: string): boolean {
+  if (isOwnAccountTransferDescription(description)) return true;
   const u = description.toUpperCase();
   if (
     u.includes("PESIFICACION") ||
@@ -18,14 +44,7 @@ export function isBankAccountingEntry(description: string): boolean {
     u.includes("CRÉDITOS VS EN USD") ||
     u.includes("CREDITO VS EN USD") ||
     u.includes("TRANSF. DEUDA") ||
-    u.includes("TRANSF DEUDA") ||
-    u.includes("CTA A CTA") ||
-    u.includes("CUENTA A CUENTA") ||
-    u.startsWith("TRANSFERENCIA INTERNA") ||
-    u.includes("TRANSFERENCIA ENTRE CUENTAS") ||
-    u.includes("TRANSF ENTRE CUENTAS") ||
-    u.includes("TRANSFERENCIA A CUENTA PROPIA") ||
-    u.includes("TRANSF A CUENTA PROPIA")
+    u.includes("TRANSF DEUDA")
   ) {
     return true;
   }

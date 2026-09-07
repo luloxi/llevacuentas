@@ -195,3 +195,12 @@ describe("Fiwind Tipo classification", () => {
     assert.equal(matchCategory("79.66").slug, "conversiones");
   });
 });
+
+describe("own-account cuenta tuya", () => {
+  it("classifies A/De una cuenta tuya as transfer (non-expense)", () => {
+    assert.equal(classifyFiwindTipo("A una cuenta tuya"), "transfer");
+    assert.equal(classifyFiwindTipo("De una cuenta tuya"), "transfer");
+    assert.equal(isFiwindNonExpenseTipo("A una cuenta tuya"), true);
+    assert.equal(isBankAccountingEntry("De una cuenta tuya"), true);
+  });
+});

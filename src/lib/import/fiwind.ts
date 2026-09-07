@@ -67,6 +67,8 @@ export function isFiwindWalletTransferTipo(tipo: string): boolean {
 export function classifyFiwindTipo(tipo: string): FiwindKind {
   if (isFiwindNumericTipo(tipo)) return "numeric";
   const u = foldFiwind(tipo);
+  // Own wallet / own bank: “A/De una cuenta tuya” — not spend or income.
+  if (/\b(A|DE)\s+(UNA\s+)?CUENTA\s+TUYA\b/.test(u)) return "transfer";
   // Grocery (“COMPRA SUPER ARS”), not Compra KO / Compra USDC.
   if (/^COMPRA\s+SUPER\b/.test(u)) return "spend";
   if (/^CONVERSION\b/.test(u)) return "conversion";
