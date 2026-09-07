@@ -1,6 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
 import gastosJson from "../../../fixtures/invoice-iog/invoice-iog-gastos.json";
-import ubersJson from "../../../fixtures/invoice-iog/invoice-iog-ubers.json";
 import { getDb, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
 import { ensureCategoriesSeeded } from "@/lib/household";
@@ -11,7 +10,6 @@ import {
   INVOICE_IOG_RUBROS,
   INVOICE_IOG_RUBRO_SLUGS,
   INVOICE_IOG_SOURCE,
-  INVOICE_IOG_TOOL_RULES,
   invoiceIogAmounts,
   invoiceIogFingerprint,
   uniqueInvoiceIogItems,
@@ -24,7 +22,6 @@ import type { AppUser } from "@/lib/session";
 const inviteCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
 
 const gastosFixture = gastosJson as InvoiceIogFixture;
-const ubersFixture = ubersJson as InvoiceIogFixture;
 
 function isOwnerEmail(email: string | null | undefined): boolean {
   return (email ?? "").trim().toLowerCase() === INVOICE_IOG_OWNER_EMAIL;
@@ -33,8 +30,12 @@ function isOwnerEmail(email: string | null | undefined): boolean {
 let inflight: Promise<void> | null = null;
 
 /**
- * Idempotent: create household "Invoice IOG" for Luciano and import the 68
- * Gastos rows + 3 Uber receipt rows. Never writes into Casita.
+ * Idempotent: create household "Invoice IOG" for Luciano and import the v3
+ * Gastos rows (~92). Reconciles prior seeds by fingerprint so reloads never
+ * stack duplicates. Never writes into Casita.
+ *
+ * Uber tickets (formerly invoice-iog-ubers.json) live inside the v3 Gastos
+ * sheet (n=73,74,79) — do not seed them separately.
  */
 export async function ensureInvoiceIogForUser(user: AppUser): Promise<void> {
   if (!isOwnerEmail(user.email)) return;
@@ -54,8 +55,7 @@ async function seedInvoiceIog(user: AppUser): Promise<void> {
   const db = getDb();
 
   const gastos = uniqueInvoiceIogItems(gastosFixture.items);
-  const ubers = uniqueInvoiceIogItems(ubersFixture.items);
-  if (gastos.length === 0 && ubers.length === 0) return;
+  if (gastos.length === 0) return;
 
   const existing = await db
     .select({
@@ -109,20 +109,60 @@ async function seedInvoiceIog(user: AppUser): Promise<void> {
   await ensureToolRules(householdId, categoryIds);
   await hideCasitaSystemCats(householdId, categoryIds);
 
+  const desiredFps = new Set(gastos.map(invoiceIogFingerprint));
+  await purgeOrphanInvoiceIogSeeds(householdId, desiredFps);
+
   await seedMissingBatch({
     householdId,
     userId: user.id,
     items: gastos,
-    fileName: "invoice-iog-gastos.json",
+    fileName: "invoice-iog-gastos-v3.json",
     categoryIds,
   });
-  await seedMissingBatch({
-    householdId,
-    userId: user.id,
-    items: ubers,
-    fileName: "invoice-iog-ubers.json",
-    categoryIds,
-  });
+}
+
+/**
+ * Drop prior invoice_iog seed rows whose fingerprint is not in the current
+ * fixture (v1/v2 n-remap, Dec SuperGrok, standalone uber_receipts, etc.).
+ * Only touches source=invoice_iog — user-imported / other-source rows stay.
+ * Clears Casita↔IOG linked_transaction_id before delete.
+ */
+async function purgeOrphanInvoiceIogSeeds(
+  householdId: string,
+  desiredFps: Set<string>,
+): Promise<number> {
+  const db = getDb();
+  const seeded = await db
+    .select({
+      id: schema.transactions.id,
+      fp: schema.transactions.externalFingerprint,
+    })
+    .from(schema.transactions)
+    .where(
+      and(
+        eq(schema.transactions.householdId, householdId),
+        eq(schema.transactions.source, INVOICE_IOG_SOURCE),
+      ),
+    );
+
+  const orphans = seeded.filter((r) => !desiredFps.has(r.fp));
+  if (orphans.length === 0) return 0;
+
+  for (const row of orphans) {
+    await db
+      .update(schema.transactions)
+      .set({ linkedTransactionId: null, updatedAt: new Date() })
+      .where(eq(schema.transactions.linkedTransactionId, row.id));
+  }
+  for (const row of orphans) {
+    await db
+      .delete(schema.transactions)
+      .where(eq(schema.transactions.id, row.id));
+  }
+  console.info(
+    `[invoice-iog] purged ${orphans.length} orphan seed tx(s) not in v3 fixture`,
+  );
+  return orphans.length;
 }
 
 async function seedMissingBatch(args: {

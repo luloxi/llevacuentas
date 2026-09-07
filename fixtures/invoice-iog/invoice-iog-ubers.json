@@ -1,51 +1,9 @@
 {
   "household": "Invoice IOG",
-  "count": 3,
-  "totalUsd": 12.092409240924093,
-  "totalArs": 18320.0,
+  "count": 0,
+  "totalUsd": 0,
+  "totalArs": 0,
   "source": "uber_receipts",
-  "items": [
-    {
-      "n": 69,
-      "date": "2026-07-28",
-      "mes": "2026-07",
-      "invoice": "uber-1.pdf",
-      "desc": "UberX Olavarría → Torre Alem Plaza",
-      "rubro": "Movilidad",
-      "moneda": "ARS",
-      "importe": 6183.0,
-      "tc": 1515,
-      "usd": 4.081188118811881,
-      "arsPagados": 6183.0,
-      "arsLiq": 6040.158415841584
-    },
-    {
-      "n": 70,
-      "date": "2026-07-29",
-      "mes": "2026-07",
-      "invoice": "uber-2.pdf",
-      "desc": "UberX Olavarría → Torre Alem Plaza",
-      "rubro": "Movilidad",
-      "moneda": "ARS",
-      "importe": 6309.0,
-      "tc": 1515,
-      "usd": 4.1643564356435645,
-      "arsPagados": 6309.0,
-      "arsLiq": 6163.247524752475
-    },
-    {
-      "n": 71,
-      "date": "2026-08-06",
-      "mes": "2026-08",
-      "invoice": "uber-3.pdf",
-      "desc": "UberX Bolívar → Torre Alem Plaza",
-      "rubro": "Movilidad",
-      "moneda": "ARS",
-      "importe": 5828.0,
-      "tc": 1515,
-      "usd": 3.846864686468647,
-      "arsPagados": 5828.0,
-      "arsLiq": 5693.359735973598
-    }
-  ]
+  "note": "Merged into invoice-iog-gastos.json v3 (n=73,74,79 UberX tickets). PDFs remain under fixtures/invoice-iog/ubers/ for reference. Do not re-seed separately.",
+  "items": []
 }

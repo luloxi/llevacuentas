@@ -44,6 +44,9 @@ export type InvoiceIogFixture = {
   totalUsd: number;
   totalArs?: number;
   source?: string;
+  /** Fixture generation: 3 = Excel v3 (92 Gastos, Jan–Sep 2026). */
+  version?: number;
+  note?: string;
   items: InvoiceIogGasto[];
 };
 
@@ -94,6 +97,8 @@ export const INVOICE_IOG_TOOL_RULES: Array<{
   { pattern: "VERCEL", rubro: "Infra y cloud", priority: 88 },
   { pattern: "UBER", rubro: "Movilidad", priority: 85 },
   { pattern: "UBERX", rubro: "Movilidad", priority: 86 },
+  { pattern: "DIDI", rubro: "Movilidad", priority: 85 },
+  { pattern: "PAYU*AR*UBER", rubro: "Movilidad", priority: 86 },
 ];
 
 export function money2(value: number | null | undefined): string | null {
@@ -106,6 +111,7 @@ export function money2(value: number | null | undefined): string | null {
 /**
  * Prefer usd + arsLiq (same economic row in two currencies).
  * ARS-original rows still keep usd from the sheet.
+ * Totales sheet (adelanto / saldo) is docs-only — app seeds line items.
  */
 export function invoiceIogAmounts(item: InvoiceIogGasto): {
   amountUsd: string | null;

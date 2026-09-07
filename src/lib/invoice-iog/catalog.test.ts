@@ -25,25 +25,34 @@ const fixture = JSON.parse(
   ),
 ) as InvoiceIogFixture;
 
-describe("Invoice IOG Gastos fixture", () => {
+describe("Invoice IOG Gastos fixture (v3)", () => {
   it("is a second household named exactly Invoice IOG, not Casita", () => {
     assert.equal(fixture.household, "Invoice IOG");
     assert.equal(INVOICE_IOG_HOUSEHOLD_NAME, "Invoice IOG");
     assert.notEqual(INVOICE_IOG_HOUSEHOLD_NAME, "Casita");
     assert.equal(INVOICE_IOG_OWNER_EMAIL, "lucianoolivabianco@gmail.com");
+    assert.equal(fixture.version, 3);
   });
 
-  it("has 68 unique Gastos rows totaling ≈ USD 846", () => {
-    assert.equal(fixture.count, 68);
-    assert.equal(fixture.items.length, 68);
+  it("has 92 unique Gastos rows totaling ≈ USD 1121 (Jan–Sep 2026)", () => {
+    assert.equal(fixture.count, 92);
+    assert.equal(fixture.items.length, 92);
     const unique = uniqueInvoiceIogItems(fixture.items);
-    assert.equal(unique.length, 68);
+    assert.equal(unique.length, 92);
     const fps = new Set(fixture.items.map(invoiceIogFingerprint));
-    assert.equal(fps.size, 68);
+    assert.equal(fps.size, 92);
     const usd = sumInvoiceIogUsd(fixture.items);
-    assert.ok(Math.abs(usd - 845.967522459) < 1e-6);
-    assert.ok(Math.abs(usd - 846) < 0.05);
-    assert.equal(Math.round(usd), 846);
+    assert.ok(Math.abs(usd - 1120.9993940806216) < 1e-6);
+    assert.ok(Math.abs(usd - 1121) < 0.05);
+    assert.equal(Math.round(usd), 1121);
+    assert.ok(
+      fixture.totalArs != null &&
+        Math.abs(fixture.totalArs - 1659079.10323932) < 0.01,
+    );
+    for (const item of fixture.items) {
+      assert.match(item.mes, /^2026-(0[1-9])$/);
+      assert.notEqual(item.mes, "2026-12");
+    }
   });
 
   it("maps each rubro to the Invoice IOG categories", () => {
@@ -60,11 +69,36 @@ describe("Invoice IOG Gastos fixture", () => {
       assert.ok(amounts.amountUsd, `usd missing for n=${item.n}`);
       assert.ok(amounts.amountArs, `arsLiq missing for n=${item.n}`);
     }
-    assert.equal(counts["Herramientas AI"], 21);
-    assert.equal(counts["Infra y cloud"], 20);
+    assert.equal(counts["Herramientas AI"], 22);
+    assert.equal(counts["Infra y cloud"], 25);
     assert.equal(counts["Eventos y extras"], 2);
-    assert.equal(counts["Movilidad"], 24);
+    assert.equal(counts["Movilidad"], 42);
     assert.equal(counts["Hardware"], 1);
+  });
+
+  it("includes post-corte Uber tickets + Mercado Pago (Grok, DiDi, DO)", () => {
+    const byN = Object.fromEntries(fixture.items.map((i) => [i.n, i]));
+    assert.equal(byN[73].date, "2026-07-28");
+    assert.equal(byN[73].importe, 6183);
+    assert.match(byN[73].desc, /UberX/i);
+    assert.equal(byN[74].date, "2026-07-29");
+    assert.equal(byN[74].importe, 6309);
+    assert.equal(byN[79].date, "2026-08-06");
+    assert.equal(byN[79].importe, 5828);
+    assert.ok(
+      fixture.items.some(
+        (i) => /Grok|SuperGrok/i.test(i.desc) && i.date.startsWith("2026-08"),
+      ),
+    );
+    assert.ok(fixture.items.some((i) => /DiDi/i.test(i.desc)));
+    assert.ok(
+      fixture.items.some(
+        (i) =>
+          /DigitalOcean/i.test(i.desc) &&
+          /Mercado Pago/i.test(i.invoice) &&
+          i.date === "2026-09-01",
+      ),
+    );
   });
 
   it("classifies listed tools as herramientas / infra", () => {
@@ -88,7 +122,6 @@ describe("Invoice IOG Gastos fixture", () => {
   });
 });
 
-
 const ubersFixture = JSON.parse(
   readFileSync(
     join(process.cwd(), "fixtures/invoice-iog/invoice-iog-ubers.json"),
@@ -96,44 +129,11 @@ const ubersFixture = JSON.parse(
   ),
 ) as InvoiceIogFixture;
 
-describe("Invoice IOG Uber receipts fixture", () => {
-  it("has 3 unique Uber rows under Movilidad totaling ~ USD 12.09 / ARS 18320", () => {
+describe("Invoice IOG Uber receipts fixture (merged into v3)", () => {
+  it("is empty — UberX tickets live in Gastos v3 (n=73,74,79)", () => {
     assert.equal(ubersFixture.household, "Invoice IOG");
-    assert.equal(ubersFixture.count, 3);
-    assert.equal(ubersFixture.items.length, 3);
-    const unique = uniqueInvoiceIogItems(ubersFixture.items);
-    assert.equal(unique.length, 3);
-    const fps = new Set(ubersFixture.items.map(invoiceIogFingerprint));
-    assert.equal(fps.size, 3);
-    assert.ok(
-      Math.abs(sumInvoiceIogUsd(ubersFixture.items) - 12.092409240924093) < 1e-9,
-    );
-    assert.equal(ubersFixture.totalArs, 18320);
-    for (const item of ubersFixture.items) {
-      assert.equal(item.rubro, "Movilidad");
-      assert.equal(item.moneda, "ARS");
-      assert.match(item.invoice, /^uber-[123]\.pdf$/);
-      const amounts = invoiceIogAmounts(item);
-      assert.ok(amounts.amountUsd);
-      assert.ok(amounts.amountArs);
-    }
-  });
-
-  it("does not collide fingerprints with the 68 Gastos rows", () => {
-    const gastoFps = new Set(fixture.items.map(invoiceIogFingerprint));
-    for (const item of ubersFixture.items) {
-      const fp = invoiceIogFingerprint(item);
-      assert.equal(gastoFps.has(fp), false, `collision n=${item.n}`);
-    }
-  });
-
-  it("parses the three sala trip amounts and dates", () => {
-    const byN = Object.fromEntries(ubersFixture.items.map((i) => [i.n, i]));
-    assert.equal(byN[69].date, "2026-07-28");
-    assert.equal(byN[69].importe, 6183);
-    assert.equal(byN[70].date, "2026-07-29");
-    assert.equal(byN[70].importe, 6309);
-    assert.equal(byN[71].date, "2026-08-06");
-    assert.equal(byN[71].importe, 5828);
+    assert.equal(ubersFixture.count, 0);
+    assert.equal(ubersFixture.items.length, 0);
+    assert.equal(uniqueInvoiceIogItems(ubersFixture.items).length, 0);
   });
 });
