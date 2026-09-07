@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Upload, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { filesFromDrop } from "@/lib/import/file-accept";
 
 export function UploadModal({
   open,
@@ -140,10 +141,14 @@ export function UploadModal({
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            const list = e.dataTransfer.files
-              ? Array.from(e.dataTransfer.files)
-              : [];
-            if (list.length) void processMany(multiple ? list : list.slice(0, 1));
+            const list = filesFromDrop(e.dataTransfer);
+            if (!list.length) {
+              setError(
+                "No se recibió ningún archivo. Probá elegirlo con el botón.",
+              );
+              return;
+            }
+            void processMany(multiple ? list : list.slice(0, 1));
           }}
           className={cn(
             "flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-4 py-10 text-center transition-all",
@@ -201,7 +206,11 @@ export function UploadModal({
             onChange={(e) => {
               const list = e.target.files ? Array.from(e.target.files) : [];
               e.target.value = "";
-              if (list.length) void processMany(list);
+              if (!list.length) {
+                setError("No se recibió ningún archivo.");
+                return;
+              }
+              void processMany(list);
             }}
           />
         </div>

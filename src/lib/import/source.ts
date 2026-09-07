@@ -2,6 +2,13 @@ import { BANKS, normalizeBank } from "@/lib/banks";
 
 export type StatementFileKind = "pdf" | "xlsx" | "xls" | "csv" | "unknown";
 
+export {
+  STATEMENT_FILE_ACCEPT,
+  filesFromDrop,
+  isStatementFileName,
+  statementFileRejectMessage,
+} from "@/lib/import/file-accept";
+
 /** Underscore/hyphen count as separators (JS \\b treats _ as a word char). */
 const SEP = String.raw`(?:^|[^a-záéíóúñ0-9])`;
 const END = String.raw`(?:[^a-záéíóúñ0-9]|$)`;
@@ -81,6 +88,40 @@ export function detectBankFromText(text: string | null | undefined): string | nu
     if (re.test(text)) return bank;
   }
   return null;
+}
+
+function foldHeader(h: string): string {
+  return h
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Fiwind Actividad Excel: sheet "Actividad" + Fecha | Tipo | Monto | Moneda
+ * (filename is often actividad-1.xlsx, no "fiwind" in it).
+ */
+export function detectFiwindActividadLayout(opts: {
+  fileName?: string | null;
+  sheetNames?: string[];
+  headers?: string[];
+}): boolean {
+  if (detectBankFromFileName(opts.fileName) === "Fiwind") return true;
+  const sheets = (opts.sheetNames ?? []).map((s) => s.toLowerCase());
+  const headers = (opts.headers ?? []).map(foldHeader);
+  const hasActividad = sheets.some((s) => s.includes("actividad"));
+  const hasTipo = headers.some((h) => h === "tipo" || h.startsWith("tipo "));
+  const hasFecha = headers.some((h) => h.includes("fecha"));
+  const hasMoneda = headers.some(
+    (h) => h === "moneda" || h.startsWith("moneda "),
+  );
+  const hasMonto = headers.some((h) => h === "monto" || h.startsWith("monto "));
+  if (headers.some((h) => h.includes("establecimiento"))) return false;
+  if (hasActividad && hasFecha && hasTipo && hasMoneda) return true;
+  if (hasFecha && hasTipo && hasMonto && hasMoneda) return true;
+  return false;
 }
 
 /**

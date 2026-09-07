@@ -14,7 +14,11 @@ export function isBankAccountingEntry(description: string): boolean {
     u.includes("CREDITO VS EN USD") ||
     // Plan V / debt plan markers sometimes appear as non-spend
     u.includes("TRANSF. DEUDA") ||
-    u.includes("TRANSF DEUDA")
+    u.includes("TRANSF DEUDA") ||
+    u.includes("CONVERSION") ||
+    u.includes("CONVERSIÓN") ||
+    u.startsWith("GANANCIA DIARIA") ||
+    u.startsWith("RENDIMIENTO BONIFICADO")
   );
 }
 
@@ -40,8 +44,8 @@ export function isCardPaymentEntry(description: string): boolean {
     u.includes("DEBITO AUT.") ||
     u.includes("PAGO FACIL") ||
     u.includes("PAGO MIS CUENTAS") ||
-    // Generic “PAGO …” but not merchant names like “PAGO FACIL COMISION” handled above
-    /^PAGO\b/.test(u.trim()) ||
+    // Generic “PAGO …” — not Fiwind “Pago a DIA” (merchant purchase)
+    (/^PAGO\b/.test(u.trim()) && !/^PAGO\s+A\b/.test(u.trim())) ||
     /\bSU\s+PAGO\b/.test(u)
   );
 }

@@ -1,8 +1,44 @@
 "use client";
 
-import { useState } from "react";
-import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import {
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
 import { BANKS } from "@/lib/banks";
+import {
+  STATEMENT_FILE_ACCEPT,
+  filesFromDrop,
+  isStatementFileName,
+  statementFileRejectMessage,
+} from "@/lib/import/file-accept";
+import { cn } from "@/lib/utils";
+
+type ImportResult = {
+  error?: string;
+  total?: number;
+  inserted?: number;
+  alreadyExists?: number;
+  skipped?: number;
+  message?: string;
+  warning?: string | null;
+  fullyDuplicate?: boolean;
+  hint?: string | null;
+  bank?: string;
+  source?: string;
+};
+
+function bankHintFromFiles(files: File[]): string | null {
+  for (const f of files) {
+    const n = f.name.toLowerCase();
+    if (n.includes("fiwind") || n.includes("actividad")) return "Fiwind";
+    if (n.includes("bbva")) return "BBVA";
+  }
+  return null;
+}
 
 export function ImportForm({
   compact = false,
@@ -11,8 +47,11 @@ export function ImportForm({
   compact?: boolean;
   onDone?: () => void;
 } = {}) {
+  const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [bank, setBank] = useState("BBVA");
+  const [fileLabel, setFileLabel] = useState<string | null>(null);
   const [result, setResult] = useState<{
     total: number;
     inserted: number;
@@ -25,105 +64,123 @@ export function ImportForm({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    const form = e.currentTarget;
-    const input = form.elements.namedItem("file") as HTMLInputElement | null;
-    const files = input?.files ? Array.from(input.files) : [];
-    if (files.length === 0) {
-      setError("Elegí al menos un archivo");
-      setLoading(false);
-      return;
-    }
+  const importFiles = useCallback(
+    async (rawFiles: File[]) => {
+      if (rawFiles.length === 0) {
+        setError("Elegí al menos un archivo");
+        return;
+      }
+      if (loading) return;
 
-    type ImportResult = {
-      error?: string;
-      total?: number;
-      inserted?: number;
-      alreadyExists?: number;
-      skipped?: number;
-      message?: string;
-      warning?: string | null;
-      fullyDuplicate?: boolean;
-      hint?: string | null;
-      bank?: string;
-      source?: string;
-    };
-
-    try {
-      let total = 0;
-      let inserted = 0;
-      let alreadyExists = 0;
-      let lastBank: string | null = bank;
-      const warnings: string[] = [];
-      const messages: string[] = [];
-
-      for (const file of files) {
-        const fd = new FormData();
-        fd.set("file", file);
-        fd.set("kind", "bbva");
-        fd.set("bank", bank);
-        const res = await fetch("/api/import/bbva", {
-          method: "POST",
-          body: fd,
-          credentials: "include",
-        });
-        const text = await res.text();
-        let data: ImportResult | null = null;
-        try {
-          data = text ? (JSON.parse(text) as ImportResult) : null;
-        } catch {
-          throw new Error(
-            res.status === 413
-              ? "El archivo es demasiado grande."
-              : text.slice(0, 160) || `Error ${res.status}`,
-          );
-        }
-        if (!res.ok) throw new Error(data?.error || `Error al importar ${file.name}`);
-        if ((data?.total ?? 0) === 0) {
-          const detail = data?.message || `No se leyeron movimientos de “${file.name}”.`;
-          const hint = data?.hint ? ` ${data.hint}` : "";
-          throw new Error(`${detail}${hint}`);
-        }
-        total += data?.total ?? 0;
-        inserted += data?.inserted ?? 0;
-        alreadyExists += data?.alreadyExists ?? data?.skipped ?? 0;
-        if (data?.message) messages.push(`${file.name}: ${data.message}`);
-        if (data?.warning) warnings.push(`${file.name}: ${data.warning}`);
-        if (data?.hint) warnings.push(`${file.name}: ${data.hint}`);
-        lastBank = data?.bank ?? lastBank;
+      const rejected = rawFiles.filter(
+        (f) => f.name.includes(".") && !isStatementFileName(f.name),
+      );
+      const files = rawFiles.filter(
+        (f) => !f.name.includes(".") || isStatementFileName(f.name),
+      );
+      if (files.length === 0) {
+        setError(statementFileRejectMessage(rejected[0]?.name ?? "el archivo"));
+        setResult(null);
+        return;
       }
 
-      const fullyDuplicate = inserted === 0 && alreadyExists > 0;
-      setResult({
-        total,
-        inserted,
-        alreadyExists,
-        message:
-          files.length > 1
-            ? `${files.length} archivos · ${inserted} nuevos · ${alreadyExists} coincidencias · ${total} filas leídas`
-            : (messages[0] ?? `${inserted} nuevos · ${alreadyExists} coincidencias`),
-        warning: warnings[0] ?? null,
-        fullyDuplicate,
-        hint: null,
-        bank: lastBank,
-      });
-      form.reset();
-      if (inserted > 0) onDone?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setLoading(false);
-    }
-  }
+      const hinted = bankHintFromFiles(files);
+      const bankToSend = hinted && (bank === "BBVA" || !bank) ? hinted : bank;
+      if (hinted && hinted !== bank) setBank(hinted);
+
+      setLoading(true);
+      setError(null);
+      setResult(null);
+      setFileLabel(
+        files.length === 1 ? files[0].name : `${files.length} archivos`,
+      );
+
+      try {
+        let total = 0;
+        let inserted = 0;
+        let alreadyExists = 0;
+        let lastBank: string | null = bankToSend;
+        const warnings: string[] = [];
+        const messages: string[] = [];
+
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i]!;
+          setFileLabel(
+            files.length > 1
+              ? `${i + 1}/${files.length} · ${file.name}`
+              : file.name,
+          );
+          const fd = new FormData();
+          fd.set("file", file);
+          fd.set("kind", "bbva");
+          fd.set("bank", bankToSend);
+          const res = await fetch("/api/import/bbva", {
+            method: "POST",
+            body: fd,
+            credentials: "include",
+          });
+          const text = await res.text();
+          let data: ImportResult | null = null;
+          try {
+            data = text ? (JSON.parse(text) as ImportResult) : null;
+          } catch {
+            throw new Error(
+              res.status === 413
+                ? "El archivo es demasiado grande."
+                : text.slice(0, 160) || `Error ${res.status}`,
+            );
+          }
+          if (!res.ok) {
+            throw new Error(data?.error || `Error al importar ${file.name}`);
+          }
+          if ((data?.total ?? 0) === 0) {
+            const detail =
+              data?.message || `No se leyeron movimientos de “${file.name}”.`;
+            const hint = data?.hint ? ` ${data.hint}` : "";
+            throw new Error(`${detail}${hint}`);
+          }
+          total += data?.total ?? 0;
+          inserted += data?.inserted ?? 0;
+          alreadyExists += data?.alreadyExists ?? data?.skipped ?? 0;
+          if (data?.message) messages.push(`${file.name}: ${data.message}`);
+          if (data?.warning) warnings.push(`${file.name}: ${data.warning}`);
+          if (data?.hint) warnings.push(`${file.name}: ${data.hint}`);
+          lastBank = data?.bank ?? lastBank;
+        }
+
+        if (rejected.length > 0) {
+          warnings.push(statementFileRejectMessage(rejected[0]!.name));
+        }
+
+        const fullyDuplicate = inserted === 0 && alreadyExists > 0;
+        setResult({
+          total,
+          inserted,
+          alreadyExists,
+          message:
+            files.length > 1
+              ? `${files.length} archivos · ${inserted} nuevos · ${alreadyExists} coincidencias · ${total} filas leídas`
+              : (messages[0] ??
+                `${inserted} nuevos · ${alreadyExists} coincidencias`),
+          warning: warnings[0] ?? null,
+          fullyDuplicate,
+          hint: null,
+          bank: lastBank,
+        });
+        if (inputRef.current) inputRef.current.value = "";
+        if (inserted > 0) onDone?.();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [bank, loading, onDone],
+  );
 
   return (
     <div className={compact ? "space-y-3" : "space-y-6"}>
-      <form
-        onSubmit={onSubmit}
+      <div
         className={
           compact
             ? "rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/40 p-4 dark:border-emerald-800 dark:bg-emerald-950/20"
@@ -143,7 +200,9 @@ export function ImportForm({
             </div>
           )}
           <div className={compact ? "text-left" : ""}>
-            <h2 className={compact ? "text-sm font-semibold" : "text-lg font-semibold"}>
+            <h2
+              className={compact ? "text-sm font-semibold" : "text-lg font-semibold"}
+            >
               {compact ? "Importar resumen" : "Subí el resumen de la tarjeta"}
             </h2>
             <p
@@ -154,15 +213,21 @@ export function ImportForm({
               }
             >
               {compact
-                ? "Excel, CSV o PDF · BBVA y Fiwind"
-                : "Excel, CSV o PDF de BBVA, Fiwind u otro banco. Elegí el banco. Sin duplicados."}
+                ? "Excel, CSV o PDF · BBVA y Fiwind · arrastrá o elegí"
+                : "Excel, CSV o PDF de BBVA, Fiwind u otro banco. Arrastrá el archivo o elegilo. Sin duplicados."}
             </p>
           </div>
-          <label className={`block w-full ${compact ? "text-left" : "text-left max-w-md"}`}>
-            <span className="mb-1 block text-xs font-medium text-zinc-500">Banco</span>
+          <label
+            className={`block w-full ${compact ? "text-left" : "text-left max-w-md"}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="mb-1 block text-xs font-medium text-zinc-500">
+              Banco
+            </span>
             <select
               value={bank}
               onChange={(e) => setBank(e.target.value)}
+              disabled={loading}
               className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             >
               {BANKS.map((b) => (
@@ -172,39 +237,94 @@ export function ImportForm({
               ))}
             </select>
           </label>
-          <input
-            name="file"
-            type="file"
-            accept=".xlsx,.xls,.csv,.txt,.pdf,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            required
-            multiple
-            onChange={(e) => {
-              const files = e.currentTarget.files;
-              if (!files?.length) return;
-              for (const f of Array.from(files)) {
-                const n = f.name.toLowerCase();
-                if (n.includes("fiwind") && (bank === "BBVA" || !bank)) {
-                  setBank("Fiwind");
-                  break;
-                }
-                if (n.includes("bbva") && bank !== "BBVA") {
-                  setBank("BBVA");
-                  break;
-                }
-              }
+
+          <div
+            data-no-swipe
+            onDragEnter={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDragOver(true);
             }}
-            className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-emerald-700"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 sm:w-auto"
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              e.dataTransfer.dropEffect = "copy";
+              setDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDragOver(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDragOver(false);
+              const list = filesFromDrop(e.dataTransfer);
+              if (!list.length) {
+                setError(
+                  "No se recibió ningún archivo. Probá elegirlo con el botón.",
+                );
+                return;
+              }
+              void importFiles(list);
+            }}
+            className={cn(
+              "flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-all",
+              compact ? "" : "max-w-md",
+              dragOver
+                ? "scale-[1.01] border-emerald-500 bg-emerald-50 shadow-inner dark:bg-emerald-950/40"
+                : "border-emerald-300/80 bg-white/60 dark:border-emerald-800 dark:bg-zinc-900/40",
+              loading && "pointer-events-none opacity-80",
+            )}
           >
-            <Upload className="h-4 w-4" />
-            {loading ? "Importando…" : "Importar"}
-          </button>
+            {loading ? (
+              <Loader2 className="h-6 w-6 animate-spin text-emerald-700" />
+            ) : (
+              <Upload className="h-6 w-6 text-emerald-700" />
+            )}
+            <p className="text-sm font-semibold">
+              {loading
+                ? "Importando…"
+                : dragOver
+                  ? "Soltá el archivo acá"
+                  : "Arrastrá el Excel acá"}
+            </p>
+            {fileLabel && loading && (
+              <p className="max-w-full truncate text-xs text-zinc-500">
+                {fileLabel}
+              </p>
+            )}
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => inputRef.current?.click()}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {loading ? "Importando…" : "Elegir archivos"}
+            </button>
+            <input
+              ref={inputRef}
+              name="file"
+              type="file"
+              accept={STATEMENT_FILE_ACCEPT}
+              multiple
+              className="sr-only"
+              onChange={(e) => {
+                const list = e.currentTarget.files
+                  ? Array.from(e.currentTarget.files)
+                  : [];
+                e.currentTarget.value = "";
+                if (!list.length) {
+                  setError("No se recibió ningún archivo.");
+                  return;
+                }
+                void importFiles(list);
+              }}
+            />
+          </div>
         </div>
-      </form>
+      </div>
 
       {result && (
         <div

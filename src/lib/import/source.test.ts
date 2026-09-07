@@ -3,8 +3,11 @@ import { describe, it } from "node:test";
 import {
   detectBankFromFileName,
   detectFileKind,
+  detectFiwindActividadLayout,
   emptyParseMessage,
+  isStatementFileName,
   resolveImportBank,
+  STATEMENT_FILE_ACCEPT,
   statementTxSource,
   statementTypeLabel,
 } from "./source";
@@ -63,6 +66,32 @@ describe("resolveImportBank", () => {
       "Fiwind",
     );
     assert.equal(detectBankFromFileName("movimientos_fiwind.csv"), "Fiwind");
+  });
+
+  it("detects Fiwind from Actividad headers even without fiwind in the name", () => {
+    assert.equal(
+      detectFiwindActividadLayout({
+        fileName: "actividad-1.xlsx",
+        sheetNames: ["Actividad", "Balance"],
+        headers: ["Fecha", "Tipo", "Monto", "Moneda"],
+      }),
+      true,
+    );
+    assert.equal(
+      resolveImportBank({
+        selected: "BBVA",
+        detected: "Fiwind",
+        fileName: "actividad-1.xlsx",
+      }),
+      "Fiwind",
+    );
+    assert.equal(isStatementFileName("actividad-2.xlsx"), true);
+    assert.match(STATEMENT_FILE_ACCEPT, /\.xlsx/);
+    assert.doesNotMatch(
+      STATEMENT_FILE_ACCEPT,
+      /openxmlformats/,
+      "MIME types in accept swallow .xlsx on some desktop Chromes",
+    );
   });
 
   it("keeps an explicit non-default pick", () => {

@@ -6,7 +6,10 @@ import {
   normalizeMovementCurrency,
   parseBbvaAmount,
 } from "@/lib/money";
-import { detectBankFromText } from "@/lib/import/source";
+import {
+  detectBankFromText,
+  detectFiwindActividadLayout,
+} from "@/lib/import/source";
 
 export type BbvaMovement = {
   date: string; // YYYY-MM-DD
@@ -24,29 +27,39 @@ function normalizeDescription(raw: string): string {
   return raw.replace(/\s+/g, " ").trim();
 }
 
+function ymd(year: number, month: number, day: number): string | null {
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return null;
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(d.getTime())) return null;
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) {
+    return null;
+  }
+  return d.toISOString().slice(0, 10);
+}
+
 function parseDate(raw: unknown): string | null {
   if (raw == null) return null;
   if (raw instanceof Date && !Number.isNaN(raw.getTime())) {
-    return raw.toISOString().slice(0, 10);
+    return ymd(raw.getUTCFullYear(), raw.getUTCMonth() + 1, raw.getUTCDate());
   }
   const s = String(raw).trim();
-  // DD/MM/YY or DD/MM/YYYY
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  // DD/MM/YY or DD/MM/YYYY, optional time ("31/08/2026 19:56:54")
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s|$|T)/);
   if (m) {
     let year = Number(m[3]);
     if (year < 100) year += 2000;
-    const month = Number(m[2]);
-    const day = Number(m[1]);
-    const d = new Date(Date.UTC(year, month - 1, day));
-    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    return ymd(year, Number(m[2]), Number(m[1]));
   }
+  // ISO date, optional time
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return ymd(Number(iso[1]), Number(iso[2]), Number(iso[3]));
   // Excel serial date as number
   if (typeof raw === "number") {
     const parsed = XLSX.SSF.parse_date_code(raw);
-    if (parsed) {
-      const d = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
-      return d.toISOString().slice(0, 10);
-    }
+    if (parsed) return ymd(parsed.y, parsed.m, parsed.d);
   }
   return null;
 }
@@ -72,8 +85,15 @@ function extractInstallment(description: string, cuotaCol: unknown): string | nu
   return null;
 }
 
+function foldDesc(desc: string): string {
+  return desc
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+}
+
 function isPaymentDescription(desc: string): boolean {
-  const u = desc.toUpperCase();
+  const u = foldDesc(desc);
   return (
     u.includes("SU PAGO") ||
     u.includes("PAGO EN PESOS") ||
@@ -83,6 +103,14 @@ function isPaymentDescription(desc: string): boolean {
     u.includes("RECARGA") ||
     u.includes("CARGA DE SALDO") ||
     u.includes("CARGA SALDO")
+  );
+}
+
+/** Fiwind Actividad: incoming / FX / yield — not household spend. */
+function isFiwindNonSpend(desc: string): boolean {
+  const u = foldDesc(desc).trim();
+  return (
+    /^(DEPOSITO|DEVOLUCION|GANANCIA\b|RENDIMIENTO\b|CONVERSION)\b/.test(u)
   );
 }
 
@@ -112,6 +140,10 @@ function isDateHeader(h: string): boolean {
   return false;
 }
 
+function isTipoHeader(h: string): boolean {
+  return h === "tipo" || h.startsWith("tipo ") || h.startsWith("tipo de");
+}
+
 function isMerchantHeader(h: string): boolean {
   return (
     h.includes("establecimiento") ||
@@ -123,7 +155,8 @@ function isMerchantHeader(h: string): boolean {
     h.includes("merchant") ||
     h === "narration" ||
     h === "detalle operacion" ||
-    h === "detalle de operacion"
+    h === "detalle de operacion" ||
+    isTipoHeader(h)
   );
 }
 
@@ -265,11 +298,36 @@ function sniffTableKind(
 
 function currencyFromCell(raw: unknown): "USD" | "ARS" | null {
   if (raw == null || raw === "") return null;
-  const u = String(raw).trim().toUpperCase();
+  const u = String(raw)
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
   if (!u) return null;
-  if (/\b(USD|U\$S|USDT|USDC|DOLAR|DÓLAR)\b/.test(u) || u === "US$") return "USD";
-  if (/\b(ARS|PESO|\$)\b/.test(u) || u === "$") return "ARS";
+  if (
+    u === "USD" ||
+    u === "USDT" ||
+    u === "USDC" ||
+    u === "US$" ||
+    u === "U$S" ||
+    /\b(USD|USDT|USDC|U\$S|DOLAR)\b/.test(u)
+  ) {
+    return "USD";
+  }
+  if (u === "ARS" || u === "$" || /\b(ARS|PESO)\b/.test(u)) return "ARS";
   return null;
+}
+
+function pickStatementSheet(names: string[]): string | undefined {
+  const skip = (n: string) => /^(balance|saldos?|resumen)$/i.test(n.trim());
+  const usable = names.filter((n) => !skip(n));
+  const pool = usable.length > 0 ? usable : names;
+  return (
+    pool.find((n) => /actividad/i.test(n)) ??
+    pool.find((n) => /mov/i.test(n)) ??
+    pool.find((n) => /periodo|period|consumo/i.test(n)) ??
+    pool[0]
+  );
 }
 
 export type StatementWorkbookMeta = {
@@ -308,10 +366,7 @@ export function parseStatementWorkbook(
     return { movements: [], classicBbva: false, detectedBank: null, fileKind };
   }
 
-  const sheetName =
-    wb.SheetNames.find((n) => /mov/i.test(n)) ??
-    wb.SheetNames.find((n) => /periodo|period|consumo/i.test(n)) ??
-    wb.SheetNames[0];
+  const sheetName = pickStatementSheet(wb.SheetNames);
   if (!sheetName) {
     return { movements: [], classicBbva: false, detectedBank: null, fileKind };
   }
@@ -328,7 +383,6 @@ export function parseStatementWorkbook(
       (r ?? []).map((c) => String(c ?? "")).join(" "),
     ),
   ].join("\n");
-  const detectedBank = detectBankFromText(previewText);
 
   // Find header row (title row may sit above it)
   let headerIdx = -1;
@@ -373,22 +427,41 @@ export function parseStatementWorkbook(
   }
   const colDebit = header.findIndex(isDebitHeader);
   const colCredit = header.findIndex(isCreditHeader);
-  const colCurrency = header.findIndex(isCurrencyHeader);
+  const colCurrency = header.findIndex((h) => h === "moneda" || isCurrencyHeader(h));
+  const colMontoOrigen = header.findIndex(
+    (h) => h.includes("monto origen") || h.includes("importe origen"),
+  );
+  const colMonedaOrigen = header.findIndex(
+    (h) => h.includes("moneda origen") || h.includes("divisa origen"),
+  );
 
   const classicBbva =
     header.some((h) => h.includes("establecimiento")) &&
     (header.some((h) => h.includes("importe en") || h.includes("u$s")) ||
       (colArs >= 0 && colUsd >= 0));
 
+  const fiwindLayout = detectFiwindActividadLayout({
+    fileName,
+    sheetNames: wb.SheetNames,
+    headers: header,
+  });
+  const detectedBank = fiwindLayout
+    ? "Fiwind"
+    : detectBankFromText(previewText);
+
   const useSplit = colArs < 0 && (colDebit >= 0 || colCredit >= 0);
 
   // Layout fallback for classic BBVA export (no reliable header match):
   // 0 card, 1 date, 2 merchant, 3 cuota, 4 ARS, 5 USD
-  const dateIdx = colDate >= 0 ? colDate : 1;
-  const movIdx = colMov >= 0 ? colMov : 2;
-  const cuotaIdx = colCuota >= 0 ? colCuota : 3;
-  const arsIdx = colArs >= 0 ? colArs : 4;
-  const usdIdx = colUsd >= 0 ? colUsd : 5;
+  // Do NOT apply that fallback to Fiwind Actividad (Fecha|Tipo|Monto|Moneda).
+  const useClassicFallback =
+    classicBbva ||
+    (!fiwindLayout && colMov < 0 && colArs < 0 && colDebit < 0 && colCredit < 0);
+  const dateIdx = colDate >= 0 ? colDate : useClassicFallback ? 1 : 0;
+  const movIdx = colMov >= 0 ? colMov : useClassicFallback ? 2 : header.findIndex(isTipoHeader);
+  const cuotaIdx = colCuota >= 0 ? colCuota : useClassicFallback ? 3 : -1;
+  const arsIdx = colArs >= 0 ? colArs : useClassicFallback ? 4 : -1;
+  const usdIdx = colUsd >= 0 ? colUsd : useClassicFallback ? 5 : -1;
 
   const out: BbvaMovement[] = [];
 
@@ -396,7 +469,7 @@ export function parseStatementWorkbook(
     const row = rows[i];
     if (!row || row.every((c) => c == null || String(c).trim() === "")) continue;
 
-    const descriptionRaw = String(row[movIdx] ?? "").trim();
+    const descriptionRaw = String(movIdx >= 0 ? (row[movIdx] ?? "") : "").trim();
     if (!descriptionRaw) continue;
     // Skip totals / footer rows
     if (/^total\b/i.test(descriptionRaw)) continue;
@@ -405,7 +478,7 @@ export function parseStatementWorkbook(
     const date = parseDate(row[dateIdx]);
     if (!date) continue;
 
-    const descriptionNormalized = normalizeDescription(descriptionRaw);
+    let descriptionNormalized = normalizeDescription(descriptionRaw);
     const installment = extractInstallment(
       descriptionRaw,
       colCuota >= 0 || classicBbva ? row[cuotaIdx] : null,
@@ -423,13 +496,49 @@ export function parseStatementWorkbook(
         amountArs = -Math.abs(credit.value);
       }
     } else {
-      ({ amountArs, amountUsd } = parseArsUsdColumns(row[arsIdx], row[usdIdx]));
+      ({ amountArs, amountUsd } = parseArsUsdColumns(
+        arsIdx >= 0 ? row[arsIdx] : null,
+        usdIdx >= 0 ? row[usdIdx] : null,
+      ));
     }
 
-    const moneda = colCurrency >= 0 ? currencyFromCell(row[colCurrency]) : null;
+    const monedaRaw = colCurrency >= 0 ? row[colCurrency] : null;
+    const moneda = currencyFromCell(monedaRaw);
     if (moneda === "USD" && amountUsd == null && amountArs != null) {
       amountUsd = amountArs;
       amountArs = null;
+    } else if (moneda === "ARS" && amountArs == null && amountUsd != null) {
+      amountArs = amountUsd;
+      amountUsd = null;
+    }
+
+    // Unknown currency (ADA, etc.): don't park it as pesos.
+    if (
+      moneda == null &&
+      monedaRaw != null &&
+      String(monedaRaw).trim() &&
+      !/^ars$/i.test(String(monedaRaw).trim())
+    ) {
+      const code = String(monedaRaw).trim().toUpperCase();
+      if (code && !/^\d/.test(code)) {
+        descriptionNormalized = normalizeDescription(
+          `${descriptionNormalized} (${code})`,
+        );
+        amountArs = null;
+        amountUsd = null;
+      }
+    }
+
+    if (amountArs == null && amountUsd == null && colMontoOrigen >= 0) {
+      const originAmt = parseBbvaAmount(row[colMontoOrigen]);
+      const originCur =
+        colMonedaOrigen >= 0
+          ? currencyFromCell(row[colMonedaOrigen])
+          : null;
+      if (originAmt) {
+        if (originCur === "USD") amountUsd = originAmt.value;
+        else amountArs = originAmt.value;
+      }
     }
 
     ({ amountArs, amountUsd } = normalizeMovementCurrency({
@@ -440,17 +549,24 @@ export function parseStatementWorkbook(
     if (amountArs == null && amountUsd == null) continue;
 
     const negative = (amountArs ?? amountUsd ?? 0) < 0;
-    const payment = isPaymentDescription(descriptionNormalized) || negative;
+    const incoming = isFiwindNonSpend(descriptionNormalized);
+    const payment =
+      isPaymentDescription(descriptionNormalized) || negative || incoming;
 
     const partial = {
       date,
-      descriptionRaw,
+      descriptionRaw:
+        descriptionNormalized !== normalizeDescription(descriptionRaw)
+          ? descriptionNormalized
+          : descriptionRaw,
       descriptionNormalized,
       installment,
       amountArs,
       amountUsd,
       isPayment: payment,
-      isCredit: negative && !isPaymentDescription(descriptionNormalized),
+      isCredit:
+        incoming ||
+        (negative && !isPaymentDescription(descriptionNormalized)),
     };
 
     out.push({ ...partial, fingerprint: makeFingerprint(partial) });

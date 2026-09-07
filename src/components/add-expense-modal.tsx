@@ -14,6 +14,12 @@ import {
 import { cn } from "@/lib/utils";
 import { compressImageForUpload } from "@/lib/image-compress";
 import type { AddExpensePreset } from "@/components/add-expense-provider";
+import {
+  STATEMENT_FILE_ACCEPT,
+  filesFromDrop,
+  isStatementFileName,
+  statementFileRejectMessage,
+} from "@/lib/import/file-accept";
 
 type Category = { id: string; slug: string; name: string };
 type Member = { userId: string; name: string };
@@ -338,9 +344,19 @@ export function AddExpenseModal({
     }
   }
 
-  async function onCardFiles(fileList: FileList) {
-    const files = Array.from(fileList);
-    if (!files.length) return;
+  async function onCardFiles(fileList: FileList | File[]) {
+    const raw = Array.from(fileList);
+    if (!raw.length) {
+      setError("No se recibió ningún archivo.");
+      return;
+    }
+    const files = raw.filter(
+      (f) => !f.name.includes(".") || isStatementFileName(f.name),
+    );
+    if (!files.length) {
+      setError(statementFileRejectMessage(raw[0]?.name ?? "el archivo"));
+      return;
+    }
     setImporting(true);
     setError(null);
     setImportNote(null);
@@ -385,7 +401,7 @@ export function AddExpenseModal({
 
       const note =
         files.length > 1
-          ? `${files.length} archivos · ${inserted} nuevos · ${already} ya estaban`
+          ? `${files.length} archivos · ${inserted} nuevos · ${already} ya estaban · ${total} filas`
           : msgs[0] || `${inserted} nuevos · ${already} ya estaban`;
       setImportNote(note);
       window.dispatchEvent(new Event("lc:card-imported"));
@@ -505,19 +521,52 @@ export function AddExpenseModal({
           <input
             ref={cardRef}
             type="file"
-            accept=".xlsx,.xls,.csv,.txt,.pdf,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept={STATEMENT_FILE_ACCEPT}
             multiple
             className="hidden"
             disabled={busy}
             onChange={(e) => {
               const list = e.target.files;
               e.target.value = "";
-              if (list?.length) void onCardFiles(list);
+              if (!list?.length) {
+                setError("No se recibió ningún archivo.");
+                return;
+              }
+              void onCardFiles(list);
             }}
           />
 
           {mode === "choose" && (
-            <div className="flex flex-col gap-2">
+            <div
+              className="flex flex-col gap-2"
+              data-no-swipe
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const list = filesFromDrop(e.dataTransfer);
+                if (!list.length) {
+                  setError(
+                    "No se recibió ningún archivo. Probá elegirlo con el botón.",
+                  );
+                  return;
+                }
+                const images = list.filter(
+                  (f) =>
+                    f.type.startsWith("image/") ||
+                    /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(f.name),
+                );
+                const statements = list.filter(
+                  (f) => !images.includes(f),
+                );
+                if (statements.length) void onCardFiles(statements);
+                else if (images[0]) void onScanFile(images[0]);
+                else setError("No se recibió ningún archivo.");
+              }}
+            >
               <ChoiceRow
                 primary
                 busy={scanning}
@@ -543,7 +592,7 @@ export function AddExpenseModal({
                 disabled={busy}
                 icon={<FileSpreadsheet className="h-5 w-5" strokeWidth={1.75} />}
                 title={importing ? "Importando…" : "Resumen tarjeta"}
-                hint="Excel o PDF de cualquier banco"
+                hint="Excel o PDF · arrastrá o elegí"
                 onClick={() => cardRef.current?.click()}
               />
 
