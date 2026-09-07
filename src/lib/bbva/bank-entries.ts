@@ -18,7 +18,14 @@ export function isBankAccountingEntry(description: string): boolean {
     u.includes("CRÉDITOS VS EN USD") ||
     u.includes("CREDITO VS EN USD") ||
     u.includes("TRANSF. DEUDA") ||
-    u.includes("TRANSF DEUDA")
+    u.includes("TRANSF DEUDA") ||
+    u.includes("CTA A CTA") ||
+    u.includes("CUENTA A CUENTA") ||
+    u.startsWith("TRANSFERENCIA INTERNA") ||
+    u.includes("TRANSFERENCIA ENTRE CUENTAS") ||
+    u.includes("TRANSF ENTRE CUENTAS") ||
+    u.includes("TRANSFERENCIA A CUENTA PROPIA") ||
+    u.includes("TRANSF A CUENTA PROPIA")
   ) {
     return true;
   }

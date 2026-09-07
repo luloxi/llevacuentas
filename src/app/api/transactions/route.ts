@@ -421,6 +421,15 @@ export async function PATCH(req: Request) {
           : Number(body.amountUsd)
         : undefined;
 
+    const nextIsPayment =
+      body.isPayment === true
+        ? true
+        : body.isPayment === false
+          ? false
+          : body.internalTransfer === true
+            ? true
+            : undefined;
+
     const row = await updateTransaction(ctx.household.id, body.id, {
       categoryId: body.categoryId,
       ownership: nextOwnership,
@@ -436,6 +445,7 @@ export async function PATCH(req: Request) {
           : undefined,
       amountArs,
       amountUsd,
+      isPayment: nextIsPayment,
     });
 
     let learned = 0;

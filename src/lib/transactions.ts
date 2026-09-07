@@ -100,6 +100,8 @@ export async function updateTransaction(
     date?: string;
     amountArs?: number | null;
     amountUsd?: number | null;
+    /** Internal transfer / non-spend — hidden from Consumos + neta. */
+    isPayment?: boolean;
   },
 ) {
   const db = getDb();
@@ -118,6 +120,7 @@ export async function updateTransaction(
     date?: string;
     amountArs?: string | null;
     amountUsd?: string | null;
+    isPayment?: boolean;
     updatedAt: Date;
   } = { ...rest, updatedAt: new Date() };
 

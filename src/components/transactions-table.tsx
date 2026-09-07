@@ -469,6 +469,34 @@ export function TransactionsTable() {
       if (r.ownership !== "personal") void patch(r.id, { ownership: "personal" });
       return;
     }
+    if (value === "internal") {
+      // Hide from Consumos + neta (isPayment); keep history in statements.
+      setError(null);
+      setSavingId(r.id);
+      const prev = rows;
+      setRows((list) => list.filter((x) => x.id !== r.id));
+      try {
+        const res = await fetch("/api/transactions", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ id: r.id, internalTransfer: true }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          setRows(prev);
+          setError(data?.error || "No se pudo marcar");
+          return;
+        }
+        setToast("Marcado como transferencia interna (no cuenta en la neta).");
+      } catch (e) {
+        setRows(prev);
+        setError(e instanceof Error ? e.message : "Error de red");
+      } finally {
+        setSavingId(null);
+      }
+      return;
+    }
     // value is a household id (or legacy "shared")
     if (value === "shared" || value === (activeHouseholdId ?? "")) {
       if (r.ownership !== "shared") void patch(r.id, { ownership: "shared" });
@@ -530,6 +558,7 @@ export function TransactionsTable() {
           </option>
         ))}
         {opts.length === 0 && <option value="shared">Hogar</option>}
+        <option value="internal">Transferencia interna</option>
       </select>
     );
   }
