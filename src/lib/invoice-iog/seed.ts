@@ -10,6 +10,7 @@ import {
   INVOICE_IOG_RUBROS,
   INVOICE_IOG_RUBRO_SLUGS,
   INVOICE_IOG_SOURCE,
+  INVOICE_IOG_TOOL_RULES,
   invoiceIogAmounts,
   invoiceIogFingerprint,
   uniqueInvoiceIogItems,
