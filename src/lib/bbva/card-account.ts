@@ -87,17 +87,20 @@ export function pickPrimaryCardLast4<T extends CardTagged>(
   return best;
 }
 
-/** Keep untagged rows (Últimos movimientos) plus the primary last4. */
+/**
+ * Keep untagged rows (Últimos movimientos has no last4) plus the primary
+ * last4. Never drop snapshot rows just because last4 is missing — that
+ * was hiding TEMBICI / Ecobici from Deuda.
+ */
 export function filterToPrimaryCard<T extends CardTagged>(
   rows: T[],
   primaryLast4: string | null,
 ): T[] {
   const primary = normalizeCardLast4(primaryLast4);
   if (!primary) return rows;
-  const tagged = cardLast4s(rows);
-  if (tagged.length <= 1) return rows;
   return rows.filter((r) => {
     const last4 = normalizeCardLast4(r.cardLast4);
-    return last4 == null || last4 === primary;
+    if (last4 == null) return true;
+    return last4 === primary;
   });
 }

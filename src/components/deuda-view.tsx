@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn, formatArs, formatUsd, formatDateAr } from "@/lib/utils";
 import {
@@ -254,12 +255,28 @@ export function DeudaView() {
   }
 
   const onlyPayments = payments.filter((p) => p.kind === "payment");
-  const settled = summary?.settled || (summary?.currentBalanceArs ?? 0) <= 0;
+  const forced = Boolean(settings.forceSettled || summary?.forceSettled);
+  const mode = summary?.mode ?? "empty";
+  const hasSnapshot = mode === "snapshot";
+  // Never infer Saldada from a $0 balance — empty / no snapshot is not settled.
+  const settled = Boolean(summary?.settled);
+  const missingSnapshot = !forced && !hasSnapshot;
   const paymentRows = onlyPayments.length ? onlyPayments : payments;
   const balance = Math.max(summary?.currentBalanceArs ?? 0, 0);
   const interestEst = estimateMonthlyInterest(balance, settings.ratePct);
   const dueLabel = nextDueLabel(settings.dueDay);
-  const forced = Boolean(settings.forceSettled || summary?.forceSettled);
+
+  const heroLabel = settled ? "Estado" : "Deuda";
+  const heroValue = settled
+    ? "Saldada"
+    : mode === "empty"
+      ? "Sin snapshot"
+      : formatArs(balance);
+  const heroTone: "neutral" | "brand" | "danger" = settled
+    ? "brand"
+    : mode === "empty"
+      ? "neutral"
+      : "danger";
 
   return (
     <div className="space-y-3">
@@ -377,25 +394,27 @@ export function DeudaView() {
 
       {summary && (
         <div className="flex gap-2">
-          <MiniStat
-            label={settled ? "Estado" : "Deuda"}
-            value={
-              settled
-                ? "Saldada"
-                : formatArs(Math.max(summary.currentBalanceArs, 0))
-            }
-            tone={settled ? "brand" : "danger"}
-          />
+          <MiniStat label={heroLabel} value={heroValue} tone={heroTone} />
           <MiniStat
             label="Pagado"
             value={formatArs(summary.totalPaidArs)}
-            tone="brand"
+            tone="neutral"
           />
           <MiniStat
             label="Cargos abiertos"
             value={String(openInstallments.length + openCharges.length)}
           />
         </div>
+      )}
+
+      {missingSnapshot && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+          Falta el Excel de Últimos movimientos BBVA. Importalo en{" "}
+          <Link href="/cargas" className="font-semibold underline underline-offset-2">
+            Cargas
+          </Link>{" "}
+          para ver la deuda actual. Sin ese snapshot no marcamos Saldada.
+        </p>
       )}
 
       {tab === "evolucion" ? (

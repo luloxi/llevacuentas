@@ -9,8 +9,11 @@ import {
 import { convertUsdToArs } from "@/lib/fx/month-end-rates";
 import { isPeriodDebtSource } from "@/lib/import/source";
 
-/** Below this, Casita shows “Saldada”. */
+/** Below this, Casita shows “Saldada” — only when a snapshot exists. */
 export const SETTLED_THRESHOLD_ARS = 50;
+
+/** Lookback from the newest Últimos movimientos date. */
+export const SNAPSHOT_LOOKBACK_DAYS = 21;
 
 /**
  * Running ledger of incomplete BBVA history invents millions.
@@ -252,16 +255,21 @@ function addDaysIso(iso: string, days: number): string {
   return dt.toISOString().slice(0, 10);
 }
 
+/** Period xls / PDF are history; everything else can be a live snapshot. */
+export function isSnapshotDebtRow(r: { source?: string | null }): boolean {
+  return !isPeriodDebtSource(r.source);
+}
+
 /**
  * Latest Últimos movimientos window — not the period xls history.
  * A 21-day lookback from the newest BBVA snapshot date keeps TEMBICI
  * and drops the older overlapping export.
  */
 export function latestSnapshotRows(rows: DebtTx[]): DebtTx[] {
-  const snapshot = rows.filter((r) => !isPeriodDebtSource(r.source));
+  const snapshot = rows.filter(isSnapshotDebtRow);
   const newest = maxDate(snapshot);
   if (!newest) return [];
-  const from = addDaysIso(newest, -21);
+  const from = addDaysIso(newest, -SNAPSHOT_LOOKBACK_DAYS);
   return snapshot.filter((r) => r.date >= from);
 }
 
@@ -339,7 +347,8 @@ export function computeCardDebt(
   const empty: CardDebtResult = {
     currentBalanceArs: 0,
     currentBalanceUsd: 0,
-    settled: true,
+    // Empty / no snapshot is not Saldada — only forceSettled is.
+    settled: forceSettled,
     forceSettled,
     openInstallments: [],
     openCharges: [],
@@ -368,8 +377,15 @@ export function computeCardDebt(
     preferredLast4: opts.settings?.cardLast4,
     knownDescriptions: opts.knownDescriptions,
   });
-  const scoped = filterToPrimaryCard(mine, primaryCardLast4);
-  const payments = paymentList(scoped);
+  // Period xls lists every card; Últimos movimientos often has no last4.
+  // Never last4-filter snapshot rows — that dropped TEMBICI / Ecobici.
+  const periodMine = mine.filter((r) => isPeriodDebtSource(r.source));
+  const snapshotMine = mine.filter(isSnapshotDebtRow);
+  const scopedPeriod = filterToPrimaryCard(periodMine, primaryCardLast4);
+  const scoped = [...scopedPeriod, ...snapshotMine];
+
+  const snapshot = latestSnapshotRows(scoped);
+  const payments = paymentList(snapshot);
   const totalPaidArs = payments
     .filter((p) => p.kind === "payment")
     .reduce((s, p) => s + Math.abs(p.amountArs ?? 0), 0);
@@ -377,7 +393,6 @@ export function computeCardDebt(
     .filter((p) => p.kind === "payment")
     .reduce((s, p) => s + Math.abs(p.amountUsd ?? 0), 0);
 
-  const snapshot = latestSnapshotRows(scoped);
   const snapshotInstallments = groupOpenInstallments(snapshot, usdRate);
   const snapshotCharges = openChargesFrom(snapshot);
 
@@ -430,7 +445,9 @@ export function computeCardDebt(
   const currentBalanceArs =
     balanceArs < SETTLED_THRESHOLD_ARS ? 0 : balanceArs;
   const currentBalanceUsd = currentBalanceArs === 0 ? 0 : balanceUsd;
-  const settled = currentBalanceArs === 0;
+  // Saldada only with a live snapshot whose balance is under the threshold.
+  // Empty / period-only / discarded ledger must not fake it.
+  const settled = mode === "snapshot" && currentBalanceArs === 0;
 
   return {
     currentBalanceArs,

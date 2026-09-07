@@ -160,6 +160,12 @@ describe("computeCardDebt — no millions", () => {
     );
     assert.ok(debt.currentBalanceArs > 0, "not force-zero when TEMBICI exists");
     assert.equal(debt.forceSettled, false);
+    assert.equal(debt.settled, false);
+    assert.equal(debt.mode, "snapshot");
+    assert.ok(
+      debt.totalPaidArs < 1_000_000,
+      `Pagado must be the 21d snapshot window, not lifetime, got ${debt.totalPaidArs}`,
+    );
     assert.equal(
       debt.openInstallments.some((p) => /PENGUIN/i.test(p.description)),
       false,
@@ -184,7 +190,7 @@ describe("computeCardDebt — no millions", () => {
     assert.equal(debt.forceSettled, true);
   });
 
-  it("period files alone default to saldada when his cuotas are 3/3", async () => {
+  it("period files alone are not false Saldada without a snapshot", async () => {
     const parsed = await parseStatementFile(
       buf("mov-periodo-a.xls"),
       "mov-periodo-a.xls",
@@ -199,7 +205,172 @@ describe("computeCardDebt — no millions", () => {
     );
     const debt = computeCardDebt(rows, { userId: "luciano" });
     assert.equal(debt.currentBalanceArs, 0);
-    assert.equal(debt.settled, true);
+    assert.equal(debt.settled, false);
+    assert.equal(debt.mode, "empty");
+  });
+
+  it("TEMBICI 140 from ultimos without last4 is an open charge, not settled", () => {
+    const rows: DebtTx[] = [
+      asTx(
+        {
+          date: "2026-05-06",
+          descriptionNormalized: "PENGUIN GALERIAS PACIF",
+          amountArs: 39000,
+          amountUsd: null,
+          installment: "4/6",
+          isPayment: false,
+          isCredit: false,
+          cardLast4: "7022",
+        },
+        "bbva_period",
+        "penguin",
+      ),
+      asTx(
+        {
+          date: "2026-08-23",
+          descriptionNormalized: "MERPAGO*TEMBICI",
+          amountArs: 140,
+          amountUsd: null,
+          installment: null,
+          isPayment: false,
+          isCredit: false,
+          cardLast4: null,
+        },
+        "bbva_xlsx",
+        "tembici",
+      ),
+    ];
+    const debt = computeCardDebt(rows, {
+      userId: "luciano",
+      settings: { cardLast4: "8958" },
+    });
+    assert.equal(debt.mode, "snapshot");
+    assert.equal(debt.settled, false);
+    assert.equal(debt.currentBalanceArs, 140);
+    assert.equal(debt.openCharges.length, 1);
+    assert.match(debt.openCharges[0]!.description, /TEMBICI/i);
+    assert.equal(
+      debt.openInstallments.some((p) => /PENGUIN/i.test(p.description)),
+      false,
+    );
+  });
+
+  it("keeps TEMBICI even if import stamped the other last4", () => {
+    const rows: DebtTx[] = [
+      asTx(
+        {
+          date: "2026-08-23",
+          descriptionNormalized: "MERPAGO*TEMBICI",
+          amountArs: 140,
+          amountUsd: null,
+          installment: null,
+          isPayment: false,
+          isCredit: false,
+          cardLast4: "7022",
+        },
+        "bbva_xlsx",
+        "tembici-stamped",
+      ),
+      asTx(
+        {
+          date: "2026-08-22",
+          descriptionNormalized: "GROK XAI",
+          amountArs: 10,
+          amountUsd: null,
+          installment: "3/3",
+          isPayment: false,
+          isCredit: false,
+          cardLast4: "8958",
+        },
+        "bbva_period",
+        "grok",
+      ),
+    ];
+    const debt = computeCardDebt(rows, {
+      userId: "luciano",
+      settings: { cardLast4: "8958" },
+    });
+    assert.equal(debt.settled, false);
+    assert.ok(debt.openCharges.some((c) => /TEMBICI/i.test(c.description)));
+    assert.equal(debt.currentBalanceArs, 140);
+  });
+
+  it("1.2M lifetime payments stay out of totalPaid (21d snapshot only)", () => {
+    const rows: DebtTx[] = [
+      asTx(
+        {
+          date: "2025-01-15",
+          descriptionNormalized: "SU PAGO EN PESOS",
+          amountArs: -1_200_000,
+          amountUsd: null,
+          installment: null,
+          isPayment: true,
+          isCredit: false,
+          cardLast4: "8958",
+        },
+        "bbva_period",
+        "old-pay",
+      ),
+      asTx(
+        {
+          date: "2025-03-01",
+          descriptionNormalized: "SU PAGO EN PESOS",
+          amountArs: -8_000_000,
+          amountUsd: null,
+          installment: null,
+          isPayment: true,
+          isCredit: false,
+          cardLast4: null,
+        },
+        "bbva_xlsx",
+        "old-snap-pay",
+      ),
+      asTx(
+        {
+          date: "2026-08-20",
+          descriptionNormalized: "SU PAGO EN PESOS",
+          amountArs: -5000,
+          amountUsd: null,
+          installment: null,
+          isPayment: true,
+          isCredit: false,
+          cardLast4: null,
+        },
+        "bbva_xlsx",
+        "recent-pay",
+      ),
+      asTx(
+        {
+          date: "2026-08-23",
+          descriptionNormalized: "MERPAGO*TEMBICI",
+          amountArs: 140,
+          amountUsd: null,
+          installment: null,
+          isPayment: false,
+          isCredit: false,
+          cardLast4: null,
+        },
+        "bbva_xlsx",
+        "tembici",
+      ),
+    ];
+    const debt = computeCardDebt(rows, { userId: "luciano" });
+    assert.equal(debt.mode, "snapshot");
+    assert.equal(debt.settled, false);
+    assert.equal(debt.totalPaidArs, 5000);
+    assert.ok(debt.totalPaidArs < 1_000_000);
+    assert.ok(!debt.payments.some((p) => Math.abs(p.amountArs ?? 0) >= 1_000_000));
+    assert.ok(debt.openCharges.some((c) => /TEMBICI/i.test(c.description)));
+  });
+
+  it("empty without snapshot is not false Saldada", () => {
+    const debt = computeCardDebt([], { userId: "luciano" });
+    assert.equal(debt.mode, "empty");
+    assert.equal(debt.settled, false);
+    assert.equal(debt.forceSettled, false);
+    assert.equal(debt.currentBalanceArs, 0);
+    assert.equal(debt.totalPaidArs, 0);
+    assert.equal(debt.openCharges.length, 0);
   });
 });
 

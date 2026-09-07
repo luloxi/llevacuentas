@@ -29,5 +29,25 @@ describe("card last4", () => {
       mine.some((r) => r.descriptionNormalized === "DIA TIENDA"),
       false,
     );
+    assert.equal(
+      mine.some((r) => r.descriptionNormalized === "MERPAGO*TEMBICI"),
+      true,
+    );
+  });
+
+  it("keeps untagged snapshot rows even when preferred last4 is set", () => {
+    const rows = [
+      { descriptionNormalized: "MERPAGO*ECOBICI", cardLast4: null },
+      { descriptionNormalized: "DIA TIENDA", cardLast4: "7022" },
+    ];
+    const mine = filterToPrimaryCard(rows, "8958");
+    assert.equal(
+      mine.some((r) => r.descriptionNormalized === "MERPAGO*ECOBICI"),
+      true,
+    );
+    assert.equal(
+      mine.some((r) => r.descriptionNormalized === "DIA TIENDA"),
+      false,
+    );
   });
 });
