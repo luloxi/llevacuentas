@@ -23,6 +23,7 @@ import {
   parseCasitaSeptiembreCsv,
   type CasitaSeptRow,
 } from "./septiembre-csv";
+import { seedCasitaHogarUtilitiesSmoke } from "./hogar-utilities-smoke";
 
 /**
  * Live/manual Casita alquiler/luz/agua on 2026-09-03 — covered by the
@@ -150,6 +151,8 @@ async function seedCasitaSeptiembre(user: AppUser): Promise<void> {
   // Sep3 service purge stays on Casita (live/manual hogar bills, not CSV).
   if (casitaId) {
     await purgeCasitaSep3ServicesCoveredByReintegro(casitaId);
+    // Shared Luz/Internet with real ARS for Cubierto smoke (hOlQBdhf).
+    await seedCasitaHogarUtilitiesSmoke(user, casitaId);
   }
 }
 

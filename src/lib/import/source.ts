@@ -178,6 +178,8 @@ export function statementTypeLabel(
     case "casita_csv":
       // Historic seed source code; never imply the whole bank extract is Casita.
       return withBank("Movimientos CSV", bankName ? undefined : "Fiwind");
+    case "casita_hogar_utilities":
+      return "Servicios hogar (Casita)";
     default:
       return bankName ? `Importación (${bankName})` : "Resumen / importación";
   }
