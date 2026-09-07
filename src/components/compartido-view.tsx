@@ -13,6 +13,7 @@ import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
 import { HogarSkeleton, PageStack, SegmentedControl } from "@/components/ui";
 import { HogarCharts } from "@/components/hogar-charts";
 import { HouseholdSwitcher } from "@/components/household-switcher";
+import { CreateHouseholdButton } from "@/components/create-household";
 import { CategoryIcon } from "@/lib/category-icons";
 import { colorForCategory } from "@/lib/category-colors";
 import {
@@ -360,6 +361,7 @@ export function CompartidoView() {
             {householdName || "Hogar"}
           </h1>
           <HouseholdSwitcher />
+          <CreateHouseholdButton />
           {inviteCode && (
             <button
               type="button"

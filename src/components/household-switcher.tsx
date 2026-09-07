@@ -54,6 +54,18 @@ export function HouseholdSwitcher({ variant = "page", className }: Props) {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    function onHouseholdChange() {
+      void load();
+    }
+    window.addEventListener("lc:household-switched", onHouseholdChange);
+    window.addEventListener("lc:household-created", onHouseholdChange);
+    return () => {
+      window.removeEventListener("lc:household-switched", onHouseholdChange);
+      window.removeEventListener("lc:household-created", onHouseholdChange);
+    };
+  }, [load]);
+
   async function switchTo(householdId: string) {
     if (!householdId || householdId === activeId || busy) return;
     setBusy(true);

@@ -38,9 +38,13 @@ export async function POST(req: Request) {
       if (ctx) await writePreferredHouseholdId(ctx.household.id);
       return NextResponse.json({ household: ctx });
     }
+    const additional = body.additional === true;
     const ctx = await createHousehold(
       sessionUser.id,
-      body.name || "Mi espacio",
+      typeof body.name === "string" && body.name.trim()
+        ? body.name.trim()
+        : "Mi espacio",
+      additional ? { additional: true } : undefined,
     );
     if (ctx) await writePreferredHouseholdId(ctx.household.id);
     return NextResponse.json({ household: ctx });
