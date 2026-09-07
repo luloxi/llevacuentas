@@ -23,7 +23,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const periodParam = searchParams.get("period"); // YYYY-MM | "all" | null (latest)
     const ownershipRaw = searchParams.get("ownership");
-    let ownershipFilter =
+    let ownershipFilter: "all" | "personal" | "shared" =
       ownershipRaw === "personal" || ownershipRaw === "shared"
         ? ownershipRaw
         : "all";
