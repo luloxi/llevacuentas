@@ -16,6 +16,13 @@ export async function GET(req: Request) {
   if ("error" in authResult) return authResult.error;
   const { user: sessionUser } = authResult;
   try {
+    // Ensure IOG↔Casita links exist before listing (idempotent; also runs on login).
+    if (authResult.authKind === "session") {
+      const { ensureInvoiceIogCasitaMatchesForUser } = await import(
+        "@/lib/invoice-iog/match-casita"
+      );
+      await ensureInvoiceIogCasitaMatchesForUser(sessionUser);
+    }
     const ctx = await requireHousehold(sessionUser.id);
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period") ?? undefined;
