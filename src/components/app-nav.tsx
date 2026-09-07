@@ -7,7 +7,6 @@ import {
   List,
   Users,
   LogOut,
-  Shield,
   Plus,
   Banknote,
   Upload,
@@ -34,7 +33,7 @@ function openAddExpense() {
   window.dispatchEvent(new Event("lc:open-add-expense"));
 }
 
-export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
+export function AppNav() {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -48,11 +47,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
     router.refresh();
   }
 
-  const desktopLinks = isAdmin
-    ? [...links, { href: "/admin", label: "Admin", icon: Shield }]
-    : links;
-
-  // Inicio · Consumos · Cargas | + | Ingresos · Hogar
+  // Inicio · Consumos · Cargas | + | Ingresos · Hogar — Admin solo por URL /admin
   const left = links.slice(0, 3);
   const right = links.slice(3);
 
@@ -71,7 +66,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
             <span className="text-[15px] tracking-tight">LlevaCuentas</span>
           </Link>
           <nav className="flex items-center gap-1">
-            {desktopLinks.map(({ href, label, icon: Icon }) => {
+            {links.map(({ href, label, icon: Icon }) => {
               const active = pathname.startsWith(href);
               return (
                 <Link
