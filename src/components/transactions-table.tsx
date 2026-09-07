@@ -54,6 +54,22 @@ function categoryLabel(name?: string | null) {
   return name.toLowerCase() === "uncategorized" ? "Sin categoría" : name;
 }
 
+/** Amber IOG pill — keep shrink-0 so truncate never eats it. */
+function IogBadge({ size = "md" }: { size?: "sm" | "md" }) {
+  return (
+    <span
+      className={
+        size === "sm"
+          ? "shrink-0 rounded-full bg-amber-600/90 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white dark:bg-amber-300 dark:text-amber-950"
+          : "shrink-0 rounded-full bg-amber-600/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-amber-300 dark:text-amber-950"
+      }
+      title="Vinculado a Invoice IOG — no cuenta en la neta"
+    >
+      IOG
+    </span>
+  );
+}
+
 function hasAnyAmount(t: { amountArs: number | null; amountUsd: number | null }) {
   return (
     (t.amountArs != null && Number.isFinite(t.amountArs) && Math.abs(t.amountArs) > 0) ||
@@ -129,6 +145,7 @@ export function TransactionsTable() {
   const [categoryF, setCategoryF] = useState<CategoryFilter>("all");
   const [ticketF, setTicketF] = useState<TicketFilter>("all");
   const [currencyF, setCurrencyF] = useState<CurrencyFilter>("all");
+  const [iogOnly, setIogOnly] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -148,6 +165,7 @@ export function TransactionsTable() {
     categoryF !== "all",
     ticketF !== "all",
     currencyF !== "all",
+    iogOnly,
   ].filter(Boolean).length;
 
   useEffect(() => {
@@ -242,6 +260,11 @@ export function TransactionsTable() {
     return () => window.removeEventListener("lc:expense-created", onCreated);
   }, [load]);
 
+  const linkedIogCount = useMemo(
+    () => rows.filter((r) => r.linkedToInvoiceIog).length,
+    [rows],
+  );
+
   const sorted = useMemo(() => {
     let list = [...rows];
     if (ownershipF !== "all") list = list.filter((t) => t.ownership === ownershipF);
@@ -251,9 +274,16 @@ export function TransactionsTable() {
     else if (ticketF === "no-ticket") list = list.filter((t) => !t.hasTicket);
     if (currencyF === "ars") list = list.filter((t) => t.amountArs != null && t.amountArs > 0);
     else if (currencyF === "usd") list = list.filter((t) => t.amountUsd != null && t.amountUsd > 0);
-    list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    if (iogOnly) list = list.filter((t) => t.linkedToInvoiceIog);
+    // Pin Casita↔Invoice IOG links to the top so badges are on page 1 (hint uses all rows).
+    list.sort((a, b) => {
+      const aIog = a.linkedToInvoiceIog ? 1 : 0;
+      const bIog = b.linkedToInvoiceIog ? 1 : 0;
+      if (aIog !== bIog) return bIog - aIog;
+      return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+    });
     return list;
-  }, [rows, ownershipF, categoryF, ticketF, currencyF]);
+  }, [rows, ownershipF, categoryF, ticketF, currencyF, iogOnly]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -263,7 +293,7 @@ export function TransactionsTable() {
   }, [sorted, safePage, pageSize]);
 
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
-  useEffect(() => { setPage(1); }, [ownershipF, categoryF, ticketF, currencyF]);
+  useEffect(() => { setPage(1); }, [ownershipF, categoryF, ticketF, currencyF, iogOnly]);
 
   async function patch(id: string, body: Record<string, unknown>) {
     setError(null); setSavingId(id);
@@ -382,6 +412,7 @@ export function TransactionsTable() {
     setCategoryF("all");
     setTicketF("all");
     setCurrencyF("all");
+    setIogOnly(false);
   }
 
   const periods = allPeriods.length
@@ -555,6 +586,16 @@ export function TransactionsTable() {
                     <Chip active={currencyF === "usd"} onClick={() => setCurrencyF("usd")}>Dólares</Chip>
                   </div>
                 </div>
+
+                {linkedIogCount > 0 && (
+                  <div>
+                    <p className="mb-1.5 text-[11px] font-semibold text-zinc-500">Invoice IOG</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Chip active={!iogOnly} onClick={() => setIogOnly(false)}>Todos</Chip>
+                      <Chip active={iogOnly} onClick={() => setIogOnly(true)}>Solo IOG</Chip>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -589,6 +630,12 @@ export function TransactionsTable() {
               <button type="button" onClick={() => setCurrencyF("all")} aria-label="Quitar"><X className="h-3 w-3" /></button>
             </span>
           )}
+          {iogOnly && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-950/60 dark:text-amber-100">
+              Solo IOG
+              <button type="button" onClick={() => setIogOnly(false)} aria-label="Quitar"><X className="h-3 w-3" /></button>
+            </span>
+          )}
         </div>
       )}
 
@@ -602,10 +649,26 @@ export function TransactionsTable() {
         />
       </div>
 
-      {rows.some((r) => r.linkedToInvoiceIog) && (
-        <p className="rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100">
-          Vinculados a Invoice IOG — no cuentan en la neta
-        </p>
+      {linkedIogCount > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100">
+          <p className="min-w-0 flex-1">
+            <span className="font-semibold tabular-nums">{linkedIogCount}</span>
+            {" "}
+            vinculado{linkedIogCount === 1 ? "" : "s"} a Invoice IOG — no cuentan en la neta
+          </p>
+          <button
+            type="button"
+            onClick={() => setIogOnly((v) => !v)}
+            className={
+              iogOnly
+                ? "shrink-0 rounded-full bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white dark:bg-amber-300 dark:text-amber-950"
+                : "shrink-0 rounded-full border border-amber-300/80 bg-white/70 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-100 dark:hover:bg-amber-900/50"
+            }
+            aria-pressed={iogOnly}
+          >
+            Solo IOG
+          </button>
+        </div>
       )}
 
       {error && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
@@ -664,10 +727,10 @@ export function TransactionsTable() {
                 <li key={r.id} className={cn("rounded-2xl border p-3.5", isTicket ? "lc-ticket" : "border-[var(--border)] bg-[var(--surface)]")}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
+                      <div className="flex min-w-0 items-center gap-1.5">
                         <span className="truncate text-sm font-semibold">{r.descriptionNormalized}</span>
-                        {isTicket && <span className="rounded-full bg-violet-600 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white dark:bg-violet-300 dark:text-violet-950">Ticket</span>}
-                        {r.linkedToInvoiceIog && <span className="rounded-full bg-amber-600/90 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white dark:bg-amber-300 dark:text-amber-950">IOG</span>}
+                        {isTicket && <span className="shrink-0 rounded-full bg-violet-600 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white dark:bg-violet-300 dark:text-violet-950">Ticket</span>}
+                        {r.linkedToInvoiceIog && <IogBadge size="sm" />}
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
                         <input
@@ -685,6 +748,11 @@ export function TransactionsTable() {
                       </div>
                     </div>
                     <div className="shrink-0 space-y-1 text-right">
+                      {r.linkedToInvoiceIog && (
+                        <div className="mb-0.5 flex justify-end">
+                          <IogBadge size="sm" />
+                        </div>
+                      )}
                       <label className="flex items-center justify-end gap-1">
                         <span className="text-[10px] font-medium text-zinc-400">$</span>
                         <input
@@ -824,28 +892,33 @@ export function TransactionsTable() {
                           />
                         </td>
                         <td className="max-w-xs px-3 py-2">
-                          <span className="truncate font-medium">{r.descriptionNormalized}</span>
-                          {isTicket && <span className="ml-1.5 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold uppercase text-white dark:bg-violet-300 dark:text-violet-950">Ticket</span>}
-                          {r.linkedToInvoiceIog && <span className="ml-1.5 rounded-full bg-amber-600/90 px-2 py-0.5 text-[10px] font-semibold uppercase text-white dark:bg-amber-300 dark:text-amber-950">IOG</span>}
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate font-medium">{r.descriptionNormalized}</span>
+                            {isTicket && <span className="shrink-0 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold uppercase text-white dark:bg-violet-300 dark:text-violet-950">Ticket</span>}
+                            {r.linkedToInvoiceIog && <IogBadge />}
+                          </div>
                           {r.installment && <div className="text-xs text-zinc-500">cuota {r.installment}</div>}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 tabular-nums">
-                          <input
-                            key={`${r.id}-desk-ars-${r.amountArs ?? "∅"}`}
-                            type="number"
-                            step="0.01"
-                            inputMode="decimal"
-                            defaultValue={r.amountArs ?? ""}
-                            placeholder={hasAnyAmount(r) ? undefined : "sin monto"}
-                            disabled={savingId === r.id}
-                            onBlur={(e) => {
-                              const next = nextAmountOnBlur(e.target.value, r.amountArs, r.amountUsd);
-                              if (next === undefined) return;
-                              if (next !== r.amountArs) void patch(r.id, { amountArs: next });
-                            }}
-                            className="lc-input w-[7.5rem] !px-1.5 !py-1 text-right text-sm tabular-nums placeholder:text-[10px] placeholder:font-normal placeholder:text-zinc-400"
-                            aria-label="Monto en pesos"
-                          />
+                          <div className="inline-flex items-center gap-1.5">
+                            {r.linkedToInvoiceIog && <IogBadge />}
+                            <input
+                              key={`${r.id}-desk-ars-${r.amountArs ?? "∅"}`}
+                              type="number"
+                              step="0.01"
+                              inputMode="decimal"
+                              defaultValue={r.amountArs ?? ""}
+                              placeholder={hasAnyAmount(r) ? undefined : "sin monto"}
+                              disabled={savingId === r.id}
+                              onBlur={(e) => {
+                                const next = nextAmountOnBlur(e.target.value, r.amountArs, r.amountUsd);
+                                if (next === undefined) return;
+                                if (next !== r.amountArs) void patch(r.id, { amountArs: next });
+                              }}
+                              className="lc-input w-[7.5rem] !px-1.5 !py-1 text-right text-sm tabular-nums placeholder:text-[10px] placeholder:font-normal placeholder:text-zinc-400"
+                              aria-label="Monto en pesos"
+                            />
+                          </div>
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 tabular-nums">
                           <input
