@@ -37,11 +37,16 @@ export function ConsumosWorkspace() {
       setToast("Importación lista.");
       setTableKey((k) => k + 1);
     }
+    function onHouseholdSwitched() {
+      setTableKey((k) => k + 1);
+    }
     window.addEventListener("lc:expense-created", onCreated);
     window.addEventListener("lc:card-imported", onImported);
+    window.addEventListener("lc:household-switched", onHouseholdSwitched);
     return () => {
       window.removeEventListener("lc:expense-created", onCreated);
       window.removeEventListener("lc:card-imported", onImported);
+      window.removeEventListener("lc:household-switched", onHouseholdSwitched);
     };
   }, []);
 

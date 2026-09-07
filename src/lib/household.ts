@@ -3,6 +3,8 @@ import { customAlphabet } from "nanoid";
 import { getDb, schema } from "@/lib/db";
 import { ensureSchema } from "@/lib/db/ensure-schema";
 import { CATEGORY_SEEDS } from "@/lib/categorize/rules";
+import { readPreferredHouseholdId } from "@/lib/household-cookie";
+import { pickActiveHouseholdId } from "@/lib/household-select";
 import type { AppUser } from "@/lib/session";
 
 const inviteCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
@@ -55,24 +57,63 @@ export type HouseholdContext = {
   }>;
 };
 
-export async function getUserHousehold(
+export type HouseholdListItem = {
+  id: string;
+  name: string;
+  role: "owner" | "member";
+  joinedAt: Date;
+};
+
+export async function listUserHouseholds(
   userId: string,
-): Promise<HouseholdContext | null> {
+): Promise<HouseholdListItem[]> {
   await ensureSchema();
   const db = getDb();
-  const [membership] = await db
-    .select()
+  const rows = await db
+    .select({
+      id: schema.households.id,
+      name: schema.households.name,
+      role: schema.householdMembers.role,
+      joinedAt: schema.householdMembers.joinedAt,
+    })
     .from(schema.householdMembers)
-    .where(eq(schema.householdMembers.userId, userId))
-    .limit(1);
-  if (!membership) return null;
+    .innerJoin(
+      schema.households,
+      eq(schema.households.id, schema.householdMembers.householdId),
+    )
+    .where(eq(schema.householdMembers.userId, userId));
 
+  return rows.sort((a, b) => {
+    const at = a.joinedAt ? a.joinedAt.getTime() : 0;
+    const bt = b.joinedAt ? b.joinedAt.getTime() : 0;
+    if (at !== bt) return at - bt;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+async function loadHouseholdContext(
+  householdId: string,
+  userId: string,
+): Promise<HouseholdContext | null> {
+  const db = getDb();
   const [household] = await db
     .select()
     .from(schema.households)
-    .where(eq(schema.households.id, membership.householdId))
+    .where(eq(schema.households.id, householdId))
     .limit(1);
   if (!household) return null;
+
+  const [membership] = await db
+    .select()
+    .from(schema.householdMembers)
+    .where(
+      and(
+        eq(schema.householdMembers.householdId, householdId),
+        eq(schema.householdMembers.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!membership) return null;
 
   const members = await db
     .select({
@@ -88,6 +129,26 @@ export async function getUserHousehold(
     .where(eq(schema.householdMembers.householdId, household.id));
 
   return { household, membership, members };
+}
+
+export async function getUserHousehold(
+  userId: string,
+  preferredHouseholdId?: string | null,
+): Promise<HouseholdContext | null> {
+  await ensureSchema();
+  const list = await listUserHouseholds(userId);
+  if (list.length === 0) return null;
+
+  const preferred =
+    preferredHouseholdId != null
+      ? preferredHouseholdId
+      : await readPreferredHouseholdId();
+  const id = pickActiveHouseholdId(
+    list.map((h) => ({ householdId: h.id, joinedAt: h.joinedAt })),
+    preferred,
+  );
+  if (!id) return null;
+  return loadHouseholdContext(id, userId);
 }
 
 /** Load a household by id (token-bound scope). Null if missing or empty. */
@@ -161,12 +222,18 @@ export async function pickHouseholdActingUser(
   };
 }
 
-export async function createHousehold(userId: string, name = "Mi espacio") {
+export async function createHousehold(
+  userId: string,
+  name = "Mi espacio",
+  opts?: { additional?: boolean },
+) {
   await ensureCategoriesSeeded();
   const db = getDb();
 
-  const existing = await getUserHousehold(userId);
-  if (existing) return existing;
+  if (!opts?.additional) {
+    const existing = await getUserHousehold(userId);
+    if (existing) return existing;
+  }
 
   const [household] = await db
     .insert(schema.households)
@@ -179,14 +246,17 @@ export async function createHousehold(userId: string, name = "Mi espacio") {
     role: "owner",
   });
 
-  return getUserHousehold(userId);
+  return getUserHousehold(userId, household.id);
 }
 
 /** Leave current household if the user is the only member (solo space). */
-export async function leaveSoloHousehold(userId: string) {
+export async function leaveSoloHousehold(
+  userId: string,
+  householdIdHint?: string,
+) {
   await ensureSchema();
   const db = getDb();
-  const existing = await getUserHousehold(userId);
+  const existing = await getUserHousehold(userId, householdIdHint);
   if (!existing) return;
 
   if (existing.members.length > 1) {
@@ -215,22 +285,29 @@ export async function joinHousehold(userId: string, code: string) {
   await ensureCategoriesSeeded();
   const db = getDb();
 
-  const existing = await getUserHousehold(userId);
-  if (existing) {
-    if (existing.members.length > 1) {
-      throw new Error(
-        "Ya pertenecés a un hogar compartido. Por ahora solo uno por usuario.",
-      );
-    }
-    await leaveSoloHousehold(userId);
-  }
-
   const [household] = await db
     .select()
     .from(schema.households)
     .where(eq(schema.households.inviteCode, code.toUpperCase().trim()))
     .limit(1);
   if (!household) throw new Error("Código de invitación inválido");
+
+  const already = await listUserHouseholds(userId);
+  if (already.some((h) => h.id === household.id)) {
+    return getUserHousehold(userId, household.id);
+  }
+
+  // Empty onboarding solo space can be replaced; Casita is never dropped.
+  if (already.length === 1) {
+    const current = await getUserHousehold(userId, already[0]!.id);
+    if (
+      current &&
+      current.members.length === 1 &&
+      current.household.name === "Mi espacio"
+    ) {
+      await leaveSoloHousehold(userId, already[0]!.id);
+    }
+  }
 
   const count = await db
     .select({ c: sql<number>`count(*)::int` })
@@ -249,11 +326,25 @@ export async function joinHousehold(userId: string, code: string) {
     role: "member",
   });
 
-  return getUserHousehold(userId);
+  return getUserHousehold(userId, household.id);
 }
 
-export async function requireHousehold(userId: string) {
-  const ctx = await getUserHousehold(userId);
+type HouseholdAuth = {
+  user: { id: string };
+  householdId?: string | null;
+};
+
+export async function requireHousehold(
+  userIdOrAuth: string | HouseholdAuth,
+  preferredHouseholdId?: string | null,
+) {
+  const userId =
+    typeof userIdOrAuth === "string" ? userIdOrAuth : userIdOrAuth.user.id;
+  const preferred =
+    typeof userIdOrAuth === "string"
+      ? preferredHouseholdId
+      : (userIdOrAuth.householdId ?? preferredHouseholdId);
+  const ctx = await getUserHousehold(userId, preferred);
   if (!ctx) throw new Error("NO_HOUSEHOLD");
   return ctx;
 }

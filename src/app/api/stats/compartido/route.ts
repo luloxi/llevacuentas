@@ -9,6 +9,7 @@ import {
 } from "@/lib/fx/month-end-rates";
 import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
 import { currentPeriodAr, periodFromDateString } from "@/lib/utils";
+import { splitExpenseAmounts } from "@/lib/stats/monthly-expenses";
 
 function prevPeriodOf(period: string): string {
   const [y, m] = period.split("-").map(Number);
@@ -98,9 +99,8 @@ export async function GET(req: Request) {
 
     function combinedOf(r: (typeof rows)[0], p: string): number {
       const rate = rates.get(p)?.buy ?? 0;
-      const ars = r.amountArs != null ? Math.abs(Number(r.amountArs)) : 0;
-      const usd = r.amountUsd != null ? Math.abs(Number(r.amountUsd)) : 0;
-      return ars + convertUsdToArs(usd, rate);
+      const split = splitExpenseAmounts(r.amountArs, r.amountUsd);
+      return split.amountArs + convertUsdToArs(split.amountUsd, rate);
     }
 
     let prevTotal = 0;

@@ -173,6 +173,8 @@ export function statementTypeLabel(
       return withBank("Resumen PDF (IA)");
     case "transparencia_xlsx":
       return "Transparencia Excel";
+    case "invoice_iog":
+      return "Invoice IOG";
     default:
       return bankName ? `Importación (${bankName})` : "Resumen / importación";
   }

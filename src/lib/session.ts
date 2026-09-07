@@ -105,5 +105,9 @@ export async function requireUser(): Promise<AppUser> {
   if (s.status === "forbidden") redirect("/login?error=forbidden");
   if (s.status !== "ok") redirect("/login");
   await syncUser(s.user);
+  if (hasDatabase()) {
+    const { ensureInvoiceIogForUser } = await import("@/lib/invoice-iog/seed");
+    await ensureInvoiceIogForUser(s.user);
+  }
   return s.user;
 }

@@ -28,6 +28,8 @@ import {
   CandlestickChart,
   Sparkles,
   Send,
+  Cpu,
+  Calendar,
 } from "lucide-react";
 
 /** Icon per category slug — inventory-style markers for fast visual scan. */
@@ -59,6 +61,11 @@ const ICONS: Record<string, LucideIcon> = {
   agua: Droplets,
   gas: Flame,
   internet: Router,
+  "herramientas-ai": Bot,
+  "infra-cloud": Server,
+  "eventos-extras": Calendar,
+  movilidad: Car,
+  hardware: Cpu,
 };
 
 export function iconForCategory(slug: string | null | undefined): LucideIcon {

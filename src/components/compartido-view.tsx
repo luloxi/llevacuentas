@@ -12,6 +12,7 @@ import {
 import { formatPeriodLabel, formatPeriodShort } from "@/lib/period-label";
 import { HogarSkeleton, PageStack, SegmentedControl } from "@/components/ui";
 import { HogarCharts } from "@/components/hogar-charts";
+import { HouseholdSwitcher } from "@/components/household-switcher";
 import { CategoryIcon } from "@/lib/category-icons";
 import { colorForCategory } from "@/lib/category-colors";
 import {
@@ -197,9 +198,11 @@ export function CompartidoView() {
     }
     window.addEventListener("lc:expense-created", onCreated);
     window.addEventListener("lc:card-imported", onCreated);
+    window.addEventListener("lc:household-switched", onCreated);
     return () => {
       window.removeEventListener("lc:expense-created", onCreated);
       window.removeEventListener("lc:card-imported", onCreated);
+      window.removeEventListener("lc:household-switched", onCreated);
     };
   }, []);
 
@@ -356,6 +359,7 @@ export function CompartidoView() {
           <h1 className="min-w-0 truncate text-[1.65rem] font-semibold tracking-tight">
             {householdName || "Hogar"}
           </h1>
+          <HouseholdSwitcher />
           {inviteCode && members.length >= 2 && (
             <button
               type="button"

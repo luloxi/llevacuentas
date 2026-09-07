@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth/client";
 import { BrandLogo } from "@/components/brand-logo";
+import { HouseholdSwitcher } from "@/components/household-switcher";
 import { NAV_LINKS, type NavHref } from "@/lib/nav";
 
 const NAV_ICONS: Record<NavHref, typeof Home> = {
@@ -66,6 +67,7 @@ export function AppNav() {
             <span className="text-[15px] tracking-tight">LlevaCuentas</span>
           </Link>
           <nav className="flex items-center gap-1">
+            <HouseholdSwitcher variant="header" className="mr-1" />
             {links.map(({ href, label, icon: Icon }) => {
               const active = pathname.startsWith(href);
               return (

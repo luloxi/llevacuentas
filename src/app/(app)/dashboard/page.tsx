@@ -5,7 +5,10 @@ import { redirect } from "next/navigation";
 import { getDb, schema } from "@/lib/db";
 import { eq } from "drizzle-orm";
 import { DashboardHome } from "@/components/dashboard-home";
-import { isExpenseRow } from "@/lib/stats/monthly-expenses";
+import {
+  isExpenseRow,
+  splitExpenseAmounts,
+} from "@/lib/stats/monthly-expenses";
 import {
   convertUsdToArs,
   getMonthEndBuyRates,
@@ -105,8 +108,9 @@ export default async function DashboardPage() {
     let ars = 0;
     let usd = 0;
     for (const t of list) {
-      if (t.amountArs != null) ars += Math.abs(Number(t.amountArs));
-      if (t.amountUsd != null) usd += Math.abs(Number(t.amountUsd));
+      const split = splitExpenseAmounts(t.amountArs, t.amountUsd);
+      ars += split.amountArs;
+      usd += split.amountUsd;
     }
     return ars + convertUsdToArs(usd, buyRate);
   }
@@ -166,9 +170,9 @@ export default async function DashboardPage() {
   const byCat = new Map<string, number>();
   for (const t of monthTx) {
     const id = t.categoryId ?? "none";
-    const ars = t.amountArs != null ? Math.abs(Number(t.amountArs)) : 0;
-    const usd = t.amountUsd != null ? Math.abs(Number(t.amountUsd)) : 0;
-    const amt = ars + convertUsdToArs(usd, rateNow);
+    const split = splitExpenseAmounts(t.amountArs, t.amountUsd);
+    const amt =
+      split.amountArs + convertUsdToArs(split.amountUsd, rateNow);
     byCat.set(id, (byCat.get(id) ?? 0) + amt);
   }
   const sorted = [...byCat.entries()]

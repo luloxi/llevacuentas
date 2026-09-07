@@ -41,6 +41,24 @@ export function toNumber(
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * usd + arsLiq on the same row is one expense in two currencies.
+ * Do not add them; keep USD and skip the ARS equivalent.
+ */
+export function splitExpenseAmounts(
+  amountArs: string | number | null | undefined,
+  amountUsd: string | number | null | undefined,
+): { amountArs: number; amountUsd: number } {
+  const ars = toNumber(amountArs);
+  const usd = toNumber(amountUsd);
+  const arsAbs = ars != null ? Math.abs(ars) : 0;
+  const usdAbs = usd != null ? Math.abs(usd) : 0;
+  if (arsAbs > 0 && usdAbs > 0) {
+    return { amountArs: 0, amountUsd: usdAbs };
+  }
+  return { amountArs: arsAbs, amountUsd: usdAbs };
+}
+
 /** Real consumption only: skip card payments, credits, bank accounting, and period xls. */
 export function isExpenseRow(r: {
   isPayment: boolean;
@@ -90,10 +108,9 @@ export function aggregateByPeriod(
       count: 0,
       categoryId: r.categoryId ?? null,
     };
-    const ars = toNumber(r.amountArs);
-    const usd = toNumber(r.amountUsd);
-    cur.amountArs += ars != null ? Math.abs(ars) : 0;
-    cur.amountUsd += usd != null ? Math.abs(usd) : 0;
+    const split = splitExpenseAmounts(r.amountArs, r.amountUsd);
+    cur.amountArs += split.amountArs;
+    cur.amountUsd += split.amountUsd;
     cur.count += 1;
     map.set(key, cur);
   }
@@ -196,10 +213,9 @@ export function aggregateByBank(rows: ExpenseTx[]): BankAgg[] {
       amountUsd: 0,
       count: 0,
     };
-    const ars = toNumber(r.amountArs);
-    const usd = toNumber(r.amountUsd);
-    cur.amountArs += ars != null ? Math.abs(ars) : 0;
-    cur.amountUsd += usd != null ? Math.abs(usd) : 0;
+    const split = splitExpenseAmounts(r.amountArs, r.amountUsd);
+    cur.amountArs += split.amountArs;
+    cur.amountUsd += split.amountUsd;
     cur.count += 1;
     map.set(bank, cur);
   }

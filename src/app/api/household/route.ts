@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { createHousehold, getUserHousehold, joinHousehold } from "@/lib/household";
+import { writePreferredHouseholdId } from "@/lib/household-cookie";
 
 export async function GET() {
   const authResult = await requireApiUser();
@@ -34,12 +35,14 @@ export async function POST(req: Request) {
     const body = await req.json();
     if (body.action === "join") {
       const ctx = await joinHousehold(sessionUser.id, body.code);
+      if (ctx) await writePreferredHouseholdId(ctx.household.id);
       return NextResponse.json({ household: ctx });
     }
     const ctx = await createHousehold(
       sessionUser.id,
       body.name || "Mi espacio",
     );
+    if (ctx) await writePreferredHouseholdId(ctx.household.id);
     return NextResponse.json({ household: ctx });
   } catch (e) {
     return NextResponse.json(
