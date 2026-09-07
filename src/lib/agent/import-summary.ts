@@ -48,10 +48,10 @@ export function summarizeParsedMovements(
   for (const m of movements) {
     const accounting = isBankAccountingEntry(m.descriptionNormalized);
     if (m.isPayment) paymentCount += 1;
-    else if (accounting) accountingCount += 1;
+    else if (m.isCredit || accounting) accountingCount += 1;
     else expenseCount += 1;
 
-    if (m.isPayment || accounting) continue;
+    if (m.isPayment || m.isCredit || accounting) continue;
 
     const period = periodFromDateString(m.date);
     const cur = byPeriod.get(period) ?? {

@@ -23,6 +23,7 @@ import { formatPeriodLabel, formatPeriodShort, isCurrentCalendarMonth } from "@/
 import { CategoryIcon } from "@/lib/category-icons";
 import { colorForCategory } from "@/lib/category-colors";
 import { useTheme } from "@/components/theme-provider";
+import { DEUDA_ENABLED } from "@/lib/features";
 
 type CategorySummary = {
   id: string;
@@ -60,14 +61,9 @@ const SKIPPED_SERVICES_KEY = "lc:hogar-skipped-services";
 const HOME_ORDER_KEY = "lc:home-order";
 const HOME_HIDDEN_KEY = "lc:home-hidden";
 
-const DEFAULT_ORDER: HomeSectionId[] = [
-  "gastos",
-  "categorias",
-  "ahorros",
-  "hogar",
-  "deuda",
-  "cotizaciones",
-];
+const DEFAULT_ORDER: HomeSectionId[] = DEUDA_ENABLED
+  ? ["gastos", "categorias", "ahorros", "hogar", "deuda", "cotizaciones"]
+  : ["gastos", "categorias", "ahorros", "hogar", "cotizaciones"];
 
 const SECTION_LABELS: Record<HomeSectionId, string> = {
   gastos: "Neta del mes",
@@ -106,7 +102,7 @@ function loadOrder(): HomeSectionId[] {
     for (const id of DEFAULT_ORDER) {
       if (!valid.includes(id)) valid.push(id);
     }
-    return valid;
+    return DEUDA_ENABLED ? valid : valid.filter((id) => id !== "deuda");
   } catch {
     return DEFAULT_ORDER;
   }

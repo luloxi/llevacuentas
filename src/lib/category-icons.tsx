@@ -24,6 +24,10 @@ import {
   Droplets,
   Flame,
   Router,
+  ArrowLeftRight,
+  CandlestickChart,
+  Sparkles,
+  Send,
 } from "lucide-react";
 
 /** Icon per category slug — inventory-style markers for fast visual scan. */
@@ -46,6 +50,10 @@ const ICONS: Record<string, LucideIcon> = {
   uncategorized: HelpCircle,
   pagos: CreditCard,
   "intereses-cargos": Percent,
+  conversiones: ArrowLeftRight,
+  "crypto-inversiones": CandlestickChart,
+  rendimientos: Sparkles,
+  envios: Send,
   alquiler: Home,
   luz: Zap,
   agua: Droplets,

@@ -1,3 +1,8 @@
+import {
+  exactFiwindMerchantSlug,
+  extractFiwindMerchant,
+} from "@/lib/import/fiwind";
+
 export type CategorySeed = {
   slug: string;
   name: string;
@@ -42,6 +47,38 @@ export const CATEGORY_SEEDS: CategorySeed[] = [
       "CREDITOS VS EN USD",
     ],
     priority: 90,
+  },
+  {
+    slug: "conversiones",
+    name: "Conversiones",
+    kind: "interest",
+    defaultOwnership: "personal",
+    patterns: ["CONVERSIÓN", "CONVERSION"],
+    priority: 95,
+  },
+  {
+    slug: "crypto-inversiones",
+    name: "Crypto / inversiones",
+    kind: "interest",
+    defaultOwnership: "personal",
+    patterns: ["COMPRA KO", "VENTA KO"],
+    priority: 95,
+  },
+  {
+    slug: "rendimientos",
+    name: "Rendimientos",
+    kind: "interest",
+    defaultOwnership: "personal",
+    patterns: ["GANANCIA DIARIA", "RENDIMIENTO BONIFICADO"],
+    priority: 95,
+  },
+  {
+    slug: "envios",
+    name: "Envíos",
+    kind: "expense",
+    defaultOwnership: "personal",
+    patterns: ["RETIRO A "],
+    priority: 40,
   },
   {
     slug: "alquiler",
@@ -107,6 +144,7 @@ export const CATEGORY_SEEDS: CategorySeed[] = [
     defaultOwnership: "shared",
     patterns: [
       "DIA TIENDA",
+      "PAGO A DIA",
       "COTO",
       "EXPRESS AV",
       "SUPERCHANGO",
@@ -150,6 +188,9 @@ export const CATEGORY_SEEDS: CategorySeed[] = [
       "TEMBICI",
       "SUBE",
       "BA MOVILIDAD",
+      "YPF",
+      "SHELL",
+      "AXION",
     ],
     priority: 70,
   },
@@ -303,13 +344,12 @@ export type CategoryMatch = {
   defaultOwnership: "personal" | "shared";
 };
 
-export function matchCategory(description: string): CategoryMatch {
-  const u = description.toUpperCase();
+function matchAgainst(text: string): CategoryMatch | null {
+  const u = text.toUpperCase();
   const sorted = [...CATEGORY_SEEDS].sort((a, b) => b.priority - a.priority);
   for (const cat of sorted) {
     for (const p of cat.patterns) {
       if (p.includes("%")) {
-        // simple wildcard: DIA %
         const [prefix] = p.split("%");
         if (u.includes(prefix.toUpperCase())) {
           return {
@@ -329,12 +369,35 @@ export function matchCategory(description: string): CategoryMatch {
       }
     }
   }
-  return {
+  return null;
+}
+
+export function matchCategory(description: string): CategoryMatch {
+  const uncategorized: CategoryMatch = {
     slug: "uncategorized",
     name: "Uncategorized",
     kind: "expense",
     defaultOwnership: "personal",
   };
+
+  const exactSlug = exactFiwindMerchantSlug(description);
+  if (exactSlug) {
+    const cat = CATEGORY_SEEDS.find((c) => c.slug === exactSlug);
+    if (cat) {
+      return {
+        slug: cat.slug,
+        name: cat.name,
+        kind: cat.kind,
+        defaultOwnership: cat.defaultOwnership,
+      };
+    }
+  }
+
+  const merchant = extractFiwindMerchant(description);
+  const hit =
+    matchAgainst(description) ??
+    (merchant !== description ? matchAgainst(merchant) : null);
+  return hit ?? uncategorized;
 }
 
 /** Normalize legacy Transparencia category names to slugs */
@@ -373,6 +436,12 @@ export function categoryNameToSlug(name: string): string {
     "hogar / servicios": "uncategorized",
     videojuegos: "streaming",
     alquiler: "alquiler",
+    conversiones: "conversiones",
+    "crypto / inversiones": "crypto-inversiones",
+    "crypto-inversiones": "crypto-inversiones",
+    rendimientos: "rendimientos",
+    envíos: "envios",
+    envios: "envios",
     luz: "luz",
     "luz / electricidad": "luz",
     agua: "agua",

@@ -61,6 +61,28 @@ describe("isExpenseRow", () => {
       }),
       false,
     );
+    assert.equal(
+      isExpenseRow({
+        isPayment: false,
+        descriptionNormalized: "Conversión",
+      }),
+      false,
+    );
+    assert.equal(
+      isExpenseRow({
+        isPayment: false,
+        descriptionNormalized: "Compra KO",
+      }),
+      false,
+    );
+    assert.equal(
+      isExpenseRow({
+        isPayment: false,
+        isCredit: true,
+        descriptionNormalized: "Depósito de cuenta propia",
+      }),
+      false,
+    );
   });
 });
 

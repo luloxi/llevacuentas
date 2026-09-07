@@ -287,10 +287,20 @@ export async function importBbvaFile(opts: {
   const txSource = statementTxSource(source);
 
   for (const m of toInsert) {
-    const catMatch = await matchCategoryWithLearning(
-      opts.householdId,
-      m.descriptionNormalized,
-    );
+    let catMatch;
+    if (m.categoryHint) {
+      const hinted = bySlug.get(m.categoryHint);
+      catMatch = {
+        slug: m.categoryHint,
+        categoryId: hinted?.id,
+        learned: false as const,
+      };
+    } else {
+      catMatch = await matchCategoryWithLearning(
+        opts.householdId,
+        m.descriptionNormalized,
+      );
+    }
     if (catMatch.learned) learnedHits++;
     const category =
       (catMatch.categoryId ? { id: catMatch.categoryId } : null) ??

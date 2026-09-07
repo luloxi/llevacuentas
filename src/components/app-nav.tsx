@@ -5,14 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
   List,
-  Landmark,
   Users,
   LogOut,
   Shield,
   Plus,
-  PiggyBank,
   Banknote,
-  CreditCard,
   Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -21,12 +18,10 @@ import { BrandLogo } from "@/components/brand-logo";
 
 const links = [
   { href: "/dashboard", label: "Inicio", icon: Home },
-  { href: "/consumos", label: "Gastos", icon: List },
-  { href: "/ingresos", label: "Ingresos", icon: Banknote },
+  { href: "/consumos", label: "Consumos", icon: List },
   { href: "/cargas", label: "Cargas", icon: Upload },
+  { href: "/ingresos", label: "Ingresos", icon: Banknote },
   { href: "/compartido", label: "Hogar", icon: Users },
-  { href: "/ahorros", label: "Ahorros", icon: PiggyBank },
-  { href: "/deuda", label: "Deuda", icon: Landmark },
 ];
 
 function openAddExpense() {
@@ -51,8 +46,9 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
     ? [...links, { href: "/admin", label: "Admin", icon: Shield }]
     : links;
 
+  // Inicio · Consumos · Cargas | + | Ingresos · Hogar
   const left = links.slice(0, 3);
-  const right = links.slice(3); // Cargas + Hogar + Ahorros + Deuda
+  const right = links.slice(3);
 
   return (
     <>
@@ -68,7 +64,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
             />
             <span className="text-[15px] tracking-tight">LlevaCuentas</span>
           </Link>
-          <nav className="flex items-center gap-0.5">
+          <nav className="flex items-center gap-1">
             {desktopLinks.map(({ href, label, icon: Icon }) => {
               const active = pathname.startsWith(href);
               return (
@@ -76,7 +72,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
                   key={href}
                   href={href}
                   className={cn(
-                    "relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    "relative flex items-center gap-1.5 rounded-2xl px-3.5 py-2 text-sm font-medium transition-colors",
                     active
                       ? "bg-[var(--brand-soft)] text-[var(--brand-fg)]"
                       : "text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]",
@@ -90,27 +86,15 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
             <button
               type="button"
               onClick={openAddExpense}
-              className="lc-btn lc-btn-primary ml-2 !px-3 !py-2"
+              className="lc-btn lc-btn-primary ml-2 !rounded-2xl !px-3.5 !py-2"
             >
               <Plus className="h-4 w-4" strokeWidth={2.25} />
-              Agregar
+              Sumar
             </button>
-            <Link
-              href="/suscripcion"
-              className={cn(
-                "relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                pathname.startsWith("/suscripcion")
-                  ? "bg-[var(--brand-soft)] text-[var(--brand-fg)]"
-                  : "text-[var(--muted-fg)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]",
-              )}
-            >
-              <CreditCard className="h-4 w-4" strokeWidth={pathname.startsWith("/suscripcion") ? 2.25 : 1.75} />
-              Suscripción
-            </Link>
             <button
               type="button"
               onClick={() => void logout()}
-              className="ml-1 flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+              className="ml-1 flex items-center gap-1.5 rounded-2xl px-3 py-2 text-sm text-[var(--muted-fg)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
             >
               <LogOut className="h-4 w-4" strokeWidth={1.75} />
               Salir
@@ -120,7 +104,7 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
       </header>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-md md:hidden">
-        <div className="relative mx-auto grid max-w-lg grid-cols-8 items-end gap-0.5 px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
+        <div className="relative mx-auto grid max-w-lg grid-cols-6 items-end gap-0.5 px-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5">
           {left.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
@@ -135,12 +119,12 @@ export function AppNav({ isAdmin = false }: { isAdmin?: boolean }) {
               type="button"
               onClick={openAddExpense}
               className="absolute -top-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--brand)] text-white shadow-md shadow-black/10 ring-[3px] ring-[var(--surface)] transition active:scale-95 dark:text-[#121110]"
-              aria-label="Agregar gasto"
+              aria-label="Sumar un gasto"
             >
               <Plus className="h-6 w-6" strokeWidth={2.25} />
             </button>
-            <span className="mt-9 text-[10px] font-medium text-[var(--muted-fg)]">
-              Agregar
+            <span className="mt-9 text-[11px] font-medium text-[var(--muted-fg)]">
+              Sumar
             </span>
           </div>
 
@@ -173,13 +157,13 @@ function NavSlot({
     <Link
       href={href}
       className={cn(
-        "relative flex flex-col items-center gap-0.5 rounded-xl px-0.5 py-1.5 text-[10px] font-medium transition-colors",
+        "relative flex flex-col items-center gap-0.5 rounded-2xl px-0.5 py-1.5 text-[11px] font-medium transition-colors",
         active ? "text-[var(--brand-fg)]" : "text-[var(--muted-fg)]",
       )}
     >
       <span
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-xl transition-colors",
+          "flex h-8 w-8 items-center justify-center rounded-2xl transition-colors",
           active ? "bg-[var(--brand-soft)]" : "",
         )}
       >

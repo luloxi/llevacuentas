@@ -52,6 +52,7 @@ export async function listTransactions(
 
   return rows.filter((r) => {
     if (!opts?.includePayments && r.isPayment) return false;
+    if (!opts?.includePayments && r.isCredit) return false;
     if (
       !opts?.includePayments &&
       isBankAccountingEntry(r.descriptionNormalized)

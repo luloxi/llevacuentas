@@ -9,6 +9,7 @@ import {
   isBankAccountingEntry,
   isCardPaymentEntry,
 } from "@/lib/bbva/bank-entries";
+import { isExpenseRow } from "@/lib/stats/monthly-expenses";
 import {
   convertUsdToArs,
   getMonthEndBuyRates,
@@ -67,17 +68,11 @@ export default async function DashboardPage() {
   const prevPeriod = `${prevY}-${String(prevM).padStart(2, "0")}`;
 
   const spendTxs = txs.filter(
-    (t) =>
-      !t.isPayment &&
-      !isBankAccountingEntry(t.descriptionNormalized ?? "") &&
-      isVisibleToUser(t, user.id),
+    (t) => isExpenseRow(t) && isVisibleToUser(t, user.id),
   );
 
   const sharedTxs = txs.filter(
-    (t) =>
-      !t.isPayment &&
-      !isBankAccountingEntry(t.descriptionNormalized ?? "") &&
-      t.ownership === "shared",
+    (t) => isExpenseRow(t) && t.ownership === "shared",
   );
 
   const monthTx = spendTxs.filter(

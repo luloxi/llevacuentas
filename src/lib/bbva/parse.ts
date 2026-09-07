@@ -10,6 +10,12 @@ import {
   detectBankFromText,
   detectFiwindActividadLayout,
 } from "@/lib/import/source";
+import {
+  categoryHintForFiwindKind,
+  classifyFiwindTipo,
+  flagsForFiwindKind,
+  isDustYield,
+} from "@/lib/import/fiwind";
 
 export type BbvaMovement = {
   date: string; // YYYY-MM-DD
@@ -21,6 +27,8 @@ export type BbvaMovement = {
   isPayment: boolean;
   isCredit: boolean;
   fingerprint: string;
+  /** Suggested category slug (Fiwind Tipo: conversiones / crypto / rendimientos). */
+  categoryHint?: string;
 };
 
 function normalizeDescription(raw: string): string {
@@ -103,14 +111,6 @@ function isPaymentDescription(desc: string): boolean {
     u.includes("RECARGA") ||
     u.includes("CARGA DE SALDO") ||
     u.includes("CARGA SALDO")
-  );
-}
-
-/** Fiwind Actividad: incoming / FX / yield — not household spend. */
-function isFiwindNonSpend(desc: string): boolean {
-  const u = foldDesc(desc).trim();
-  return (
-    /^(DEPOSITO|DEVOLUCION|GANANCIA\b|RENDIMIENTO\b|CONVERSION)\b/.test(u)
   );
 }
 
@@ -549,9 +549,20 @@ export function parseStatementWorkbook(
     if (amountArs == null && amountUsd == null) continue;
 
     const negative = (amountArs ?? amountUsd ?? 0) < 0;
-    const incoming = isFiwindNonSpend(descriptionNormalized);
-    const payment =
-      isPaymentDescription(descriptionNormalized) || negative || incoming;
+    let payment = isPaymentDescription(descriptionNormalized) || negative;
+    let credit =
+      negative && !isPaymentDescription(descriptionNormalized);
+    let categoryHint: string | undefined;
+
+    if (fiwindLayout) {
+      const kind = classifyFiwindTipo(descriptionNormalized);
+      if (isDustYield(kind, amountArs, amountUsd)) continue;
+      const flags = flagsForFiwindKind(kind);
+      // Keep SU PAGO / PAGO RECIBIDO as payments even on a Fiwind-named file.
+      payment = isPaymentDescription(descriptionNormalized) || flags.isPayment;
+      credit = flags.isCredit || (negative && !payment);
+      categoryHint = categoryHintForFiwindKind(kind);
+    }
 
     const partial = {
       date,
@@ -564,9 +575,8 @@ export function parseStatementWorkbook(
       amountArs,
       amountUsd,
       isPayment: payment,
-      isCredit:
-        incoming ||
-        (negative && !isPaymentDescription(descriptionNormalized)),
+      isCredit: credit,
+      categoryHint,
     };
 
     out.push({ ...partial, fingerprint: makeFingerprint(partial) });

@@ -8,7 +8,9 @@ import {
   parseBbvaPdfText,
   parseGenericPdfText,
 } from "@/lib/bbva/parse-pdf";
-import { isCardPaymentEntry } from "@/lib/bbva/bank-entries";
+import { isBankAccountingEntry, isCardPaymentEntry } from "@/lib/bbva/bank-entries";
+import { isExpenseRow } from "@/lib/stats/monthly-expenses";
+import { classifyFiwindTipo, isDustYield } from "@/lib/import/fiwind";
 import { parseBbvaAmount } from "@/lib/money";
 import { summarizeParsedMovements } from "@/lib/agent/import-summary";
 import {
@@ -122,7 +124,12 @@ describe("Fiwind Excel / CSV", () => {
     const parsed = parseStatementWorkbook(buf, "actividad-1.xlsx");
     assert.equal(parsed.detectedBank, "Fiwind");
     assert.equal(parsed.classicBbva, false);
-    assert.equal(parsed.movements.length, 5);
+    // Ganancia diaria 0.68 ARS is dust — skipped
+    assert.equal(parsed.movements.length, 4);
+    assert.equal(
+      parsed.movements.some((m) => /GANANCIA DIARIA/i.test(m.descriptionNormalized)),
+      false,
+    );
 
     const dia = parsed.movements.find((m) => /PAGO A DIA/i.test(m.descriptionNormalized));
     assert.ok(dia);
@@ -130,13 +137,22 @@ describe("Fiwind Excel / CSV", () => {
     assert.equal(dia?.amountArs, 15420.5);
     assert.equal(dia?.isPayment, false);
     assert.equal(isCardPaymentEntry(dia!.descriptionNormalized), false);
+    assert.equal(isExpenseRow(dia!), true);
 
     const deposito = parsed.movements.find((m) => /DEP[OÓ]SITO/i.test(m.descriptionNormalized));
     assert.equal(deposito?.isCredit, true);
+    assert.equal(isExpenseRow(deposito!), false);
 
     const ko = parsed.movements.find((m) => /COMPRA KO/i.test(m.descriptionNormalized));
     assert.equal(ko?.amountUsd, 20);
     assert.equal(ko?.amountArs, null);
+    assert.equal(ko?.categoryHint, "crypto-inversiones");
+    assert.equal(isExpenseRow(ko!), false);
+
+    const conv = parsed.movements.find((m) => /CONVERSI[OÓ]N/i.test(m.descriptionNormalized));
+    assert.equal(conv?.categoryHint, "conversiones");
+    assert.equal(isExpenseRow(conv!), false);
+    assert.equal(conv?.isPayment, false);
 
     assert.equal(
       statementTypeLabel("xlsx", parsed.detectedBank),
@@ -233,19 +249,19 @@ describe("Fiwind Actividad fixtures", () => {
     }> = [
       {
         file: "actividad-1.xlsx",
-        min: 30,
-        date: "2026-06-30",
+        min: 25,
+        date: "2026-06-29",
         snippet: "Rendimiento bonificado",
       },
       {
         file: "actividad-2.xlsx",
-        min: 170,
+        min: 140,
         date: "2026-08-31",
         snippet: "Retiro a Elena Paco Coro",
       },
       {
         file: "actividad-3.xlsx",
-        min: 80,
+        min: 70,
         date: "2026-07-31",
         snippet: "Retiro a Katherine",
       },
@@ -292,6 +308,68 @@ describe("Fiwind Actividad fixtures", () => {
     assert.ok(pago);
     assert.equal(pago?.isPayment, false);
     assert.equal(isCardPaymentEntry(pago!.descriptionNormalized), false);
+    assert.equal(isExpenseRow(pago!), true);
+  });
+
+  it("does not count conversions, crypto trades or dust yields as gastos", () => {
+    const buf = readFileSync(join(dir, "actividad-2.xlsx"));
+    const parsed = parseStatementWorkbook(buf, "actividad-2.xlsx");
+
+    assert.equal(
+      parsed.movements.some(
+        (m) =>
+          classifyFiwindTipo(m.descriptionNormalized) === "yield" &&
+          isDustYield("yield", m.amountArs, m.amountUsd),
+      ),
+      false,
+      "dust yields should be skipped on import",
+    );
+
+    const expenses = parsed.movements.filter(isExpenseRow);
+    assert.ok(expenses.length > 20, `expected real spends, got ${expenses.length}`);
+    assert.ok(
+      expenses.every((m) => !isBankAccountingEntry(m.descriptionNormalized)),
+    );
+    assert.ok(
+      expenses.every((m) => classifyFiwindTipo(m.descriptionNormalized) === "spend"),
+    );
+
+    const summary = summarizeParsedMovements(parsed.movements, "xlsx");
+    const convArs = parsed.movements
+      .filter((m) => classifyFiwindTipo(m.descriptionNormalized) === "conversion")
+      .reduce((s, m) => s + Math.abs(m.amountArs ?? 0), 0);
+    const totalArs = parsed.movements.reduce(
+      (s, m) => s + Math.abs(m.amountArs ?? 0),
+      0,
+    );
+    const expenseArs = summary.byPeriod.reduce((s, p) => s + p.amountArs, 0);
+    assert.ok(convArs > 100_000, `expected large conversions in file, got ${convArs}`);
+    assert.ok(
+      expenseArs <= totalArs - convArs + 0.01,
+      `conversions leaked into gastos: expenses ${expenseArs} total ${totalArs} conv ${convArs}`,
+    );
+    assert.equal(
+      expenses.some((m) => /CONVERSI/i.test(m.descriptionNormalized)),
+      false,
+    );
+    assert.equal(
+      expenses.some((m) => /COMPRA KO|VENTA KO/i.test(m.descriptionNormalized)),
+      false,
+    );
+
+    const pairSpend = parsed.movements.find((m) =>
+      /RETIRO A FELICITAS/i.test(m.descriptionNormalized),
+    );
+    const pairConv = parsed.movements.find(
+      (m) =>
+        /CONVERSI/i.test(m.descriptionNormalized) &&
+        m.date === pairSpend?.date &&
+        m.amountArs === pairSpend?.amountArs,
+    );
+    assert.ok(pairSpend, "expected convert-then-pay Retiro a Felicitas");
+    assert.ok(pairConv, "expected matching Conversión of the same ARS");
+    assert.equal(isExpenseRow(pairSpend!), true);
+    assert.equal(isExpenseRow(pairConv!), false);
   });
 });
 

@@ -7,6 +7,7 @@ import { getMonthEndBuyRates } from "@/lib/fx/month-end-rates";
 import {
   aggregateByPeriod,
   buildMonthFromAgg,
+  isExpenseRow,
   visibleExpenseRows,
 } from "@/lib/stats/monthly-expenses";
 
@@ -104,7 +105,7 @@ export async function GET(req: Request) {
     if (balPeriod) {
       const shared = allRows.filter(
         (r) =>
-          !r.isPayment &&
+          isExpenseRow(r) &&
           r.ownership === "shared" &&
           r.date.startsWith(balPeriod) &&
           r.amountArs != null,

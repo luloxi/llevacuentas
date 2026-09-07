@@ -15,6 +15,7 @@ export type ExpenseTx = {
   amountArs: string | number | null;
   amountUsd: string | number | null;
   isPayment: boolean;
+  isCredit?: boolean;
   categoryId: string | null;
   bank: string | null;
   ownership: string;
@@ -38,12 +39,13 @@ export function toNumber(
   return Number.isFinite(n) ? n : null;
 }
 
-/** Real consumption only: skip card payments and bank accounting lines. */
+/** Real consumption only: skip card payments, credits, and bank accounting lines. */
 export function isExpenseRow(r: {
   isPayment: boolean;
+  isCredit?: boolean;
   descriptionNormalized: string;
 }): boolean {
-  if (r.isPayment) return false;
+  if (r.isPayment || r.isCredit) return false;
   if (isBankAccountingEntry(r.descriptionNormalized)) return false;
   return true;
 }

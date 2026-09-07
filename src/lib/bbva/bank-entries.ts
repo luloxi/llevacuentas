@@ -1,25 +1,26 @@
+import { isFiwindNonExpenseTipo } from "@/lib/import/fiwind";
+
 /**
- * BBVA statement lines that are accounting (not real consumption).
- * e.g. converting USD balance to ARS, debt transfers, USD interest credits.
+ * Statement lines that are accounting (not real consumption).
+ * BBVA: pesificación, debt transfers, USD interest credits.
+ * Fiwind: USDC↔ARS conversions, Compra/Venta KO, yields, deposits, crypto out.
  * They must not inflate “gastos” totals in Análisis / Consumos.
  */
 export function isBankAccountingEntry(description: string): boolean {
   const u = description.toUpperCase();
-  return (
+  if (
     u.includes("PESIFICACION") ||
     u.includes("PESIFICACIÓN") ||
     u.includes("TRANSFERENCIA DEUDA") ||
     u.includes("CREDITOS VS EN USD") ||
     u.includes("CRÉDITOS VS EN USD") ||
     u.includes("CREDITO VS EN USD") ||
-    // Plan V / debt plan markers sometimes appear as non-spend
     u.includes("TRANSF. DEUDA") ||
-    u.includes("TRANSF DEUDA") ||
-    u.includes("CONVERSION") ||
-    u.includes("CONVERSIÓN") ||
-    u.startsWith("GANANCIA DIARIA") ||
-    u.startsWith("RENDIMIENTO BONIFICADO")
-  );
+    u.includes("TRANSF DEUDA")
+  ) {
+    return true;
+  }
+  return isFiwindNonExpenseTipo(description);
 }
 
 /** Card payments the user made (reduces debt). */
