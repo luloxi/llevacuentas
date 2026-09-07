@@ -38,6 +38,38 @@ export function looksLikeHogarReintegroPayee(description: string): boolean {
   return hasKatherine && hasFernanda;
 }
 
+/**
+ * Fiwind CSV / exports sometimes list the roommate payee alone (no
+ * "Retiro a" / "Pago a" prefix). Still a hogar-service reimbursement.
+ * Requires the whole description to be that payee — not "… en el super".
+ */
+export function looksLikeBareHogarReintegroPayee(description: string): boolean {
+  const key = normalizeKey(description);
+  if (!key) return false;
+  if (OUTBOUND_PAY_PREFIX.test(key)) return false;
+  if (/^KATHO$/.test(key)) return true;
+  // Whole line = Katherine + Fernanda + optional surnames (not merchant copy).
+  if (!/^KATHERINE\s+FERNANDA(\s+[A-Z]+)*$/.test(key)) return false;
+  const after = key.replace(/^KATHERINE\s+FERNANDA\s*/, "");
+  if (!after) return true;
+  if (
+    /\b(EN|EL|LA|LOS|LAS|DE|DEL|AL|SUPER|MARKET|TIENDA|FARMAC|STEAM|PAGO|RETIRO|UNA|CUENTA)\b/.test(
+      after,
+    )
+  ) {
+    return false;
+  }
+  return after.split(" ").every((t) => t.length >= 3);
+}
+
+/** Outbound-prefix OR bare-payee hogar reintegro description. */
+export function isHogarReintegroDescription(description: string): boolean {
+  return (
+    looksLikeHogarReintegroPayee(description) ||
+    looksLikeBareHogarReintegroPayee(description)
+  );
+}
+
 /** Same payee key for bulk “Aplicar a N” (exact normalized description). */
 export function sameHogarReintegroKey(a: string, b: string): boolean {
   const ka = normalizeKey(a);

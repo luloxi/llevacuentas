@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   countHogarReintegroMatches,
   looksLikeHogarReintegroPayee,
+  looksLikeBareHogarReintegroPayee,
+  isHogarReintegroDescription,
   sameHogarReintegroKey,
 } from "./reintegro-hogar";
 
@@ -85,6 +87,33 @@ describe("countHogarReintegroMatches", () => {
         "retiro a katherine fernanda sanchez carrasco",
       ),
       true,
+    );
+  });
+});
+
+describe("looksLikeBareHogarReintegroPayee / isHogarReintegroDescription", () => {
+  it("matches bare Fiwind CSV payee (Katherine Fernanda…)", () => {
+    assert.equal(
+      looksLikeBareHogarReintegroPayee(
+        "Katherine Fernanda Sanchez Carrasco",
+      ),
+      true,
+    );
+    assert.equal(
+      isHogarReintegroDescription("Katherine Fernanda Sanchez Carrasco"),
+      true,
+    );
+    assert.equal(looksLikeBareHogarReintegroPayee("Katho"), true);
+  });
+
+  it("does not treat merchant lines as bare reintegro", () => {
+    assert.equal(
+      looksLikeBareHogarReintegroPayee("Katherine Fernanda en el super"),
+      false,
+    );
+    assert.equal(
+      isHogarReintegroDescription("Katherine Fernanda en el super"),
+      false,
     );
   });
 });

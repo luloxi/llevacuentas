@@ -35,3 +35,25 @@ describe("parseCasitaSeptiembreCsv", () => {
     assert.equal(fps.size, rows.length);
   });
 });
+
+describe("casita sept fixture vs Sep3 reintegro coverage", () => {
+  it("keeps Katherine payment and has no alquiler/luz/agua rows", () => {
+    const text = readFileSync(
+      join(process.cwd(), "fixtures/casita/gastos-septiembre.csv"),
+      "utf8",
+    );
+    const rows = parseCasitaSeptiembreCsv(text);
+    const kath = rows.filter((r) =>
+      /katherine\s+fernanda/i.test(r.description),
+    );
+    assert.equal(kath.length, 1);
+    assert.equal(kath[0]!.date, "2026-09-03");
+    assert.equal(kath[0]!.amountArs, -225750);
+    assert.equal(
+      rows.filter((r) =>
+        /^(alquiler|luz|agua)$/i.test(r.description.trim()),
+      ).length,
+      0,
+    );
+  });
+});

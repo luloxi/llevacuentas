@@ -7,6 +7,7 @@ import { ensureCategoriesSeeded, getCategoryMap } from "@/lib/household";
 import { matchCategoryWithLearning } from "@/lib/categorize/learn";
 import { INVOICE_IOG_HOUSEHOLD_NAME } from "@/lib/invoice-iog/catalog";
 import { isOwnAccountTransferDescription } from "@/lib/bbva/bank-entries";
+import { isHogarReintegroDescription } from "@/lib/reintegro-hogar";
 import type { AppUser } from "@/lib/session";
 import {
   CASITA_HOUSEHOLD_NAME,
@@ -18,6 +19,16 @@ import {
   parseCasitaSeptiembreCsv,
   type CasitaSeptRow,
 } from "./septiembre-csv";
+
+/**
+ * Live/manual Casita alquiler/luz/agua on 2026-09-03 — covered by the
+ * Katherine Fernanda Fiwind reintegro (~225750 ARS same day). Not in the
+ * septiembre CSV; purge on ensure so they never double-count.
+ */
+export const CASITA_SEP3_SERVICES_COVERED_BY_REINTEGRO = {
+  date: "2026-09-03",
+  categorySlugs: ["alquiler", "luz", "agua"] as const,
+} as const;
 
 function isOwnerEmail(email: string | null | undefined): boolean {
   return (email ?? "").trim().toLowerCase() === CASITA_OWNER_EMAIL;
@@ -108,6 +119,8 @@ async function seedCasitaSeptiembre(user: AppUser): Promise<void> {
   await seedGastos(user, householdId, gastos);
   await seedIngresos(user, householdId, ingresos);
   await backfillCasitaSeptOwnAccountTransfers(householdId, user.id);
+  await backfillCasitaSeptHogarReintegros(householdId);
+  await purgeCasitaSep3ServicesCoveredByReintegro(householdId);
 }
 
 async function seedGastos(
@@ -160,7 +173,9 @@ async function seedGastos(
           amountArs: abs,
           amountUsd: null,
           installment: null,
-          isPayment: isOwnAccountTransferDescription(row.description),
+          isPayment:
+            isOwnAccountTransferDescription(row.description) ||
+            isHogarReintegroDescription(row.description),
           isCredit: false,
           categoryId: category?.id,
           ownership: "personal",
@@ -330,4 +345,124 @@ async function backfillCasitaSeptOwnAccountTransfers(
     if (!isOwnAccountTransferDescription(r.label)) continue;
     await db.delete(schema.incomes).where(eq(schema.incomes.id, r.id));
   }
+}
+
+/**
+ * Mark roommate hogar-service reimbursements as isPayment (out of neta).
+ * Covers bare Fiwind CSV payee lines and Retiro/Pago a … forms.
+ */
+async function backfillCasitaSeptHogarReintegros(householdId: string) {
+  const db = getDb();
+  const txs = await db
+    .select({
+      id: schema.transactions.id,
+      descriptionNormalized: schema.transactions.descriptionNormalized,
+      isPayment: schema.transactions.isPayment,
+    })
+    .from(schema.transactions)
+    .where(eq(schema.transactions.householdId, householdId));
+
+  for (const r of txs) {
+    if (r.isPayment) continue;
+    if (!isHogarReintegroDescription(r.descriptionNormalized)) continue;
+    await db
+      .update(schema.transactions)
+      .set({ isPayment: true, updatedAt: new Date() })
+      .where(eq(schema.transactions.id, r.id));
+  }
+}
+
+/**
+ * Idempotent: delete Casita alquiler/luz/agua on 2026-09-03 (covered by
+ * Katherine reintegro). Matches category slug, or exact service name as
+ * description when category is missing/wrong.
+ */
+async function purgeCasitaSep3ServicesCoveredByReintegro(
+  householdId: string,
+): Promise<number> {
+  const db = getDb();
+  const { date, categorySlugs } = CASITA_SEP3_SERVICES_COVERED_BY_REINTEGRO;
+  const slugSet = new Set<string>(categorySlugs);
+
+  const cats = await db
+    .select({ id: schema.categories.id, slug: schema.categories.slug })
+    .from(schema.categories);
+  const catIdToSlug = new Map(cats.map((c) => [c.id, c.slug]));
+  const serviceCatIds = new Set(
+    cats.filter((c) => slugSet.has(c.slug)).map((c) => c.id),
+  );
+
+  const txs = await db
+    .select({
+      id: schema.transactions.id,
+      descriptionNormalized: schema.transactions.descriptionNormalized,
+      categoryId: schema.transactions.categoryId,
+      amountArs: schema.transactions.amountArs,
+    })
+    .from(schema.transactions)
+    .where(
+      and(
+        eq(schema.transactions.householdId, householdId),
+        eq(schema.transactions.date, date),
+      ),
+    );
+
+  const toDelete: Array<{
+    id: string;
+    slug: string;
+    amountArs: string | null;
+  }> = [];
+
+  for (const t of txs) {
+    const slug = t.categoryId ? catIdToSlug.get(t.categoryId) : undefined;
+    const descKey = t.descriptionNormalized
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const descIsService =
+      descKey === "ALQUILER" || descKey === "LUZ" || descKey === "AGUA";
+    const byCat = t.categoryId != null && serviceCatIds.has(t.categoryId);
+    if (!byCat && !descIsService) continue;
+
+    let resolved = slug && slugSet.has(slug) ? slug : null;
+    if (!resolved && descIsService) {
+      resolved =
+        descKey === "ALQUILER"
+          ? "alquiler"
+          : descKey === "LUZ"
+            ? "luz"
+            : "agua";
+    }
+    if (!resolved || !slugSet.has(resolved)) continue;
+
+    toDelete.push({
+      id: t.id,
+      slug: resolved,
+      amountArs: t.amountArs != null ? String(t.amountArs) : null,
+    });
+  }
+
+  if (toDelete.length === 0) return 0;
+
+  const ids = toDelete.map((d) => d.id);
+  // Clear reverse cross-hogar links before delete (no FK on linked_transaction_id).
+  for (const id of ids) {
+    await db
+      .update(schema.transactions)
+      .set({ linkedTransactionId: null, updatedAt: new Date() })
+      .where(eq(schema.transactions.linkedTransactionId, id));
+  }
+  for (const id of ids) {
+    await db.delete(schema.transactions).where(eq(schema.transactions.id, id));
+  }
+
+  const summary = toDelete
+    .map((d) => `${d.slug}${d.amountArs != null ? `=${d.amountArs}` : ""}`)
+    .join(", ");
+  console.info(
+    `[casita] purged ${toDelete.length} Sep3 service(s) covered by reintegro: ${summary}`,
+  );
+  return toDelete.length;
 }
