@@ -179,6 +179,11 @@ export const transactions = pgTable(
     bank: text("bank"),
     /** Last 4 of the BBVA card when the period xls lists titular + adicionales. */
     cardLast4: text("card_last4"),
+    /**
+     * Cross-hogar link (Casita BBVA/Fiwind ↔ Invoice IOG) by same amount.
+     * Casita side excluded from neta; Invoice IOG stays source of truth for work.
+     */
+    linkedTransactionId: text("linked_transaction_id"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
   },
@@ -187,6 +192,7 @@ export const transactions = pgTable(
     index("tx_household_date_idx").on(t.householdId, t.date),
     index("tx_household_cat_idx").on(t.householdId, t.categoryId),
     index("tx_household_bank_idx").on(t.householdId, t.bank),
+    index("tx_linked_idx").on(t.linkedTransactionId),
   ],
 );
 
@@ -307,6 +313,8 @@ export const incomes = pgTable(
     label: text("label").notNull(),
     amountArs: numeric("amount_ars", { precision: 14, scale: 2 }),
     amountUsd: numeric("amount_usd", { precision: 14, scale: 2 }),
+    /** Stable import key (Casita CSV seed, etc.) for idempotent re-import. */
+    externalFingerprint: text("external_fingerprint"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
   },
@@ -314,6 +322,7 @@ export const incomes = pgTable(
     index("incomes_user_idx").on(t.userId),
     index("incomes_household_date_idx").on(t.householdId, t.date),
     index("incomes_user_kind_idx").on(t.userId, t.kind),
+    uniqueIndex("incomes_household_fp_uidx").on(t.householdId, t.externalFingerprint),
   ],
 );
 

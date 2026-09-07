@@ -108,7 +108,7 @@ export function HouseholdSetup() {
         <p className="mt-2 text-[15px] leading-relaxed text-[var(--muted-fg)]">
           {invited
             ? "Entrá con el código y quedás en las cuentas compartidas."
-            : "Creá el hogar, invitá a Jurio desde Hogar, o uníte con un código."}
+            : "Creá tu hogar (podés usarlo solo) o uníte con un código."}
         </p>
       </div>
 
@@ -148,7 +148,8 @@ export function HouseholdSetup() {
               <h2 className="font-semibold tracking-tight">Crear el hogar</h2>
             </div>
             <p className="text-xs leading-relaxed text-[var(--muted-fg)]">
-              Después, desde Hogar, invitá a Jurio con un código.
+              Podés usarlo solo. Si más adelante querés sumar a alguien, hay un
+              Invitar opcional en Hogar.
             </p>
             <input
               value={name}
@@ -163,7 +164,7 @@ export function HouseholdSetup() {
               onClick={() => void create()}
               className="lc-btn lc-btn-primary w-full"
             >
-              {loading === "create" ? "Creando…" : "Crear e invitar"}
+              {loading === "create" ? "Creando…" : "Crear hogar"}
             </button>
           </div>
 
@@ -202,7 +203,7 @@ export function HouseholdSetup() {
             <span>
               {loading === "solo"
                 ? "Preparando…"
-                : "Seguir solo por ahora — después se puede sumar Jurio"}
+                : "Seguir solo por ahora"}
             </span>
           </button>
         </>

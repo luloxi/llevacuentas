@@ -180,6 +180,8 @@ export async function ensureSchema() {
       `,
       sql`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS bank text`,
       sql`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS card_last4 text`,
+      sql`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS linked_transaction_id text`,
+      sql`CREATE INDEX IF NOT EXISTS tx_linked_idx ON transactions(linked_transaction_id)`,
       sql`
         CREATE INDEX IF NOT EXISTS tx_household_bank_idx
           ON transactions(household_id, bank)
@@ -265,6 +267,8 @@ export async function ensureSchema() {
       sql`ALTER TABLE debt_settings ADD COLUMN IF NOT EXISTS card_last4 text`,
       sql`ALTER TABLE incomes ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'variable'`,
       sql`ALTER TABLE incomes ADD COLUMN IF NOT EXISTS frequency text`,
+      sql`ALTER TABLE incomes ADD COLUMN IF NOT EXISTS external_fingerprint text`,
+      sql`CREATE UNIQUE INDEX IF NOT EXISTS incomes_household_fp_uidx ON incomes(household_id, external_fingerprint) WHERE external_fingerprint IS NOT NULL`,
       sql`CREATE INDEX IF NOT EXISTS incomes_user_idx ON incomes(user_id)`,
       sql`CREATE INDEX IF NOT EXISTS incomes_household_date_idx ON incomes(household_id, date)`,
       sql`CREATE INDEX IF NOT EXISTS incomes_user_kind_idx ON incomes(user_id, kind)`,

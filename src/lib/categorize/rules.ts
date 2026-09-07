@@ -338,6 +338,22 @@ export const CATEGORY_SEEDS: CategorySeed[] = [
     priority: 60,
   },
   {
+    slug: "jardineria",
+    name: "Jardinería",
+    kind: "expense",
+    defaultOwnership: "shared",
+    patterns: ["JARDIN", "VIVERO", "JARDINER"],
+    priority: 55,
+  },
+  {
+    slug: "muebles-arreglos",
+    name: "Muebles / Arreglos de la casa",
+    kind: "expense",
+    defaultOwnership: "shared",
+    patterns: ["MUEBLER", "SODIMAC", "EASY ", "REX ", "FERRETER"],
+    priority: 55,
+  },
+  {
     slug: "uncategorized",
     name: "Uncategorized",
     kind: "expense",

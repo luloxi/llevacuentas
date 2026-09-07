@@ -360,7 +360,7 @@ export function CompartidoView() {
             {householdName || "Hogar"}
           </h1>
           <HouseholdSwitcher />
-          {inviteCode && members.length >= 2 && (
+          {inviteCode && (
             <button
               type="button"
               onClick={() => setInviteOpen(true)}
@@ -371,26 +371,6 @@ export function CompartidoView() {
             </button>
           )}
         </div>
-
-        {inviteCode && members.length < 2 && (
-          <div className="rounded-[1.15rem] border border-[var(--brand)]/25 bg-[var(--brand-soft)] px-4 py-4 sm:px-5">
-            <p className="text-[15px] font-semibold tracking-tight text-[var(--brand-fg)]">
-              Este hogar todavía es de a uno
-            </p>
-            <p className="mt-1 text-sm leading-relaxed text-[var(--foreground)]/80">
-              Invitá a Jurio con el código. Entra con Google y queda en las
-              cuentas compartidas.
-            </p>
-            <button
-              type="button"
-              onClick={() => setInviteOpen(true)}
-              className="lc-btn lc-btn-primary mt-3 !rounded-2xl !px-4 !py-2"
-            >
-              <UserPlus className="h-4 w-4" />
-              Invitá a Jurio
-            </button>
-          </div>
-        )}
 
         {viewTab === "charts" ? (
           <HogarCharts />
@@ -804,7 +784,7 @@ export function CompartidoView() {
                   Hogar
                 </p>
                 <h2 className="mt-0.5 text-lg font-semibold tracking-tight">
-                  Invitá a Jurio
+                  Invitar al hogar
                 </h2>
               </div>
               <button

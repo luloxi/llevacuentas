@@ -30,6 +30,8 @@ import {
   Send,
   Cpu,
   Calendar,
+  Flower2,
+  Armchair,
 } from "lucide-react";
 
 /** Icon per category slug — inventory-style markers for fast visual scan. */
@@ -66,6 +68,8 @@ const ICONS: Record<string, LucideIcon> = {
   "eventos-extras": Calendar,
   movilidad: Car,
   hardware: Cpu,
+  jardineria: Flower2,
+  "muebles-arreglos": Armchair,
 };
 
 export function iconForCategory(slug: string | null | undefined): LucideIcon {

@@ -29,6 +29,8 @@ type Tx = {
   amountArs: number | null; amountUsd: number | null; installment: string | null;
   isPayment: boolean; ownership: "personal" | "shared";
   paidByUserId: string | null; source: string;
+  linkedTransactionId?: string | null;
+  linkedToInvoiceIog?: boolean;
   category: Category | null; hasTicket: boolean; receipt: ReceiptInfo | null;
 };
 
@@ -633,6 +635,7 @@ export function TransactionsTable() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="truncate text-sm font-semibold">{r.descriptionNormalized}</span>
                         {isTicket && <span className="rounded-full bg-violet-600 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white dark:bg-violet-300 dark:text-violet-950">Ticket</span>}
+                        {r.linkedToInvoiceIog && <span className="rounded-full bg-amber-600/90 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white dark:bg-amber-300 dark:text-amber-950">IOG</span>}
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
                         <input
@@ -789,6 +792,7 @@ export function TransactionsTable() {
                         <td className="max-w-xs px-3 py-2">
                           <span className="truncate font-medium">{r.descriptionNormalized}</span>
                           {isTicket && <span className="ml-1.5 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold uppercase text-white dark:bg-violet-300 dark:text-violet-950">Ticket</span>}
+                          {r.linkedToInvoiceIog && <span className="ml-1.5 rounded-full bg-amber-600/90 px-2 py-0.5 text-[10px] font-semibold uppercase text-white dark:bg-amber-300 dark:text-amber-950">IOG</span>}
                           {r.installment && <div className="text-xs text-zinc-500">cuota {r.installment}</div>}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 tabular-nums">

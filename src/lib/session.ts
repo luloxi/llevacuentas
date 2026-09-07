@@ -108,6 +108,14 @@ export async function requireUser(): Promise<AppUser> {
   if (hasDatabase()) {
     const { ensureInvoiceIogForUser } = await import("@/lib/invoice-iog/seed");
     await ensureInvoiceIogForUser(s.user);
+    const { ensureCasitaSeptiembreForUser } = await import(
+      "@/lib/casita/seed-septiembre"
+    );
+    await ensureCasitaSeptiembreForUser(s.user);
+    const { ensureInvoiceIogCasitaMatchesForUser } = await import(
+      "@/lib/invoice-iog/match-casita"
+    );
+    await ensureInvoiceIogCasitaMatchesForUser(s.user);
   }
   return s.user;
 }

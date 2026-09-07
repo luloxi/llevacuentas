@@ -175,6 +175,8 @@ export function statementTypeLabel(
       return "Transparencia Excel";
     case "invoice_iog":
       return "Invoice IOG";
+    case "casita_csv":
+      return withBank("CSV Casita", bankName ? undefined : "Fiwind");
     default:
       return bankName ? `Importación (${bankName})` : "Resumen / importación";
   }
