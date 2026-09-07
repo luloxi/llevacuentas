@@ -2,6 +2,7 @@
 
 import { cn, formatArs, formatUsd, formatDateAr } from "@/lib/utils";
 import { isReintegroHogarTipo } from "@/lib/reintegro-hogar";
+import { isGastoCubiertoTipo } from "@/lib/gasto-cubierto";
 
 type CategoryOpt = { id: string; slug: string; name: string };
 
@@ -59,9 +60,11 @@ export function MesAMesTxRow({
     t.descriptionNormalized,
   )
     ? "reintegro"
-    : t.ownership === "personal"
-      ? "personal"
-      : activeHouseholdId ?? "shared";
+    : isGastoCubiertoTipo(Boolean(t.isPayment), t.category)
+      ? "cubierto"
+      : t.ownership === "personal"
+        ? "personal"
+        : activeHouseholdId ?? "shared";
 
   return (
     <li className="rounded-xl border border-zinc-100/80 bg-white px-3 py-2.5 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -129,9 +132,11 @@ export function MesAMesTxRow({
             "lc-input w-full !px-2 !py-1.5 text-xs font-medium",
             assignValue === "reintegro"
               ? "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
-              : t.ownership === "shared"
-                ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
-                : "",
+              : assignValue === "cubierto"
+                ? "border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
+                : t.ownership === "shared"
+                  ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
+                  : "",
           )}
           aria-label="Asignar a"
         >
@@ -142,6 +147,7 @@ export function MesAMesTxRow({
             </option>
           ))}
           {opts.length === 0 && <option value="shared">Hogar</option>}
+          <option value="cubierto">Cubierto</option>
           <option value="reintegro">Reintegro hogar</option>
           <option value="internal">Transferencia interna</option>
         </select>

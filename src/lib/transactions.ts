@@ -55,7 +55,11 @@ export async function listTransactions(
   return rows.filter((r) => {
     if (
       !opts?.includePayments &&
-      isConsumosHiddenPayment(r.isPayment, r.descriptionNormalized)
+      isConsumosHiddenPayment(
+        r.isPayment,
+        r.descriptionNormalized,
+        r.categoryId ? byId.get(r.categoryId)?.slug : null,
+      )
     ) {
       return false;
     }

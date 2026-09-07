@@ -464,12 +464,19 @@ export async function PATCH(req: Request) {
       body.householdReimbursement === 1 ||
       body.householdReimbursement === "true";
 
+    const wantsHouseholdBillCovered =
+      body.householdBillCovered === true ||
+      body.householdBillCovered === 1 ||
+      body.householdBillCovered === "true";
+
     const nextIsPayment =
       body.isPayment === true
         ? true
         : body.isPayment === false
           ? false
-          : body.internalTransfer === true || wantsHouseholdReimbursement
+          : body.internalTransfer === true ||
+              wantsHouseholdReimbursement ||
+              wantsHouseholdBillCovered
             ? true
             : undefined;
 
@@ -495,6 +502,7 @@ export async function PATCH(req: Request) {
     let similarUpdated = 0;
     let similarCount = 0;
     let reintegroCount = 0;
+    let cubiertoCount = 0;
 
     const categoryId =
       body.categoryId && typeof body.categoryId === "string"
@@ -513,7 +521,8 @@ export async function PATCH(req: Request) {
       Boolean(categoryId) &&
       Boolean(before.descriptionNormalized) &&
       (categoryChanged || applyToSimilar) &&
-      !wantsHouseholdReimbursement;
+      !wantsHouseholdReimbursement &&
+      !wantsHouseholdBillCovered;
 
     if (shouldOfferOrApply && categoryId && before.descriptionNormalized) {
       const {
@@ -571,6 +580,7 @@ export async function PATCH(req: Request) {
     } else if (
       before.descriptionNormalized &&
       !wantsHouseholdReimbursement &&
+      !wantsHouseholdBillCovered &&
       body.skipReintegroOffer !== true &&
       (categoryChanged ||
         nextOwnership === "shared" ||
@@ -592,14 +602,36 @@ export async function PATCH(req: Request) {
       }
     }
 
+    // Gasto hogar cubierto (luz/agua/…): isPayment, optional bulk same merchant.
+    if (wantsHouseholdBillCovered && before.descriptionNormalized) {
+      const {
+        countGastoCubiertoByMerchant,
+        applyGastoCubiertoToSimilar,
+      } = await import("@/lib/gasto-cubierto-db");
+      cubiertoCount = await countGastoCubiertoByMerchant({
+        householdId: ctx.household.id,
+        description: before.descriptionNormalized,
+      });
+      if (applyToSimilar) {
+        similarUpdated = await applyGastoCubiertoToSimilar({
+          householdId: ctx.household.id,
+          description: before.descriptionNormalized,
+          excludeTxId: body.id,
+        });
+      }
+      similarCount = cubiertoCount;
+    }
+
     return NextResponse.json({
       transaction: row,
       learned,
       similarUpdated,
       similarCount,
       reintegroCount,
+      cubiertoCount,
       appliedToSimilar: Boolean(applyToSimilar),
       householdReimbursement: Boolean(wantsHouseholdReimbursement),
+      householdBillCovered: Boolean(wantsHouseholdBillCovered),
     });
   } catch (e) {
     return NextResponse.json(

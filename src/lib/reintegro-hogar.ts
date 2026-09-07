@@ -4,6 +4,8 @@
  * UI must not echo full legal names.
  */
 
+import { isHogarUtilitySlug } from "@/lib/gasto-cubierto";
+
 const HOGAR_REINTEGRO_PAYEE_TOKENS = [
   "KATHERINE",
   "FERNANDA",
@@ -72,15 +74,19 @@ export function isHogarReintegroDescription(description: string): boolean {
 
 /**
  * Card payments / internal transfers (isPayment) stay out of Consumos.
- * Hogar-service reintegros are isPayment (out of neta) but remain visible
- * with Tipo "Reintegro hogar".
+ * Exceptions that stay visible (still out of neta via isPayment):
+ * - Hogar-service reintegros → Tipo "Reintegro hogar"
+ * - Utility bills marked cubierto → Tipo "Cubierto"
  */
 export function isConsumosHiddenPayment(
   isPayment: boolean,
   descriptionNormalized: string,
+  categorySlug?: string | null,
 ): boolean {
   if (!isPayment) return false;
-  return !isHogarReintegroDescription(descriptionNormalized);
+  if (isHogarReintegroDescription(descriptionNormalized)) return false;
+  if (isHogarUtilitySlug(categorySlug)) return false;
+  return true;
 }
 
 /** True when Tipo should show "Reintegro hogar". */

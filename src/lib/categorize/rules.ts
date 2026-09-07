@@ -147,6 +147,14 @@ export const CATEGORY_SEEDS: CategorySeed[] = [
     priority: 82,
   },
   {
+    slug: "expensas",
+    name: "Expensas",
+    kind: "expense",
+    defaultOwnership: "shared",
+    patterns: ["EXPENSAS", "EXPENSA ", "ABL ", "ABL-", "TASA MUNICIPAL"],
+    priority: 84,
+  },
+  {
     slug: "supermercado",
     name: "Supermercado",
     kind: "expense",

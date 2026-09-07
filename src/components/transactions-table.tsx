@@ -18,10 +18,15 @@ import {
   type ReintegroHogarPrompt,
 } from "@/components/reintegro-hogar-toast";
 import {
+  GastoCubiertoToast,
+  type GastoCubiertoPrompt,
+} from "@/components/gasto-cubierto-toast";
+import {
   looksLikeHogarReintegroPayee,
   isConsumosHiddenPayment,
   isReintegroHogarTipo,
 } from "@/lib/reintegro-hogar";
+import { isGastoCubiertoTipo } from "@/lib/gasto-cubierto";
 
 type Category = { id: string; slug: string; name: string };
 type Member = { userId: string; name: string };
@@ -136,9 +141,11 @@ function toSheet(rows: Tx[], members: Member[]) {
     Categoría: categoryLabel(r.category?.name),
     Tipo: isReintegroHogarTipo(r.isPayment, r.descriptionNormalized)
       ? "Reintegro hogar"
-      : r.ownership === "shared"
-        ? "Hogar"
-        : "Personal",
+      : isGastoCubiertoTipo(r.isPayment, r.category)
+        ? "Cubierto"
+        : r.ownership === "shared"
+          ? "Hogar"
+          : "Personal",
     Pagó: (() => {
       const m = members.find((x) => x.userId === r.paidByUserId);
       return m ? memberLabel(m) : "";
@@ -170,6 +177,8 @@ export function TransactionsTable() {
   const [applyBusy, setApplyBusy] = useState(false);
   const [reintegroPrompt, setReintegroPrompt] = useState<ReintegroHogarPrompt | null>(null);
   const [reintegroBusy, setReintegroBusy] = useState(false);
+  const [cubiertoPrompt, setCubiertoPrompt] = useState<GastoCubiertoPrompt | null>(null);
+  const [cubiertoBusy, setCubiertoBusy] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
@@ -187,10 +196,10 @@ export function TransactionsTable() {
   ].filter(Boolean).length;
 
   useEffect(() => {
-    if (!toast || applyPrompt || reintegroPrompt) return;
+    if (!toast || applyPrompt || reintegroPrompt || cubiertoPrompt) return;
     const t = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(t);
-  }, [toast, applyPrompt, reintegroPrompt]);
+  }, [toast, applyPrompt, reintegroPrompt, cubiertoPrompt]);
 
   useEffect(() => {
     let cancelled = false;
@@ -256,7 +265,7 @@ export function TransactionsTable() {
       }>(res);
       if (!res.ok) { setError(data.error || `Error ${res.status}`); return; }
       const list = (data.transactions ?? [])
-        .filter((t) => !isConsumosHiddenPayment(t.isPayment, t.descriptionNormalized))
+        .filter((t) => !isConsumosHiddenPayment(t.isPayment, t.descriptionNormalized, t.category?.slug))
         .map((t) => ({
           ...t,
           ownership: t.ownership === "shared" ? "shared" as const : "personal" as const,
@@ -295,7 +304,7 @@ export function TransactionsTable() {
         const ps = [
           ...new Set(
             (data.transactions ?? [])
-              .filter((t) => !isConsumosHiddenPayment(t.isPayment, t.descriptionNormalized))
+              .filter((t) => !isConsumosHiddenPayment(t.isPayment, t.descriptionNormalized, t.category?.slug))
               .map((r) => periodFromDateString(r.date)),
           ),
         ].sort().reverse();
@@ -392,6 +401,7 @@ export function TransactionsTable() {
 
       if (body.householdReimbursement) {
         setApplyPrompt(null);
+        setCubiertoPrompt(null);
         if (body.applyToSimilar) {
           setReintegroPrompt(null);
           const n = typeof data?.similarUpdated === "number" ? data.similarUpdated : 0;
@@ -425,6 +435,39 @@ export function TransactionsTable() {
           setToast(
             "Marcado como reintegro de servicios (no cuenta en la neta).",
           );
+        }
+        return;
+      }
+
+      if (body.householdBillCovered) {
+        setApplyPrompt(null);
+        setReintegroPrompt(null);
+        if (body.applyToSimilar) {
+          setCubiertoPrompt(null);
+          const n = typeof data?.similarUpdated === "number" ? data.similarUpdated : 0;
+          setToast(
+            n > 0
+              ? `Cubierto aplicado a ${n + 1} gasto${n + 1 === 1 ? "" : "s"} (no cuenta en la neta).`
+              : "Marcado como cubierto (no cuenta en la neta).",
+          );
+          void load();
+          return;
+        }
+        const n =
+          typeof data?.cubiertoCount === "number"
+            ? data.cubiertoCount
+            : typeof data?.similarCount === "number"
+              ? data.similarCount
+              : 1;
+        setRows((list) =>
+          list.map((x) => (x.id === id ? { ...x, isPayment: true } : x)),
+        );
+        if (n > 1 && !body.applyToSimilar) {
+          setToast(null);
+          setCubiertoPrompt({ txId: id, count: n, pending: false });
+        } else {
+          setCubiertoPrompt(null);
+          setToast("Marcado como cubierto (no cuenta en la neta).");
         }
         return;
       }
@@ -516,6 +559,24 @@ export function TransactionsTable() {
     }
   }
 
+  async function applyCubierto(all: boolean) {
+    if (!cubiertoPrompt) return;
+    if (!cubiertoPrompt.pending && !all) {
+      setCubiertoPrompt(null);
+      setToast("Marcado como cubierto (no cuenta en la neta).");
+      return;
+    }
+    setCubiertoBusy(true);
+    try {
+      await patch(cubiertoPrompt.txId, {
+        householdBillCovered: true,
+        applyToSimilar: all,
+      });
+    } finally {
+      setCubiertoBusy(false);
+    }
+  }
+
   async function patchItem(txId: string, itemId: string, body: { name?: string; productCategory?: string | null }) {
     const prev = rows;
     setRows((list) => list.map((r) => {
@@ -561,13 +622,17 @@ export function TransactionsTable() {
 
   function assignValueFor(r: Tx): string {
     if (isReintegroHogarTipo(r.isPayment, r.descriptionNormalized)) return "reintegro";
+    if (isGastoCubiertoTipo(r.isPayment, r.category)) return "cubierto";
     if (r.ownership === "personal") return "personal";
     return activeHouseholdId ?? "shared";
   }
 
   async function onAssignChange(r: Tx, value: string) {
     if (value === "personal") {
-      if (r.ownership === "personal") return;
+      const wasSpecial =
+        isReintegroHogarTipo(r.isPayment, r.descriptionNormalized) ||
+        isGastoCubiertoTipo(r.isPayment, r.category);
+      if (r.ownership === "personal" && !wasSpecial) return;
       setError(null);
       setSavingId(r.id);
       const prev = rows;
@@ -576,7 +641,11 @@ export function TransactionsTable() {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ id: r.id, ownership: "personal" }),
+          body: JSON.stringify({
+            id: r.id,
+            ownership: "personal",
+            ...(wasSpecial ? { isPayment: false } : {}),
+          }),
         });
         const data = await res.json().catch(() => null);
         if (!res.ok) {
@@ -589,7 +658,13 @@ export function TransactionsTable() {
         } else {
           setRows((list) =>
             list.map((x) =>
-              x.id === r.id ? { ...x, ownership: "personal" as const } : x,
+              x.id === r.id
+                ? {
+                    ...x,
+                    ownership: "personal" as const,
+                    ...(wasSpecial ? { isPayment: false } : {}),
+                  }
+                : x,
             ),
           );
         }
@@ -601,8 +676,16 @@ export function TransactionsTable() {
       }
       return;
     }
+    if (value === "cubierto") {
+      setApplyPrompt(null);
+      setReintegroPrompt(null);
+      setToast(null);
+      void patch(r.id, { householdBillCovered: true });
+      return;
+    }
     if (value === "reintegro") {
       setApplyPrompt(null);
+      setCubiertoPrompt(null);
       setToast(null);
       void patch(r.id, { householdReimbursement: true });
       return;
@@ -657,7 +740,25 @@ export function TransactionsTable() {
         });
         return;
       }
-      if (r.ownership !== "shared") void patch(r.id, { ownership: "shared" });
+      const wasSpecial =
+        isReintegroHogarTipo(r.isPayment, r.descriptionNormalized) ||
+        isGastoCubiertoTipo(r.isPayment, r.category);
+      if (r.ownership !== "shared" || wasSpecial) {
+        void patch(r.id, {
+          ownership: "shared",
+          ...(wasSpecial ? { isPayment: false } : {}),
+          skipReintegroOffer: true,
+        });
+        if (wasSpecial) {
+          setRows((list) =>
+            list.map((x) =>
+              x.id === r.id
+                ? { ...x, isPayment: false, ownership: "shared" as const }
+                : x,
+            ),
+          );
+        }
+      }
       return;
     }
     // Move to another household — drop from this list on success
@@ -705,9 +806,11 @@ export function TransactionsTable() {
           "lc-input !px-2 !py-1.5 text-xs font-medium",
           value === "reintegro"
             ? "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
-            : r.ownership === "shared"
-              ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
-              : "",
+            : value === "cubierto"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
+              : r.ownership === "shared"
+                ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
+                : "",
         )}
         aria-label="Asignar a"
       >
@@ -718,6 +821,7 @@ export function TransactionsTable() {
           </option>
         ))}
         {opts.length === 0 && <option value="shared">Hogar</option>}
+        <option value="cubierto">Cubierto</option>
         <option value="reintegro">Reintegro hogar</option>
         <option value="internal">Transferencia interna</option>
       </select>
@@ -998,6 +1102,17 @@ export function TransactionsTable() {
                 skipReintegroOffer: true,
               });
             }
+          }}
+        />
+      ) : cubiertoPrompt ? (
+        <GastoCubiertoToast
+          prompt={cubiertoPrompt}
+          busy={cubiertoBusy || savingId === cubiertoPrompt.txId}
+          onApply={() => void applyCubierto(true)}
+          onSoloEste={() => void applyCubierto(false)}
+          onDismiss={() => {
+            setCubiertoPrompt(null);
+            setToast(null);
           }}
         />
       ) : applyPrompt ? (

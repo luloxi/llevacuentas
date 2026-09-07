@@ -28,9 +28,15 @@ import {
   type ReintegroHogarPrompt,
 } from "@/components/reintegro-hogar-toast";
 import {
+  GastoCubiertoToast,
+  type GastoCubiertoPrompt,
+} from "@/components/gasto-cubierto-toast";
+import {
   looksLikeHogarReintegroPayee,
   isConsumosHiddenPayment,
+  isReintegroHogarTipo,
 } from "@/lib/reintegro-hogar";
+import { isGastoCubiertoTipo } from "@/lib/gasto-cubierto";
 
 type CategoryOpt = { id: string; slug: string; name: string };
 
@@ -208,6 +214,8 @@ export function MesAMesView({
   const [activeHouseholdId, setActiveHouseholdId] = useState<string | null>(null);
   const [reintegroPrompt, setReintegroPrompt] = useState<ReintegroHogarPrompt | null>(null);
   const [reintegroBusy, setReintegroBusy] = useState(false);
+  const [cubiertoPrompt, setCubiertoPrompt] = useState<GastoCubiertoPrompt | null>(null);
+  const [cubiertoBusy, setCubiertoBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -320,6 +328,7 @@ export function MesAMesView({
                   !isConsumosHiddenPayment(
                     Boolean(t.isPayment),
                     t.descriptionNormalized,
+                    t.category?.slug,
                   ) &&
                   (t.amountArs != null || t.amountUsd != null),
               )
@@ -405,6 +414,7 @@ export function MesAMesView({
             !isConsumosHiddenPayment(
               Boolean(t.isPayment),
               t.descriptionNormalized,
+              t.category?.slug,
             ) &&
             (t.amountArs != null || t.amountUsd != null),
         ),
@@ -532,14 +542,46 @@ export function MesAMesView({
         return data;
       }
 
-      if (body.householdReimbursement || body.internalTransfer) {
+      if (
+        body.householdReimbursement ||
+        body.householdBillCovered ||
+        body.internalTransfer
+      ) {
         if (body.internalTransfer) {
           setTxs((list) => list.filter((x) => x.id !== id));
         } else {
-          // Reintegro hogar stays visible (out of neta via isPayment).
+          // Reintegro / Cubierto stay visible (out of neta via isPayment).
           setTxs((list) =>
             list.map((x) => (x.id === id ? { ...x, isPayment: true } : x)),
           );
+        }
+        if (body.householdBillCovered) {
+          setReintegroPrompt(null);
+          const n =
+            typeof data?.cubiertoCount === "number"
+              ? data.cubiertoCount
+              : typeof data?.similarCount === "number"
+                ? data.similarCount
+                : 1;
+          if (n > 1 && !body.applyToSimilar) {
+            setToast(null);
+            setCubiertoPrompt({ txId: id, count: n, pending: false });
+          } else if (body.applyToSimilar) {
+            setCubiertoPrompt(null);
+            const u =
+              typeof data?.similarUpdated === "number" ? data.similarUpdated : 0;
+            setToast(
+              u > 0
+                ? `Cubierto aplicado a ${u + 1} gasto${u + 1 === 1 ? "" : "s"} (no cuenta en la neta).`
+                : "Marcado como cubierto (no cuenta en la neta).",
+            );
+            await reloadTxs();
+          } else {
+            setCubiertoPrompt(null);
+            setToast("Marcado como cubierto (no cuenta en la neta).");
+          }
+          void loadStats();
+          return data;
         }
         const n =
           typeof data?.reintegroCount === "number"
@@ -549,6 +591,7 @@ export function MesAMesView({
               : 1;
         if (body.householdReimbursement && n > 1 && !body.applyToSimilar) {
           setToast(null);
+          setCubiertoPrompt(null);
           setReintegroPrompt({ txId: id, count: n, pending: false });
         } else if (body.householdReimbursement) {
           setReintegroPrompt(null);
@@ -602,7 +645,10 @@ export function MesAMesView({
 
   async function onAssignChange(r: Tx, value: string) {
     if (value === "personal") {
-      if (r.ownership === "personal") return;
+      const wasSpecial =
+        isReintegroHogarTipo(Boolean(r.isPayment), r.descriptionNormalized) ||
+        isGastoCubiertoTipo(Boolean(r.isPayment), r.category);
+      if (r.ownership === "personal" && !wasSpecial) return;
       setError(null);
       setSavingId(r.id);
       const prev = txs;
@@ -611,7 +657,11 @@ export function MesAMesView({
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ id: r.id, ownership: "personal" }),
+          body: JSON.stringify({
+            id: r.id,
+            ownership: "personal",
+            ...(wasSpecial ? { isPayment: false } : {}),
+          }),
         });
         const data = await res.json().catch(() => null);
         if (!res.ok) {
@@ -625,7 +675,13 @@ export function MesAMesView({
         } else {
           setTxs((list) =>
             list.map((x) =>
-              x.id === r.id ? { ...x, ownership: "personal" as const } : x,
+              x.id === r.id
+                ? {
+                    ...x,
+                    ownership: "personal" as const,
+                    ...(wasSpecial ? { isPayment: false } : {}),
+                  }
+                : x,
             ),
           );
           setToast("Guardado.");
@@ -639,8 +695,16 @@ export function MesAMesView({
       }
       return;
     }
+    if (value === "cubierto") {
+      setApplyPrompt(null);
+      setReintegroPrompt(null);
+      setToast(null);
+      void patchTx(r.id, { householdBillCovered: true });
+      return;
+    }
     if (value === "reintegro") {
       setApplyPrompt(null);
+      setCubiertoPrompt(null);
       setToast(null);
       void patchTx(r.id, { householdReimbursement: true });
       return;
@@ -669,7 +733,16 @@ export function MesAMesView({
         });
         return;
       }
-      if (r.ownership !== "shared") void patchTx(r.id, { ownership: "shared" });
+      const wasSpecial =
+        isReintegroHogarTipo(Boolean(r.isPayment), r.descriptionNormalized) ||
+        isGastoCubiertoTipo(Boolean(r.isPayment), r.category);
+      if (r.ownership !== "shared" || wasSpecial) {
+        void patchTx(r.id, {
+          ownership: "shared",
+          ...(wasSpecial ? { isPayment: false } : {}),
+          skipReintegroOffer: true,
+        });
+      }
       return;
     }
     // Move to another household
@@ -717,6 +790,24 @@ export function MesAMesView({
       });
     } finally {
       setReintegroBusy(false);
+    }
+  }
+
+  async function applyCubierto(all: boolean) {
+    if (!cubiertoPrompt) return;
+    if (!cubiertoPrompt.pending && !all) {
+      setCubiertoPrompt(null);
+      setToast("Marcado como cubierto (no cuenta en la neta).");
+      return;
+    }
+    setCubiertoBusy(true);
+    try {
+      await patchTx(cubiertoPrompt.txId, {
+        householdBillCovered: true,
+        applyToSimilar: all,
+      });
+    } finally {
+      setCubiertoBusy(false);
     }
   }
 
@@ -809,6 +900,17 @@ export function MesAMesView({
                 skipReintegroOffer: true,
               });
             }
+          }}
+        />
+      ) : cubiertoPrompt ? (
+        <GastoCubiertoToast
+          prompt={cubiertoPrompt}
+          busy={cubiertoBusy || savingId === cubiertoPrompt.txId}
+          onApply={() => void applyCubierto(true)}
+          onSoloEste={() => void applyCubierto(false)}
+          onDismiss={() => {
+            setCubiertoPrompt(null);
+            setToast(null);
           }}
         />
       ) : applyPrompt ? (

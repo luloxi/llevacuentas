@@ -32,6 +32,7 @@ import {
   Calendar,
   Flower2,
   Armchair,
+  Building2,
 } from "lucide-react";
 
 /** Icon per category slug — inventory-style markers for fast visual scan. */
@@ -63,6 +64,7 @@ const ICONS: Record<string, LucideIcon> = {
   agua: Droplets,
   gas: Flame,
   internet: Router,
+  expensas: Building2,
   "herramientas-ai": Bot,
   "infra-cloud": Server,
   "eventos-extras": Calendar,
