@@ -9,6 +9,10 @@ import * as XLSX from "xlsx";
 import { formatArs, cn, currentPeriodAr, periodFromDateString } from "@/lib/utils";
 import { formatPeriodLabel } from "@/lib/period-label";
 import { EmptyState, ListSkeleton, Toast } from "@/components/ui";
+import {
+  ApplyCriterionToast,
+  type ApplyCriterionPrompt,
+} from "@/components/apply-criterion-toast";
 
 type Category = { id: string; slug: string; name: string };
 type Member = { userId: string; name: string };
@@ -101,6 +105,8 @@ export function TransactionsTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [applyPrompt, setApplyPrompt] = useState<ApplyCriterionPrompt | null>(null);
+  const [applyBusy, setApplyBusy] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
@@ -117,10 +123,10 @@ export function TransactionsTable() {
   ].filter(Boolean).length;
 
   useEffect(() => {
-    if (!toast) return;
+    if (!toast || applyPrompt) return;
     const t = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(t);
-  }, [toast]);
+  }, [toast, applyPrompt]);
 
   useEffect(() => {
     if (!exportOpen && !filterOpen) return;
@@ -239,6 +245,9 @@ export function TransactionsTable() {
       catId === undefined ? undefined
         : !catId ? null
         : (categories.find((c) => c.id === catId) ?? null);
+    const prevCatId = rows.find((r) => r.id === id)?.category?.id ?? null;
+    const categoryChanged =
+      catId !== undefined && catId !== null && catId !== prevCatId;
 
     setRows((list) => list.map((r) => {
       if (r.id !== id) return r;
@@ -263,11 +272,45 @@ export function TransactionsTable() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) { setRows(prev); setError(data?.error || "No se pudo guardar"); return; }
-      if (data?.learned || body.ownership) setToast("Guardado.");
+
+      if (body.applyToSimilar) {
+        setApplyPrompt(null);
+        const n = typeof data?.similarUpdated === "number" ? data.similarUpdated : 0;
+        setToast(
+          n > 0
+            ? `Criterio aplicado a ${n + 1} gasto${n + 1 === 1 ? "" : "s"}.`
+            : "Criterio guardado.",
+        );
+        void load();
+        return;
+      }
+
+      const similarCount =
+        typeof data?.similarCount === "number" ? data.similarCount : 0;
+      if (categoryChanged && similarCount >= 2 && catId) {
+        setToast(null);
+        setApplyPrompt({ txId: id, categoryId: catId, count: similarCount });
+      } else if (body.ownership || categoryChanged) {
+        setApplyPrompt(null);
+        setToast("Guardado.");
+      }
     } catch {
       setRows(prev); setError("Error de red al guardar");
     } finally {
       setSavingId(null);
+    }
+  }
+
+  async function applyCriterion() {
+    if (!applyPrompt) return;
+    setApplyBusy(true);
+    try {
+      await patch(applyPrompt.txId, {
+        categoryId: applyPrompt.categoryId,
+        applyToSimilar: true,
+      });
+    } finally {
+      setApplyBusy(false);
     }
   }
 
@@ -532,7 +575,19 @@ export function TransactionsTable() {
       </div>
 
       {error && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
-      {toast && <Toast>{toast}</Toast>}
+      {applyPrompt ? (
+        <ApplyCriterionToast
+          prompt={applyPrompt}
+          busy={applyBusy || savingId === applyPrompt.txId}
+          onApply={() => void applyCriterion()}
+          onSoloEste={() => {
+            setApplyPrompt(null);
+            setToast("Guardado.");
+          }}
+        />
+      ) : (
+        toast && <Toast>{toast}</Toast>
+      )}
 
       {loading && !rows.length ? (
         <ListSkeleton label="Cargando consumos…" />

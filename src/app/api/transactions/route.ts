@@ -401,33 +401,61 @@ export async function PATCH(req: Request) {
 
     let learned = 0;
     let similarUpdated = 0;
-    if (
-      body.categoryId &&
-      typeof body.categoryId === "string" &&
-      before?.descriptionNormalized
-    ) {
+    let similarCount = 0;
+
+    const categoryId =
+      body.categoryId && typeof body.categoryId === "string"
+        ? body.categoryId
+        : null;
+    const categoryChanged =
+      Boolean(categoryId) && categoryId !== before.categoryId;
+    const applyToSimilar =
+      body.applyToSimilar === true ||
+      body.applyToSimilar === 1 ||
+      body.applyToSimilar === "true";
+
+    // Learn/bulk-apply when user confirms "Aplicar", even if this PATCH
+    // re-sends the same categoryId (first PATCH already saved Solo este).
+    const shouldOfferOrApply =
+      Boolean(categoryId) &&
+      Boolean(before.descriptionNormalized) &&
+      (categoryChanged || applyToSimilar);
+
+    if (shouldOfferOrApply && categoryId && before.descriptionNormalized) {
       const {
         learnFromCategorization,
         applyCategoryToSimilar,
+        countSimilarByMerchant,
       } = await import("@/lib/categorize/learn");
-      const { patterns } = await learnFromCategorization({
+
+      // N = total gastos on this account/merchant (including the one just edited)
+      similarCount = await countSimilarByMerchant({
         householdId: ctx.household.id,
         description: before.descriptionNormalized,
-        categoryId: body.categoryId,
       });
-      learned = patterns.length;
-      similarUpdated = await applyCategoryToSimilar({
-        householdId: ctx.household.id,
-        description: before.descriptionNormalized,
-        categoryId: body.categoryId,
-        excludeTxId: body.id,
-      });
+
+      if (applyToSimilar) {
+        const { patterns } = await learnFromCategorization({
+          householdId: ctx.household.id,
+          description: before.descriptionNormalized,
+          categoryId,
+        });
+        learned = patterns.length;
+        similarUpdated = await applyCategoryToSimilar({
+          householdId: ctx.household.id,
+          description: before.descriptionNormalized,
+          categoryId,
+          excludeTxId: body.id,
+        });
+      }
     }
 
     return NextResponse.json({
       transaction: row,
       learned,
       similarUpdated,
+      similarCount,
+      appliedToSimilar: Boolean(applyToSimilar),
     });
   } catch (e) {
     return NextResponse.json(

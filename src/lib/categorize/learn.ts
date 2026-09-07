@@ -13,6 +13,33 @@ export function normalizeMerchantText(description: string): string {
     .trim();
 }
 
+/** Same account/merchant key used for "apply to N" matching. */
+export function sameMerchantKey(a: string, b: string): boolean {
+  const ka = normalizeMerchantText(a);
+  const kb = normalizeMerchantText(b);
+  return Boolean(ka) && ka === kb;
+}
+
+/**
+ * Count gastos on the same account/merchant key in the household.
+ * Includes the current tx when `excludeTxId` is omitted; pass it to count others only.
+ */
+export function countMatchingMerchant(
+  rows: Array<{ id: string; descriptionNormalized: string }>,
+  description: string,
+  excludeTxId?: string,
+): number {
+  const key = normalizeMerchantText(description);
+  if (!key) return 0;
+  let n = 0;
+  for (const tx of rows) {
+    if (excludeTxId && tx.id === excludeTxId) continue;
+    if (normalizeMerchantText(tx.descriptionNormalized) !== key) continue;
+    n++;
+  }
+  return n;
+}
+
 /**
  * Build patterns to remember from a manual categorization.
  * Longer / more specific patterns first.
@@ -106,7 +133,32 @@ export async function learnFromCategorization(opts: {
 }
 
 /**
- * Apply the same category to other uncategorized txs with the same merchant key.
+ * Count transactions in the household with the same merchant/account key.
+ * By default includes the current tx (N = total on that account).
+ */
+export async function countSimilarByMerchant(opts: {
+  householdId: string;
+  description: string;
+  excludeTxId?: string;
+}): Promise<number> {
+  const db = getDb();
+  const key = normalizeMerchantText(opts.description);
+  if (!key) return 0;
+
+  const all = await db
+    .select({
+      id: schema.transactions.id,
+      descriptionNormalized: schema.transactions.descriptionNormalized,
+    })
+    .from(schema.transactions)
+    .where(eq(schema.transactions.householdId, opts.householdId));
+
+  return countMatchingMerchant(all, opts.description, opts.excludeTxId);
+}
+
+/**
+ * Apply the same category to ALL matching txs on the same merchant key
+ * (not only uncategorized — user explicitly opted in via toast).
  */
 export async function applyCategoryToSimilar(opts: {
   householdId: string;
@@ -118,10 +170,6 @@ export async function applyCategoryToSimilar(opts: {
   const key = normalizeMerchantText(opts.description);
   if (!key) return 0;
 
-  const { byId, bySlug } = await getCategoryMap();
-  const uncatId = bySlug.get("uncategorized")?.id;
-
-  // Same normalized description (exact match on stored field, case-insensitive via upper)
   const all = await db
     .select({
       id: schema.transactions.id,
@@ -134,12 +182,8 @@ export async function applyCategoryToSimilar(opts: {
   let updated = 0;
   for (const tx of all) {
     if (opts.excludeTxId && tx.id === opts.excludeTxId) continue;
-    const isUncat =
-      !tx.categoryId ||
-      tx.categoryId === uncatId ||
-      byId.get(tx.categoryId ?? "")?.slug === "uncategorized";
-    if (!isUncat) continue;
     if (normalizeMerchantText(tx.descriptionNormalized) !== key) continue;
+    if (tx.categoryId === opts.categoryId) continue;
 
     await db
       .update(schema.transactions)

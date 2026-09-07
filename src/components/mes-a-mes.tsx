@@ -19,6 +19,10 @@ import {
   Surface,
   Toast,
 } from "@/components/ui";
+import {
+  ApplyCriterionToast,
+  type ApplyCriterionPrompt,
+} from "@/components/apply-criterion-toast";
 
 type CategoryOpt = { id: string; slug: string; name: string };
 
@@ -168,6 +172,8 @@ export function MesAMesView({
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [applyPrompt, setApplyPrompt] = useState<ApplyCriterionPrompt | null>(null);
+  const [applyBusy, setApplyBusy] = useState(false);
   const [periodReady, setPeriodReady] = useState(false);
 
   const loadStats = useCallback(async () => {
@@ -208,10 +214,10 @@ export function MesAMesView({
   }, [loadStats]);
 
   useEffect(() => {
-    if (!toast) return;
+    if (!toast || applyPrompt) return;
     const t = window.setTimeout(() => setToast(null), 4000);
     return () => window.clearTimeout(t);
-  }, [toast]);
+  }, [toast, applyPrompt]);
 
   useEffect(() => {
     if (mode !== "resumen" || !periodReady) {
@@ -294,29 +300,61 @@ export function MesAMesView({
     });
   }
 
-  async function changeCategory(txId: string, categoryId: string) {
+  async function reloadTxs() {
+    const q =
+      filterPeriod && filterPeriod !== "all"
+        ? `?period=${encodeURIComponent(filterPeriod)}`
+        : "";
+    const res2 = await fetch(`/api/transactions${q}`, {
+      credentials: "include",
+    });
+    if (res2.ok) {
+      const d2 = await res2.json();
+      setTxs(
+        (d2.transactions as Tx[]).filter(
+          (t) =>
+            !t.isPayment &&
+            (t.amountArs != null || t.amountUsd != null),
+        ),
+      );
+    }
+  }
+
+  async function changeCategory(
+    txId: string,
+    categoryId: string,
+    opts?: { applyToSimilar?: boolean },
+  ) {
     setSavingId(txId);
     setToast(null);
     const prev = txs;
+    const prevCatId = txs.find((t) => t.id === txId)?.category?.id ?? null;
+    const categoryChanged = Boolean(categoryId) && categoryId !== prevCatId;
     const cat = categories.find((c) => c.id === categoryId) ?? null;
-    setTxs((list) =>
-      list.map((t) =>
-        t.id === txId
-          ? {
-              ...t,
-              category: cat
-                ? { id: cat.id, slug: cat.slug, name: cat.name }
-                : null,
-            }
-          : t,
-      ),
-    );
+    if (!opts?.applyToSimilar) {
+      setTxs((list) =>
+        list.map((t) =>
+          t.id === txId
+            ? {
+                ...t,
+                category: cat
+                  ? { id: cat.id, slug: cat.slug, name: cat.name }
+                  : null,
+              }
+            : t,
+        ),
+      );
+    }
     try {
       const res = await fetch("/api/transactions", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ id: txId, categoryId: categoryId || null }),
+        body: JSON.stringify({
+          id: txId,
+          categoryId: categoryId || null,
+          ...(opts?.applyToSimilar ? { applyToSimilar: true } : {}),
+        }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
@@ -324,34 +362,48 @@ export function MesAMesView({
         setError(data?.error || "No se pudo guardar");
         return;
       }
-      if (data?.similarUpdated > 0) {
+
+      if (opts?.applyToSimilar) {
+        setApplyPrompt(null);
+        const n = typeof data?.similarUpdated === "number" ? data.similarUpdated : 0;
         setToast(
-          `Categoría actualizada. También ${data.similarUpdated} gasto(s) similar(es).`,
+          n > 0
+            ? `Criterio aplicado a ${n + 1} gasto${n + 1 === 1 ? "" : "s"}.`
+            : "Criterio guardado.",
         );
+        void loadStats();
+        await reloadTxs();
+        return;
       }
+
+      const similarCount =
+        typeof data?.similarCount === "number" ? data.similarCount : 0;
+      if (categoryChanged && similarCount >= 2 && categoryId) {
+        setApplyPrompt({ txId, categoryId, count: similarCount });
+      } else if (categoryChanged) {
+        setApplyPrompt(null);
+        setToast("Guardado.");
+      }
+
       void loadStats();
-      const q =
-        filterPeriod && filterPeriod !== "all"
-          ? `?period=${encodeURIComponent(filterPeriod)}`
-          : "";
-      const res2 = await fetch(`/api/transactions${q}`, {
-        credentials: "include",
-      });
-      if (res2.ok) {
-        const d2 = await res2.json();
-        setTxs(
-          (d2.transactions as Tx[]).filter(
-            (t) =>
-              !t.isPayment &&
-              (t.amountArs != null || t.amountUsd != null),
-          ),
-        );
-      }
+      await reloadTxs();
     } catch {
       setTxs(prev);
       setError("Error de red al guardar");
     } finally {
       setSavingId(null);
+    }
+  }
+
+  async function applyCriterion() {
+    if (!applyPrompt) return;
+    setApplyBusy(true);
+    try {
+      await changeCategory(applyPrompt.txId, applyPrompt.categoryId, {
+        applyToSimilar: true,
+      });
+    } finally {
+      setApplyBusy(false);
     }
   }
 
@@ -424,7 +476,19 @@ export function MesAMesView({
         </div>
       )}
 
-      {toast && <Toast>{toast}</Toast>}
+      {applyPrompt ? (
+        <ApplyCriterionToast
+          prompt={applyPrompt}
+          busy={applyBusy || savingId === applyPrompt.txId}
+          onApply={() => void applyCriterion()}
+          onSoloEste={() => {
+            setApplyPrompt(null);
+            setToast("Guardado.");
+          }}
+        />
+      ) : (
+        toast && <Toast>{toast}</Toast>
+      )}
       {error && months.length > 0 && (
         <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40">
           {error}
