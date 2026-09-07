@@ -70,6 +70,27 @@ export function isHogarReintegroDescription(description: string): boolean {
   );
 }
 
+/**
+ * Card payments / internal transfers (isPayment) stay out of Consumos.
+ * Hogar-service reintegros are isPayment (out of neta) but remain visible
+ * with Tipo "Reintegro hogar".
+ */
+export function isConsumosHiddenPayment(
+  isPayment: boolean,
+  descriptionNormalized: string,
+): boolean {
+  if (!isPayment) return false;
+  return !isHogarReintegroDescription(descriptionNormalized);
+}
+
+/** True when Tipo should show "Reintegro hogar". */
+export function isReintegroHogarTipo(
+  isPayment: boolean,
+  descriptionNormalized: string,
+): boolean {
+  return isPayment && isHogarReintegroDescription(descriptionNormalized);
+}
+
 /** Same payee key for bulk “Aplicar a N” (exact normalized description). */
 export function sameHogarReintegroKey(a: string, b: string): boolean {
   const ka = normalizeKey(a);

@@ -27,7 +27,10 @@ import {
   ReintegroHogarToast,
   type ReintegroHogarPrompt,
 } from "@/components/reintegro-hogar-toast";
-import { looksLikeHogarReintegroPayee } from "@/lib/reintegro-hogar";
+import {
+  looksLikeHogarReintegroPayee,
+  isConsumosHiddenPayment,
+} from "@/lib/reintegro-hogar";
 
 type CategoryOpt = { id: string; slug: string; name: string };
 
@@ -314,7 +317,10 @@ export function MesAMesView({
             (data.transactions as Tx[])
               .filter(
                 (t) =>
-                  !t.isPayment &&
+                  !isConsumosHiddenPayment(
+                    Boolean(t.isPayment),
+                    t.descriptionNormalized,
+                  ) &&
                   (t.amountArs != null || t.amountUsd != null),
               )
               .map((t) => ({
@@ -396,7 +402,10 @@ export function MesAMesView({
       setTxs(
         (d2.transactions as Tx[]).filter(
           (t) =>
-            !t.isPayment &&
+            !isConsumosHiddenPayment(
+              Boolean(t.isPayment),
+              t.descriptionNormalized,
+            ) &&
             (t.amountArs != null || t.amountUsd != null),
         ),
       );
@@ -524,7 +533,14 @@ export function MesAMesView({
       }
 
       if (body.householdReimbursement || body.internalTransfer) {
-        setTxs((list) => list.filter((x) => x.id !== id));
+        if (body.internalTransfer) {
+          setTxs((list) => list.filter((x) => x.id !== id));
+        } else {
+          // Reintegro hogar stays visible (out of neta via isPayment).
+          setTxs((list) =>
+            list.map((x) => (x.id === id ? { ...x, isPayment: true } : x)),
+          );
+        }
         const n =
           typeof data?.reintegroCount === "number"
             ? data.reintegroCount

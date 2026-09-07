@@ -5,6 +5,8 @@ import {
   looksLikeHogarReintegroPayee,
   looksLikeBareHogarReintegroPayee,
   isHogarReintegroDescription,
+  isConsumosHiddenPayment,
+  isReintegroHogarTipo,
   sameHogarReintegroKey,
 } from "./reintegro-hogar";
 
@@ -115,5 +117,20 @@ describe("looksLikeBareHogarReintegroPayee / isHogarReintegroDescription", () =>
       isHogarReintegroDescription("Katherine Fernanda en el super"),
       false,
     );
+  });
+});
+
+describe("Consumos visibility for hogar reintegro isPayment", () => {
+  it("keeps Katherine visible; hides unrelated payments", () => {
+    assert.equal(
+      isConsumosHiddenPayment(true, "Katherine Fernanda Sanchez Carrasco"),
+      false,
+    );
+    assert.equal(
+      isReintegroHogarTipo(true, "Katherine Fernanda Sanchez Carrasco"),
+      true,
+    );
+    assert.equal(isConsumosHiddenPayment(true, "A una cuenta tuya"), true);
+    assert.equal(isConsumosHiddenPayment(false, "DIA"), false);
   });
 });

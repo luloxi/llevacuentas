@@ -4,6 +4,7 @@ import { isPeriodDebtSource } from "@/lib/import/source";
 import { getDb, schema } from "@/lib/db";
 import { getCategoryMap } from "@/lib/household";
 import { periodFromDateString } from "@/lib/utils";
+import { isConsumosHiddenPayment } from "@/lib/reintegro-hogar";
 
 /**
  * Visibility:
@@ -52,7 +53,12 @@ export async function listTransactions(
     .orderBy(desc(schema.transactions.date));
 
   return rows.filter((r) => {
-    if (!opts?.includePayments && r.isPayment) return false;
+    if (
+      !opts?.includePayments &&
+      isConsumosHiddenPayment(r.isPayment, r.descriptionNormalized)
+    ) {
+      return false;
+    }
     if (!opts?.includePayments && r.isCredit) return false;
     if (
       !opts?.includePayments &&

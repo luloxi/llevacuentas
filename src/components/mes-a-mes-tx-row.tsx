@@ -1,6 +1,7 @@
 "use client";
 
 import { cn, formatArs, formatUsd, formatDateAr } from "@/lib/utils";
+import { isReintegroHogarTipo } from "@/lib/reintegro-hogar";
 
 type CategoryOpt = { id: string; slug: string; name: string };
 
@@ -53,8 +54,12 @@ export function MesAMesTxRow({
       : activeHouseholdId
         ? [{ id: activeHouseholdId, name: "Hogar" }]
         : [];
-  const assignValue =
-    t.ownership === "personal"
+  const assignValue = isReintegroHogarTipo(
+    Boolean(t.isPayment),
+    t.descriptionNormalized,
+  )
+    ? "reintegro"
+    : t.ownership === "personal"
       ? "personal"
       : activeHouseholdId ?? "shared";
 
@@ -122,9 +127,11 @@ export function MesAMesTxRow({
           onClick={(e) => e.stopPropagation()}
           className={cn(
             "lc-input w-full !px-2 !py-1.5 text-xs font-medium",
-            t.ownership === "shared"
-              ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
-              : "",
+            assignValue === "reintegro"
+              ? "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+              : t.ownership === "shared"
+                ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
+                : "",
           )}
           aria-label="Asignar a"
         >

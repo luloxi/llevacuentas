@@ -17,7 +17,11 @@ import {
   ReintegroHogarToast,
   type ReintegroHogarPrompt,
 } from "@/components/reintegro-hogar-toast";
-import { looksLikeHogarReintegroPayee } from "@/lib/reintegro-hogar";
+import {
+  looksLikeHogarReintegroPayee,
+  isConsumosHiddenPayment,
+  isReintegroHogarTipo,
+} from "@/lib/reintegro-hogar";
 
 type Category = { id: string; slug: string; name: string };
 type Member = { userId: string; name: string };
@@ -130,7 +134,11 @@ function toSheet(rows: Tx[], members: Member[]) {
     "Monto $": r.amountArs ?? "",
     USD: r.amountUsd ?? "",
     Categoría: categoryLabel(r.category?.name),
-    Tipo: r.ownership === "shared" ? "Hogar" : "Personal",
+    Tipo: isReintegroHogarTipo(r.isPayment, r.descriptionNormalized)
+      ? "Reintegro hogar"
+      : r.ownership === "shared"
+        ? "Hogar"
+        : "Personal",
     Pagó: (() => {
       const m = members.find((x) => x.userId === r.paidByUserId);
       return m ? memberLabel(m) : "";
@@ -248,7 +256,7 @@ export function TransactionsTable() {
       }>(res);
       if (!res.ok) { setError(data.error || `Error ${res.status}`); return; }
       const list = (data.transactions ?? [])
-        .filter((t) => !t.isPayment)
+        .filter((t) => !isConsumosHiddenPayment(t.isPayment, t.descriptionNormalized))
         .map((t) => ({
           ...t,
           ownership: t.ownership === "shared" ? "shared" as const : "personal" as const,
@@ -287,7 +295,7 @@ export function TransactionsTable() {
         const ps = [
           ...new Set(
             (data.transactions ?? [])
-              .filter((t) => !t.isPayment)
+              .filter((t) => !isConsumosHiddenPayment(t.isPayment, t.descriptionNormalized))
               .map((r) => periodFromDateString(r.date)),
           ),
         ].sort().reverse();
@@ -401,8 +409,10 @@ export function TransactionsTable() {
             : typeof data?.similarCount === "number"
               ? data.similarCount
               : 1;
-        // Row already isPayment — drop from list like Transferencia interna.
-        setRows((list) => list.filter((x) => x.id !== id));
+        // Keep visible in Consumos as Tipo Reintegro hogar (still out of neta).
+        setRows((list) =>
+          list.map((x) => (x.id === id ? { ...x, isPayment: true } : x)),
+        );
         if (n > 1 && !body.applyToSimilar) {
           setToast(null);
           setReintegroPrompt({
@@ -550,6 +560,7 @@ export function TransactionsTable() {
   }
 
   function assignValueFor(r: Tx): string {
+    if (isReintegroHogarTipo(r.isPayment, r.descriptionNormalized)) return "reintegro";
     if (r.ownership === "personal") return "personal";
     return activeHouseholdId ?? "shared";
   }
@@ -661,9 +672,11 @@ export function TransactionsTable() {
         onChange={(e) => void onAssignChange(r, e.target.value)}
         className={cn(
           "lc-input !px-2 !py-1.5 text-xs font-medium",
-          r.ownership === "shared"
-            ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
-            : "",
+          value === "reintegro"
+            ? "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+            : r.ownership === "shared"
+              ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
+              : "",
         )}
         aria-label="Asignar a"
       >

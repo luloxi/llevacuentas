@@ -173,9 +173,7 @@ async function seedGastos(
           amountArs: abs,
           amountUsd: null,
           installment: null,
-          isPayment:
-            isOwnAccountTransferDescription(row.description) ||
-            isHogarReintegroDescription(row.description),
+          isPayment: casitaSeptGastoIsPayment(row.description),
           isCredit: false,
           categoryId: category?.id,
           ownership: "personal",
@@ -373,24 +371,60 @@ async function backfillCasitaSeptHogarReintegros(householdId: string) {
 }
 
 /**
+ * Pure matcher: Sep3 alquiler/luz/agua covered by Katherine reintegro.
+ * Never matches hogar-reintegro payee rows (Katherine / Katho), even if they
+ * were miscategorized as a service slug.
+ */
+export function matchesCasitaSep3ServiceCoveredByReintegro(opts: {
+  descriptionNormalized: string;
+  categorySlug?: string | null;
+}): string | null {
+  if (isHogarReintegroDescription(opts.descriptionNormalized)) return null;
+
+  const slugSet = new Set<string>(
+    CASITA_SEP3_SERVICES_COVERED_BY_REINTEGRO.categorySlugs,
+  );
+  const descKey = opts.descriptionNormalized
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const descIsService =
+    descKey === "ALQUILER" || descKey === "LUZ" || descKey === "AGUA";
+
+  const slug = opts.categorySlug ?? undefined;
+  const byCat = Boolean(slug && slugSet.has(slug));
+  if (!byCat && !descIsService) return null;
+
+  let resolved = slug && slugSet.has(slug) ? slug : null;
+  if (!resolved && descIsService) {
+    resolved =
+      descKey === "ALQUILER"
+        ? "alquiler"
+        : descKey === "LUZ"
+          ? "luz"
+          : "agua";
+  }
+  if (!resolved || !slugSet.has(resolved)) return null;
+  return resolved;
+}
+
+/**
  * Idempotent: delete Casita alquiler/luz/agua on 2026-09-03 (covered by
  * Katherine reintegro). Matches category slug, or exact service name as
- * description when category is missing/wrong.
+ * description when category is missing/wrong. Never deletes Katherine.
  */
-async function purgeCasitaSep3ServicesCoveredByReintegro(
+export async function purgeCasitaSep3ServicesCoveredByReintegro(
   householdId: string,
 ): Promise<number> {
   const db = getDb();
-  const { date, categorySlugs } = CASITA_SEP3_SERVICES_COVERED_BY_REINTEGRO;
-  const slugSet = new Set<string>(categorySlugs);
+  const { date } = CASITA_SEP3_SERVICES_COVERED_BY_REINTEGRO;
 
   const cats = await db
     .select({ id: schema.categories.id, slug: schema.categories.slug })
     .from(schema.categories);
   const catIdToSlug = new Map(cats.map((c) => [c.id, c.slug]));
-  const serviceCatIds = new Set(
-    cats.filter((c) => slugSet.has(c.slug)).map((c) => c.id),
-  );
 
   const txs = await db
     .select({
@@ -414,28 +448,14 @@ async function purgeCasitaSep3ServicesCoveredByReintegro(
   }> = [];
 
   for (const t of txs) {
-    const slug = t.categoryId ? catIdToSlug.get(t.categoryId) : undefined;
-    const descKey = t.descriptionNormalized
-      .toUpperCase()
-      .normalize("NFD")
-      .replace(/\p{M}/gu, "")
-      .replace(/\s+/g, " ")
-      .trim();
-    const descIsService =
-      descKey === "ALQUILER" || descKey === "LUZ" || descKey === "AGUA";
-    const byCat = t.categoryId != null && serviceCatIds.has(t.categoryId);
-    if (!byCat && !descIsService) continue;
-
-    let resolved = slug && slugSet.has(slug) ? slug : null;
-    if (!resolved && descIsService) {
-      resolved =
-        descKey === "ALQUILER"
-          ? "alquiler"
-          : descKey === "LUZ"
-            ? "luz"
-            : "agua";
-    }
-    if (!resolved || !slugSet.has(resolved)) continue;
+    const categorySlug = t.categoryId
+      ? catIdToSlug.get(t.categoryId) ?? null
+      : null;
+    const resolved = matchesCasitaSep3ServiceCoveredByReintegro({
+      descriptionNormalized: t.descriptionNormalized,
+      categorySlug,
+    });
+    if (!resolved) continue;
 
     toDelete.push({
       id: t.id,
@@ -465,4 +485,12 @@ async function purgeCasitaSep3ServicesCoveredByReintegro(
     `[casita] purged ${toDelete.length} Sep3 service(s) covered by reintegro: ${summary}`,
   );
   return toDelete.length;
+}
+
+/** Seed flags for a CSV gasto description (own-account or hogar reintegro). */
+export function casitaSeptGastoIsPayment(description: string): boolean {
+  return (
+    isOwnAccountTransferDescription(description) ||
+    isHogarReintegroDescription(description)
+  );
 }
