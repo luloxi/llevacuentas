@@ -4,9 +4,10 @@ export const size = { width: 512, height: 512 };
 export const contentType = "image/png";
 
 /**
- * Android / PWA icon — black background, yellow paper outline + $.
- * Paper stays inside the maskable safe zone (~66%) so it doesn't clip on Android.
- * Paper and $ are tilted diagonally.
+ * Android / PWA icon.
+ * Opaque black field, filled yellow ticket, black $.
+ * Mark stays inside the maskable 66% safe zone.
+ * No hairline strokes and no CSS dog-ear: both break at launcher size.
  */
 export default function Icon() {
   const yellow = "#F0B90B";
@@ -22,56 +23,29 @@ export default function Icon() {
           background: "#000000",
         }}
       >
-        {/* Outer safe padding for adaptive/maskable icons */}
         <div
           style={{
-            width: 280,
-            height: 280,
+            width: 228,
+            height: 276,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            transform: "rotate(-18deg)",
+            background: yellow,
+            borderRadius: 32,
+            transform: "rotate(-14deg)",
           }}
         >
-          {/* Paper outline — smaller than before */}
           <div
             style={{
-              width: 168,
-              height: 210,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              border: `18px solid ${yellow}`,
-              borderRadius: 22,
-              background: "transparent",
-              position: "relative",
+              fontSize: 148,
+              fontWeight: 800,
+              color: "#000000",
+              lineHeight: 1,
+              fontFamily: "system-ui, sans-serif",
+              transform: "rotate(-4deg)",
             }}
           >
-            {/* Folded corner */}
-            <div
-              style={{
-                position: "absolute",
-                top: -18,
-                right: -18,
-                width: 44,
-                height: 44,
-                borderBottom: `18px solid ${yellow}`,
-                borderLeft: `18px solid ${yellow}`,
-                borderBottomLeftRadius: 6,
-              }}
-            />
-            <div
-              style={{
-                fontSize: 92,
-                fontWeight: 700,
-                color: yellow,
-                lineHeight: 1,
-                fontFamily: "system-ui, sans-serif",
-                transform: "rotate(-6deg)",
-              }}
-            >
-              $
-            </div>
+            $
           </div>
         </div>
       </div>
