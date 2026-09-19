@@ -86,6 +86,10 @@ export function isConsumosHiddenPayment(
   if (!isPayment) return false;
   if (isHogarReintegroDescription(descriptionNormalized)) return false;
   if (isHogarUtilitySlug(categorySlug)) return false;
+  // Rainman: Transferencia interna stays visible (out of neta) like Cubierto.
+  if ((categorySlug ?? "").trim().toLowerCase() === "transferencia-interna") {
+    return false;
+  }
   return true;
 }
 

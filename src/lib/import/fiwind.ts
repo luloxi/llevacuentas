@@ -132,7 +132,7 @@ export const FIWIND_CATEGORY_SLUG: Record<
   investment: "crypto-inversiones",
   yield: "rendimientos",
   crypto_out: "conversiones",
-  transfer: "conversiones",
+  transfer: "transferencia-interna",
   numeric: "conversiones",
 };
 

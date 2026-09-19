@@ -1,6 +1,7 @@
 import {
   isBankAccountingEntry,
   isCardPaymentEntry,
+  isInternalTransferDescription,
 } from "@/lib/bbva/bank-entries";
 import {
   filterToPrimaryCard,
@@ -84,6 +85,8 @@ export type CardDebtResult = {
   totalChargesArs: number;
   totalChargesUsd: number;
   peakBalanceArs: number;
+  /** Rainman: deuda_neta = saldo_deuda − pagos_aplicados (snapshot saldo already net). */
+  netDebtArs: number;
   primaryCardLast4: string | null;
   mode: "forced" | "snapshot" | "installments" | "empty";
 };
@@ -300,6 +303,8 @@ function paymentList(rows: DebtTx[]): DebtPayment[] {
     const looksPay = isCardPaymentEntry(desc);
     const isPay = Boolean(r.isPayment);
     const isCredit = Boolean(r.isCredit);
+    // Rainman: self-transfer / own FX never inflate debt (nor count as card payment).
+    if (isInternalTransferDescription(desc) && !looksPay) continue;
     if (!(looksPay || isPay || isCredit)) continue;
     if (isBankAccountingEntry(desc) && !looksPay && !isPay) continue;
     const kind: "payment" | "credit" =
@@ -358,6 +363,7 @@ export function computeCardDebt(
     totalChargesArs: 0,
     totalChargesUsd: 0,
     peakBalanceArs: 0,
+    netDebtArs: 0,
     primaryCardLast4: opts.settings?.cardLast4 ?? null,
     mode: forceSettled ? "forced" : "empty",
   };
@@ -462,6 +468,9 @@ export function computeCardDebt(
     totalChargesArs: chargeSum.ars,
     totalChargesUsd: chargeSum.usd,
     peakBalanceArs: currentBalanceArs,
+    // Paying the card from CA lowers this (snapshot / remaining cuotas).
+    // Self credits never raise it (filtered out of paymentList above).
+    netDebtArs: currentBalanceArs,
     primaryCardLast4,
     mode,
   };

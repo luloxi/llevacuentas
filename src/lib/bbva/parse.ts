@@ -16,6 +16,7 @@ import {
   flagsForFiwindKind,
   isDustYield,
 } from "@/lib/import/fiwind";
+import { isInternalTransferDescription } from "@/lib/bbva/bank-entries";
 
 export type BbvaSheetLayout = "period" | "ultimos" | "table";
 
@@ -648,6 +649,13 @@ export function parseStatementWorkbook(
       payment = isPaymentDescription(descriptionNormalized) || flags.isPayment;
       credit = flags.isCredit || (negative && !payment);
       categoryHint = categoryHintForFiwindKind(kind);
+    }
+
+    // Rainman: self-transfer / own FX → Transferencia interna (never Ingresos).
+    if (isInternalTransferDescription(descriptionNormalized)) {
+      payment = true;
+      credit = false;
+      categoryHint = categoryHint ?? "transferencia-interna";
     }
 
     const partial = {

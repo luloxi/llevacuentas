@@ -1,3 +1,4 @@
+import { isNonIncomeTransferLabel } from "@/lib/bbva/bank-entries";
 import { periodFromDateString } from "@/lib/utils";
 
 export type IncomeKind = "recurring" | "variable";
@@ -138,6 +139,8 @@ export function periodIncomeEntries(
       r.kind === "recurring" ? "recurring" : "variable";
 
     if (kind === "variable") {
+      // Rainman: never treat self-transfer / FX / DEBIN as Ingresos Variables
+      if (isNonIncomeTransferLabel(r.label)) continue;
       if (periodFromDateString(r.date) !== period) continue;
       entries.push({
         date: r.date,
@@ -260,4 +263,3 @@ export function monthlyIncomeEvolution(
     return { period, amountArs };
   });
 }
-

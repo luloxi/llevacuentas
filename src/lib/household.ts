@@ -45,15 +45,36 @@ export async function ensureCategoriesSeeded() {
       .onConflictDoNothing()
       .returning();
 
-    if (row) {
-      for (const pattern of cat.patterns) {
-        if (pattern.includes("%")) continue;
-        await db.insert(schema.merchantRules).values({
-          pattern: pattern.toUpperCase(),
-          categoryId: row.id,
-          priority: cat.priority,
-        });
-      }
+    // Resolve id whether newly inserted or already present (Rainman patterns).
+    let categoryId = row?.id ?? null;
+    if (!categoryId) {
+      const [existing] = await db
+        .select({ id: schema.categories.id })
+        .from(schema.categories)
+        .where(eq(schema.categories.slug, cat.slug))
+        .limit(1);
+      categoryId = existing?.id ?? null;
+    }
+    if (!categoryId) continue;
+
+    const existingPatterns = await db
+      .select({ pattern: schema.merchantRules.pattern })
+      .from(schema.merchantRules)
+      .where(eq(schema.merchantRules.categoryId, categoryId));
+    const have = new Set(
+      existingPatterns.map((r) => r.pattern.toUpperCase()),
+    );
+
+    for (const pattern of cat.patterns) {
+      if (pattern.includes("%")) continue;
+      const pat = pattern.toUpperCase();
+      if (have.has(pat)) continue;
+      await db.insert(schema.merchantRules).values({
+        pattern: pat,
+        categoryId,
+        priority: cat.priority,
+      });
+      have.add(pat);
     }
   }
 }

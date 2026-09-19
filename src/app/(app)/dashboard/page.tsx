@@ -44,6 +44,15 @@ export default async function DashboardPage() {
   if (!ctx) redirect("/onboarding");
 
   await ensureSchema();
+  // Rainman: migrate existing self/FX rows before neta / Variables aggregators.
+  try {
+    const { reclassifyFiwindNoise } = await import(
+      "@/lib/import/reclassify-fiwind"
+    );
+    await reclassifyFiwindNoise(ctx.household.id, { userId: user.id });
+  } catch {
+    // Non-fatal
+  }
   const db = getDb();
   const txs = await db
     .select()

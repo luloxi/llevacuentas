@@ -64,12 +64,17 @@ export async function listTransactions(
     ) {
       return false;
     }
-    if (!opts?.includePayments && r.isCredit) return false;
+    if (!opts?.includePayments && r.isCredit) {
+      const slug = r.categoryId ? byId.get(r.categoryId)?.slug : null;
+      if (slug !== "transferencia-interna") return false;
+    }
     if (
       !opts?.includePayments &&
       isBankAccountingEntry(r.descriptionNormalized)
     ) {
-      return false;
+      // Rainman: Transferencia interna stays listed (out of neta).
+      const slug = r.categoryId ? byId.get(r.categoryId)?.slug : null;
+      if (slug !== "transferencia-interna") return false;
     }
     if (!opts?.includePayments && isPeriodDebtSource(r.source)) {
       return false;
@@ -112,8 +117,10 @@ export async function updateTransaction(
     date?: string;
     amountArs?: number | null;
     amountUsd?: number | null;
-    /** Internal transfer / non-spend — hidden from Consumos + neta. */
+    /** Internal transfer / non-spend — out of neta; visible if Transferencia interna. */
     isPayment?: boolean;
+    /** Credits that become Transferencia interna must clear isCredit so lists show them. */
+    isCredit?: boolean;
   },
 ) {
   const db = getDb();
@@ -133,6 +140,7 @@ export async function updateTransaction(
     amountArs?: string | null;
     amountUsd?: string | null;
     isPayment?: boolean;
+    isCredit?: boolean;
     updatedAt: Date;
   } = { ...rest, updatedAt: new Date() };
 

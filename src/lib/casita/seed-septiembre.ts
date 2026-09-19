@@ -6,7 +6,10 @@ import { ensureSchema } from "@/lib/db/ensure-schema";
 import { ensureCategoriesSeeded, getCategoryMap } from "@/lib/household";
 import { matchCategoryWithLearning } from "@/lib/categorize/learn";
 import { INVOICE_IOG_HOUSEHOLD_NAME, INVOICE_IOG_SOURCE } from "@/lib/invoice-iog/catalog";
-import { isOwnAccountTransferDescription } from "@/lib/bbva/bank-entries";
+import {
+  isNonIncomeTransferLabel,
+  isOwnAccountTransferDescription,
+} from "@/lib/bbva/bank-entries";
 import {
   isPersonalHouseholdName,
   resolvePersonalHouseholdId,
@@ -457,7 +460,7 @@ async function seedIngresos(
   );
 
   for (const row of ingresos) {
-    if (isOwnAccountTransferDescription(row.description)) continue;
+    if (isNonIncomeTransferLabel(row.description)) continue;
     const fp = casitaSeptFingerprint(row);
     if (have.has(fp)) continue;
     const key = `${row.date}|${row.description.trim().toUpperCase()}|${moneyAbs2(row.amountArs)}`;
@@ -524,7 +527,7 @@ async function backfillCasitaSeptOwnAccountTransfers(
     );
 
   for (const r of incomes) {
-    if (!isOwnAccountTransferDescription(r.label)) continue;
+    if (!isNonIncomeTransferLabel(r.label)) continue;
     await db.delete(schema.incomes).where(eq(schema.incomes.id, r.id));
   }
 }

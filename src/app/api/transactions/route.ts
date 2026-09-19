@@ -29,6 +29,20 @@ export async function GET(req: Request) {
       await ensureInvoiceIogCasitaMatchesForUser(sessionUser);
     }
     const ctx = await requireHousehold(sessionUser.id);
+    // Rainman one-shot: self/FX → Transferencia interna + purge bad Ingresos Variables.
+    // Idempotent; cleans live DB without manual wipe / re-import.
+    if (authResult.authKind === "session") {
+      try {
+        const { reclassifyFiwindNoise } = await import(
+          "@/lib/import/reclassify-fiwind"
+        );
+        await reclassifyFiwindNoise(ctx.household.id, {
+          userId: sessionUser.id,
+        });
+      } catch {
+        // Non-fatal — listing still works if reclassify hiccups.
+      }
+    }
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period") ?? undefined;
     const categoryId = searchParams.get("categoryId") ?? undefined;
@@ -480,6 +494,11 @@ export async function PATCH(req: Request) {
             ? true
             : undefined;
 
+    const wantsInternalTransfer =
+      body.internalTransfer === true ||
+      body.internalTransfer === 1 ||
+      body.internalTransfer === "true";
+
     // Only include fields the client sent. Passing amountArs: undefined still
     // puts the key on the patch object ("in" === true) and used to NULL montos
     // on Cubierto / Reintegro marks — Resumen Cubiertos then showed $0.
@@ -487,6 +506,17 @@ export async function PATCH(req: Request) {
       isPayment: nextIsPayment,
     };
     if ("categoryId" in body) patch.categoryId = body.categoryId;
+    // Rainman: Tipo Transferencia interna → category + isPayment (lists show them).
+    if (wantsInternalTransfer && !("categoryId" in body)) {
+      const { bySlug } = await getCategoryMap({
+        householdId: ctx.household.id,
+        includeHidden: true,
+      });
+      const internal =
+        bySlug.get("transferencia-interna") ?? bySlug.get("conversiones");
+      if (internal) patch.categoryId = internal.id;
+      patch.isCredit = false;
+    }
     if (nextOwnership !== undefined) patch.ownership = nextOwnership;
     if (nextPaidBy !== undefined) patch.paidByUserId = nextPaidBy;
     else if ("paidByUserId" in body) patch.paidByUserId = body.paidByUserId;

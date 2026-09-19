@@ -10,13 +10,30 @@ export async function POST() {
 
   try {
     const ctx = await requireHousehold(user.id);
-    const result = await reclassifyFiwindNoise(ctx.household.id);
-    const message =
-      result.updated === 0
-        ? result.alreadyOk > 0
-          ? `Nada nuevo: ${result.alreadyOk} ya estaban como ruido (Conversiones / crypto). No se borró nada.`
-          : "No había ruido Fiwind para reclasificar."
-        : `Listo: ${result.updated} movimiento${result.updated === 1 ? "" : "s"} fuera de gastos (categoría Conversiones). No se borró nada.`;
+    const result = await reclassifyFiwindNoise(ctx.household.id, {
+      userId: user.id,
+    });
+    const message = (() => {
+      const bits: string[] = [];
+      if (result.internalMarked > 0) {
+        bits.push(`${result.internalMarked} Transferencia interna`);
+      }
+      if (result.incomesRemoved > 0) {
+        bits.push(
+          `${result.incomesRemoved} ingreso${result.incomesRemoved === 1 ? "" : "s"} self/FX quitado${result.incomesRemoved === 1 ? "" : "s"}`,
+        );
+      }
+      const other = result.updated - (result.internalMarked ?? 0);
+      if (other > 0) {
+        bits.push(`${other} ruido Fiwind → Conversiones`);
+      }
+      if (bits.length === 0) {
+        return result.alreadyOk > 0
+          ? `Nada nuevo: ${result.alreadyOk} ya estaban bien. No se borraron movimientos.`
+          : "No había ruido Fiwind / self-transfer para reclasificar.";
+      }
+      return `Listo: ${bits.join(" · ")}. Movimientos no se borran.`;
+    })();
     return NextResponse.json({ ok: true, ...result, message });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error";

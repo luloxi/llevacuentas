@@ -51,6 +51,7 @@ export async function GET() {
       openCharges: debt.openCharges,
       summary: {
         currentBalanceArs: debt.currentBalanceArs,
+        netDebtArs: debt.netDebtArs,
         currentBalanceUsd: debt.currentBalanceUsd,
         peakBalanceArs: debt.peakBalanceArs,
         totalPaidArs: debt.totalPaidArs,

@@ -37,6 +37,7 @@ import {
   isReintegroHogarTipo,
 } from "@/lib/reintegro-hogar";
 import { isGastoCubiertoTipo } from "@/lib/gasto-cubierto";
+import { isTransferenciaInternaTipo } from "@/lib/bbva/bank-entries";
 
 type CategoryOpt = { id: string; slug: string; name: string };
 
@@ -673,6 +674,7 @@ export function MesAMesView({
     if (value === "personal") {
       const wasSpecial =
         isReintegroHogarTipo(Boolean(r.isPayment), r.descriptionNormalized) ||
+        isTransferenciaInternaTipo(Boolean(r.isPayment), r.category) ||
         isGastoCubiertoTipo(Boolean(r.isPayment), r.category);
       if (r.ownership === "personal" && !wasSpecial) return;
       setError(null);
@@ -761,6 +763,7 @@ export function MesAMesView({
       }
       const wasSpecial =
         isReintegroHogarTipo(Boolean(r.isPayment), r.descriptionNormalized) ||
+        isTransferenciaInternaTipo(Boolean(r.isPayment), r.category) ||
         isGastoCubiertoTipo(Boolean(r.isPayment), r.category);
       if (r.ownership !== "shared" || wasSpecial) {
         void patchTx(r.id, {

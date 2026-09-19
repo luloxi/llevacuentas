@@ -27,6 +27,7 @@ import {
   isReintegroHogarTipo,
 } from "@/lib/reintegro-hogar";
 import { isGastoCubiertoTipo } from "@/lib/gasto-cubierto";
+import { isTransferenciaInternaTipo } from "@/lib/bbva/bank-entries";
 
 type Category = { id: string; slug: string; name: string };
 type Member = { userId: string; name: string };
@@ -141,11 +142,13 @@ function toSheet(rows: Tx[], members: Member[]) {
     Categoría: categoryLabel(r.category?.name),
     Tipo: isReintegroHogarTipo(r.isPayment, r.descriptionNormalized)
       ? "Reintegro hogar"
-      : isGastoCubiertoTipo(r.isPayment, r.category)
-        ? "Cubierto"
-        : r.ownership === "shared"
-          ? "Hogar"
-          : "Personal",
+      : isTransferenciaInternaTipo(r.isPayment, r.category)
+        ? "Transferencia interna"
+        : isGastoCubiertoTipo(r.isPayment, r.category)
+          ? "Cubierto"
+          : r.ownership === "shared"
+            ? "Hogar"
+            : "Personal",
     Pagó: (() => {
       const m = members.find((x) => x.userId === r.paidByUserId);
       return m ? memberLabel(m) : "";
@@ -622,6 +625,7 @@ export function TransactionsTable() {
 
   function assignValueFor(r: Tx): string {
     if (isReintegroHogarTipo(r.isPayment, r.descriptionNormalized)) return "reintegro";
+    if (isTransferenciaInternaTipo(r.isPayment, r.category)) return "internal";
     if (isGastoCubiertoTipo(r.isPayment, r.category)) return "cubierto";
     if (r.ownership === "personal") return "personal";
     return activeHouseholdId ?? "shared";
@@ -631,6 +635,7 @@ export function TransactionsTable() {
     if (value === "personal") {
       const wasSpecial =
         isReintegroHogarTipo(r.isPayment, r.descriptionNormalized) ||
+        isTransferenciaInternaTipo(r.isPayment, r.category) ||
         isGastoCubiertoTipo(r.isPayment, r.category);
       if (r.ownership === "personal" && !wasSpecial) return;
       setError(null);
@@ -742,6 +747,7 @@ export function TransactionsTable() {
       }
       const wasSpecial =
         isReintegroHogarTipo(r.isPayment, r.descriptionNormalized) ||
+        isTransferenciaInternaTipo(r.isPayment, r.category) ||
         isGastoCubiertoTipo(r.isPayment, r.category);
       if (r.ownership !== "shared" || wasSpecial) {
         void patch(r.id, {

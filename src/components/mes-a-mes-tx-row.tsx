@@ -3,6 +3,7 @@
 import { cn, formatArs, formatUsd, formatDateAr } from "@/lib/utils";
 import { isReintegroHogarTipo } from "@/lib/reintegro-hogar";
 import { isGastoCubiertoTipo } from "@/lib/gasto-cubierto";
+import { isTransferenciaInternaTipo } from "@/lib/bbva/bank-entries";
 
 type CategoryOpt = { id: string; slug: string; name: string };
 
@@ -60,11 +61,13 @@ export function MesAMesTxRow({
     t.descriptionNormalized,
   )
     ? "reintegro"
-    : isGastoCubiertoTipo(Boolean(t.isPayment), t.category)
-      ? "cubierto"
-      : t.ownership === "personal"
-        ? "personal"
-        : activeHouseholdId ?? "shared";
+    : isTransferenciaInternaTipo(Boolean(t.isPayment), t.category)
+      ? "internal"
+      : isGastoCubiertoTipo(Boolean(t.isPayment), t.category)
+        ? "cubierto"
+        : t.ownership === "personal"
+          ? "personal"
+          : activeHouseholdId ?? "shared";
 
   return (
     <li className="rounded-xl border border-zinc-100/80 bg-white px-3 py-2.5 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">

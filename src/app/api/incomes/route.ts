@@ -13,6 +13,7 @@ import {
   type IncomeFrequency,
   type IncomeKind,
 } from "@/lib/incomes";
+import { isNonIncomeTransferLabel } from "@/lib/bbva/bank-entries";
 import { currentPeriodAr, periodFromDateString } from "@/lib/utils";
 
 function n(v: unknown): number | null {
@@ -51,6 +52,16 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Sin espacio" }, { status: 400 });
     }
 
+    // Rainman: delete self/FX income rows so Variables stay clean.
+    try {
+      const { reclassifyFiwindNoise } = await import(
+        "@/lib/import/reclassify-fiwind"
+      );
+      await reclassifyFiwindNoise(ctx.household.id, { userId: user.id });
+    } catch {
+      // Non-fatal
+    }
+
     const url = new URL(req.url);
     const period = url.searchParams.get("period") || currentPeriodAr();
 
@@ -61,9 +72,10 @@ export async function GET(req: Request) {
       .where(eq(schema.incomes.userId, user.id))
       .orderBy(desc(schema.incomes.date), desc(schema.incomes.createdAt));
 
-    const incomes = rows.map(serialize);
+    const rowsKeep = rows.filter((r) => !isNonIncomeTransferLabel(r.label));
+    const incomes = rowsKeep.map(serialize);
     const periodEntries = periodIncomeEntries(
-      rows.map((r) => ({
+      rowsKeep.map((r) => ({
         id: r.id,
         date: r.date,
         label: r.label,
@@ -82,7 +94,7 @@ export async function GET(req: Request) {
       return periodFromDateString(r.date) === period;
     });
 
-    const incomeRowsForChart = rows.map((r) => ({
+    const incomeRowsForChart = rowsKeep.map((r) => ({
       id: r.id,
       date: r.date,
       label: r.label,
@@ -140,6 +152,15 @@ export async function POST(req: Request) {
     const label = (body.label || "").trim();
     if (!label) {
       return NextResponse.json({ error: "Falta la descripción" }, { status: 400 });
+    }
+    if (isNonIncomeTransferLabel(label)) {
+      return NextResponse.json(
+        {
+          error:
+            "Eso es Transferencia interna (self/FX/DEBIN), no un ingreso. Marcá Transferencia interna en Consumos.",
+        },
+        { status: 400 },
+      );
     }
 
     const kind: IncomeKind = isIncomeKind(body.kind) ? body.kind : "variable";
