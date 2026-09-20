@@ -96,7 +96,23 @@ describe("isBankAccountingEntry internal transfers", () => {
     assert.equal(isCardPaymentEntry("PAGO VISA"), true);
   });
 
-  it("keeps real spends and third-party income (Mauro, CR TRF INM)", () => {
+  it("Rainman: BBVA CR TRF / CR TBE / INM COE ($300k) is Transferencia interna", () => {
+    for (const d of [
+      "BBVA CA$ CR TRF INM COE Nro:937250",
+      "BBVA CA$ CR TBE INM COE",
+      "CR TBE INM COE",
+      "CR TRF INM COE Nro:937250",
+      "BBVA CA$ CR TBE",
+      "BBVA CA$ CR TRF",
+      "INM COE Nro:1",
+    ]) {
+      assert.equal(isInternalTransferDescription(d), true, d);
+      assert.equal(isNonIncomeTransferLabel(d), true, d);
+      assert.equal(isBankAccountingEntry(d), true, d);
+    }
+  });
+
+  it("keeps real spends and named third-party income (Mauro)", () => {
     assert.equal(isOwnAccountTransferDescription("COMPRA SUPER ARS"), false);
     assert.equal(isBankAccountingEntry("COMPRA SUPER ARS"), false);
     assert.equal(isBankAccountingEntry("TRANSFERENCIA A JUAN PEREZ"), false);
@@ -106,10 +122,6 @@ describe("isBankAccountingEntry internal transfers", () => {
       isInternalTransferDescription("Transferencia de Mauro Agustin Andreoli"),
       false,
     );
-    // 05/09 CR TRF $300k — real third-party credit, keep as Ingresos
-    const cr = "BBVA CA$ CR TRF INM COE Nro:937250";
-    assert.equal(isInternalTransferDescription(cr), false, cr);
-    assert.equal(isNonIncomeTransferLabel(cr), false, cr);
   });
 
   it("Tipo Transferencia interna matches category slug", () => {

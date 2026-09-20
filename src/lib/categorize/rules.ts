@@ -53,6 +53,10 @@ export const CATEGORY_SEEDS: CategorySeed[] = [
       "VENTA ME",
       "BBNK",
       "MISMO TITULAR",
+      // BBVA credit-transfer tickets (Rainman: $300k CR TBE/TRF INM COE)
+      "CR TRF",
+      "CR TBE",
+      "INM COE",
     ],
     priority: 99,
   },

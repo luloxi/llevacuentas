@@ -58,11 +58,13 @@ export function isOwnFxConversionDescription(description: string): boolean {
  * Own-account / internal wallet moves — not gasto nor ingreso.
  * Covers Fiwind “A/De una cuenta tuya”, BBVA entre-cuentas / cuenta propia,
  * Transferencia inmediata (self), bare TRANSFERENCIA, TRANSF. CLIENTE CTA. CAP,
- * same-CUIT self transfers, BBNK self, and own FX (Cambio de moneda).
+ * BBVA CR TRF / CR TBE / INM COE credit tickets, same-CUIT self transfers,
+ * BBNK self, and own FX (Cambio de moneda).
  *
  * Rainman: money already yours changing pockets ≠ income.
  * Optional `holderCuit` (11 digits): CUIT in the memo matching the titular → interno.
- * Keeps third-party income (Mauro, CR TRF INM COE, …).
+ * BBVA credit-transfer tickets (CR TRF / CR TBE / INM COE) → Transferencia interna.
+ * Keeps named third-party income (Mauro, salary, …).
  */
 export function isOwnAccountTransferDescription(
   description: string,
@@ -86,6 +88,12 @@ export function isOwnAccountTransferDescription(
   // Mercado Pago / BBVA instant self: "Transferencia inmediata"
   // (01/09 +800k, 1.924M, 1.9M) — never Ingresos Variables.
   if (u.includes("TRANSFERENCIA INMEDIATA")) return true;
+
+  // BBVA CA$ credit-transfer labels — Rainman FAIL fix:
+  // CR TRF / CR TBE / INM COE (e.g. "CR TBE INM COE", "CR TRF INM COE" $300k)
+  // always Transferencia interna, never Ingresos Variables.
+  if (/\bCR\s+(TRF|TBE)\b/.test(u)) return true;
+  if (/\bINM\s+COE\b/.test(u)) return true;
 
   // BBVA own-pocket: TRANSF. CLIENTE CTA. CAP093 … (05/06 +566k)
   if (/\bTRANSF\.?\s*CLIENTE\b/.test(u) && /\bCTA\.?\b/.test(u)) return true;
@@ -149,7 +157,7 @@ export function isInternalTransferDescription(
 
 /**
  * Labels that must never appear as Ingresos Variables.
- * Real income (Mauro, salary, CR TRF INM from third parties, interest) stays.
+ * Real income (Mauro, salary, interest) stays; BBVA CR TRF/TBE INM COE does not.
  */
 export function isNonIncomeTransferLabel(
   label: string,
