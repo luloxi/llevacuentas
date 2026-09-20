@@ -267,6 +267,8 @@ export async function ensureSchema() {
       sql`ALTER TABLE debt_settings ADD COLUMN IF NOT EXISTS force_settled boolean NOT NULL DEFAULT false`,
       sql`ALTER TABLE debt_settings ADD COLUMN IF NOT EXISTS cleared_at timestamp`,
       sql`ALTER TABLE debt_settings ADD COLUMN IF NOT EXISTS card_last4 text`,
+      sql`ALTER TABLE debt_settings ADD COLUMN IF NOT EXISTS saldo_deuda_ars numeric(14,2)`,
+      sql`ALTER TABLE debt_settings ADD COLUMN IF NOT EXISTS saldo_deuda_usd numeric(14,2)`,
       sql`ALTER TABLE incomes ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'variable'`,
       sql`ALTER TABLE incomes ADD COLUMN IF NOT EXISTS frequency text`,
       sql`ALTER TABLE incomes ADD COLUMN IF NOT EXISTS external_fingerprint text`,

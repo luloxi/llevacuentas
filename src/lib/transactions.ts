@@ -23,6 +23,68 @@ export function isVisibleToUser(
   return tx.paidByUserId === userId;
 }
 
+
+/** Strip separators so "300.000,00" / "300000" / "$ 300.000" share a digit needle. */
+export function digitsOnly(s: string): string {
+  return s.replace(/\D/g, "");
+}
+
+/**
+ * Haystacks for amount search: absolute value as plain digits, integer digits,
+ * and ARS-formatted digits (dots/commas stripped via digitsOnly at match time).
+ */
+export function amountSearchDigitStrings(
+  amount: number | string | null | undefined,
+): string[] {
+  if (amount == null || amount === "") return [];
+  const n = Math.abs(typeof amount === "number" ? amount : Number(amount));
+  if (!Number.isFinite(n) || n === 0) return [];
+  const fixed = n.toFixed(2); // "300000.00"
+  const intPart = Math.trunc(n).toString(); // "300000"
+  // es-AR: 300.000,00 — digitsOnly yields 30000000 (with cents) or we also keep int
+  const ars = new Intl.NumberFormat("es-AR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
+  const out = new Set<string>();
+  for (const h of [fixed, intPart, ars, String(n)]) {
+    const d = digitsOnly(h);
+    if (d) out.add(d);
+  }
+  // Also bare integer without cents padding for partial "300000" vs "30000000"
+  out.add(intPart);
+  return [...out];
+}
+
+/**
+ * Consumos `q` match: description substring OR amount digits (partial).
+ * Monk types `300000` while desc is `CR TBE INM COE` — amount must hit.
+ */
+export function transactionMatchesQuery(
+  row: {
+    descriptionNormalized: string;
+    amountArs?: number | string | null;
+    amountUsd?: number | string | null;
+  },
+  q: string,
+): boolean {
+  const needle = q.trim();
+  if (!needle) return true;
+  const upper = needle.toUpperCase();
+  if (row.descriptionNormalized.toUpperCase().includes(upper)) return true;
+
+  const qDigits = digitsOnly(needle);
+  if (qDigits.length === 0) return false;
+
+  for (const hay of [
+    ...amountSearchDigitStrings(row.amountArs),
+    ...amountSearchDigitStrings(row.amountUsd),
+  ]) {
+    if (hay.includes(qDigits)) return true;
+  }
+  return false;
+}
+
 /**
  * List household transactions for Consumos / analysis APIs.
  * Kept free of PDF/xlsx import deps so /api/transactions can load on serverless.
@@ -111,8 +173,7 @@ export async function listTransactions(
       if (!bare) return false;
     }
     if (opts?.q) {
-      const q = opts.q.toUpperCase();
-      if (!r.descriptionNormalized.toUpperCase().includes(q)) return false;
+      if (!transactionMatchesQuery(r, opts.q)) return false;
     }
     return true;
   });
