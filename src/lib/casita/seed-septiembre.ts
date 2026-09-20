@@ -10,6 +10,7 @@ import {
   isNonIncomeTransferLabel,
   isOwnAccountTransferDescription,
 } from "@/lib/bbva/bank-entries";
+import { internalTransferFingerprint } from "@/lib/import/reclassify-fiwind";
 import {
   isPersonalHouseholdName,
   resolvePersonalHouseholdId,
@@ -488,28 +489,61 @@ async function seedIngresos(
 
 /**
  * Mark “A/De una cuenta tuya” (and similar) gastos as Transferencia interna,
- * and drop matching ingresos so they never inflate neta.
+ * and drop matching ingresos — upserting Consumos Transferencia interna so
+ * CR TBE / self / FX stay searchable (never wipe silently).
  */
 async function backfillCasitaSeptOwnAccountTransfers(
   householdId: string,
   userId: string,
 ) {
   const db = getDb();
+  const { bySlug } = await getCategoryMap({
+    householdId,
+    includeHidden: true,
+  });
+  const internalCat =
+    bySlug.get("transferencia-interna") ?? bySlug.get("conversiones");
+
   const txs = await db
     .select({
       id: schema.transactions.id,
       descriptionNormalized: schema.transactions.descriptionNormalized,
       isPayment: schema.transactions.isPayment,
+      isCredit: schema.transactions.isCredit,
+      categoryId: schema.transactions.categoryId,
+      date: schema.transactions.date,
+      amountArs: schema.transactions.amountArs,
+      amountUsd: schema.transactions.amountUsd,
+      externalFingerprint: schema.transactions.externalFingerprint,
     })
     .from(schema.transactions)
     .where(eq(schema.transactions.householdId, householdId));
 
   for (const r of txs) {
     if (!isOwnAccountTransferDescription(r.descriptionNormalized)) continue;
-    if (r.isPayment) continue;
+    const patch: {
+      isPayment?: boolean;
+      isCredit?: boolean;
+      categoryId?: string;
+      updatedAt: Date;
+    } = { updatedAt: new Date() };
+    let needs = false;
+    if (!r.isPayment) {
+      patch.isPayment = true;
+      needs = true;
+    }
+    if (r.isCredit) {
+      patch.isCredit = false;
+      needs = true;
+    }
+    if (internalCat && r.categoryId !== internalCat.id) {
+      patch.categoryId = internalCat.id;
+      needs = true;
+    }
+    if (!needs) continue;
     await db
       .update(schema.transactions)
-      .set({ isPayment: true, updatedAt: new Date() })
+      .set(patch)
       .where(eq(schema.transactions.id, r.id));
   }
 
@@ -517,6 +551,9 @@ async function backfillCasitaSeptOwnAccountTransfers(
     .select({
       id: schema.incomes.id,
       label: schema.incomes.label,
+      date: schema.incomes.date,
+      amountArs: schema.incomes.amountArs,
+      amountUsd: schema.incomes.amountUsd,
     })
     .from(schema.incomes)
     .where(
@@ -526,8 +563,69 @@ async function backfillCasitaSeptOwnAccountTransfers(
       ),
     );
 
+  const existingFps = new Set(txs.map((t) => t.externalFingerprint));
+
   for (const r of incomes) {
     if (!isNonIncomeTransferLabel(r.label)) continue;
+    const ars = r.amountArs != null ? Number(r.amountArs) : 0;
+    const usd = r.amountUsd != null ? Number(r.amountUsd) : 0;
+    const fp = internalTransferFingerprint({
+      date: r.date,
+      label: r.label,
+      amountArs: Number.isFinite(ars) ? ars : null,
+      amountUsd: Number.isFinite(usd) ? usd : null,
+    });
+    const labelFold = r.label
+      .replace(/\s+/g, " ")
+      .trim()
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "");
+    const matched = txs.find(
+      (t) =>
+        t.externalFingerprint === fp ||
+        (t.date === r.date &&
+          t.descriptionNormalized
+            .replace(/\s+/g, " ")
+            .trim()
+            .toUpperCase()
+            .normalize("NFD")
+            .replace(/\p{M}/gu, "") === labelFold),
+    );
+    if (matched) {
+      await db
+        .update(schema.transactions)
+        .set({
+          isPayment: true,
+          isCredit: false,
+          categoryId: internalCat?.id ?? matched.categoryId,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.transactions.id, matched.id));
+    } else if (!existingFps.has(fp)) {
+      try {
+        await db.insert(schema.transactions).values({
+          householdId,
+          date: r.date,
+          descriptionRaw: r.label,
+          descriptionNormalized: r.label.replace(/\s+/g, " ").trim(),
+          amountArs: ars ? Math.abs(ars).toFixed(2) : null,
+          amountUsd: usd ? Math.abs(usd).toFixed(2) : null,
+          isPayment: true,
+          isCredit: false,
+          categoryId: internalCat?.id ?? null,
+          ownership: "personal",
+          paidByUserId: userId,
+          externalFingerprint: fp,
+          source: "reclassify_internal",
+          bank: "BBVA",
+        });
+        existingFps.add(fp);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/unique|duplicate/i.test(msg)) throw e;
+      }
+    }
     await db.delete(schema.incomes).where(eq(schema.incomes.id, r.id));
   }
 }

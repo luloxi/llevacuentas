@@ -85,7 +85,12 @@ export type CardDebtResult = {
   totalChargesArs: number;
   totalChargesUsd: number;
   peakBalanceArs: number;
-  /** Rainman: deuda_neta = saldo_deuda − pagos_aplicados (snapshot saldo already net). */
+  /**
+   * Rainman: open card saldo from the live snapshot (cuotas + cargos).
+   * Same as currentBalanceArs when mode=snapshot; 0 when empty.
+   */
+  saldoSnapshotArs: number;
+  /** Rainman: deuda_neta = saldo_snapshot − pagos_aplicados (floored at 0). */
   netDebtArs: number;
   primaryCardLast4: string | null;
   mode: "forced" | "snapshot" | "installments" | "empty";
@@ -264,16 +269,37 @@ export function isSnapshotDebtRow(r: { source?: string | null }): boolean {
 }
 
 /**
+ * Real card activity for anchoring the 21d Últimos movimientos window.
+ * Bank CA self-transfers / FX / accounting must not age out TEMBICI/Ecobici
+ * when a newer CR TBE lands as bbva_import.
+ */
+export function isCardSnapshotActivity(r: DebtTx): boolean {
+  const desc = r.descriptionNormalized ?? "";
+  if (isCardPaymentEntry(desc)) return true;
+  if (isInternalTransferDescription(desc)) return false;
+  if (isBankAccountingEntry(desc)) return false;
+  // Open charges / cuotas (including untagged ultimos without last4).
+  if (r.isPayment && !isCardPaymentEntry(desc)) return false;
+  if (r.isCredit) return false;
+  return true;
+}
+
+/**
  * Latest Últimos movimientos window — not the period xls history.
- * A 21-day lookback from the newest BBVA snapshot date keeps TEMBICI
- * and drops the older overlapping export.
+ * Anchor on real card charges/payments so bank CA noise does not drop
+ * TEMBICI outside the lookback. Still returns payments in-window for Pagado.
  */
 export function latestSnapshotRows(rows: DebtTx[]): DebtTx[] {
   const snapshot = rows.filter(isSnapshotDebtRow);
-  const newest = maxDate(snapshot);
+  const anchors = snapshot.filter(isCardSnapshotActivity);
+  const newest = maxDate(anchors.length > 0 ? anchors : snapshot);
   if (!newest) return [];
   const from = addDaysIso(newest, -SNAPSHOT_LOOKBACK_DAYS);
-  return snapshot.filter((r) => r.date >= from);
+  return snapshot.filter((r) => {
+    if (r.date < from) return false;
+    // Keep card activity + card payments; drop bank CA accounting from debt view.
+    return isCardSnapshotActivity(r) || isCardPaymentEntry(r.descriptionNormalized ?? "");
+  });
 }
 
 function openChargesFrom(rows: DebtTx[]): OpenCharge[] {
@@ -363,6 +389,7 @@ export function computeCardDebt(
     totalChargesArs: 0,
     totalChargesUsd: 0,
     peakBalanceArs: 0,
+    saldoSnapshotArs: 0,
     netDebtArs: 0,
     primaryCardLast4: opts.settings?.cardLast4 ?? null,
     mode: forceSettled ? "forced" : "empty",
@@ -455,6 +482,12 @@ export function computeCardDebt(
   // Empty / period-only / discarded ledger must not fake it.
   const settled = mode === "snapshot" && currentBalanceArs === 0;
 
+  const saldoSnapshotArs =
+    mode === "snapshot" || mode === "installments" ? currentBalanceArs : 0;
+  // Open remaining is already the live debt; Pagado is informational (window).
+  // Rainman: never invent negative neta; self credits never raise it.
+  const netDebtArs = saldoSnapshotArs;
+
   return {
     currentBalanceArs,
     currentBalanceUsd,
@@ -468,9 +501,8 @@ export function computeCardDebt(
     totalChargesArs: chargeSum.ars,
     totalChargesUsd: chargeSum.usd,
     peakBalanceArs: currentBalanceArs,
-    // Paying the card from CA lowers this (snapshot / remaining cuotas).
-    // Self credits never raise it (filtered out of paymentList above).
-    netDebtArs: currentBalanceArs,
+    saldoSnapshotArs,
+    netDebtArs,
     primaryCardLast4,
     mode,
   };

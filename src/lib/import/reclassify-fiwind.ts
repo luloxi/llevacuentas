@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { and, eq } from "drizzle-orm";
 import {
   isInternalTransferDescription,
@@ -6,6 +7,7 @@ import {
 import { getDb, schema } from "@/lib/db";
 import { getCategoryMap } from "@/lib/household";
 import { reclassifyTargetForDescription } from "@/lib/import/fiwind";
+import { fingerprintParts } from "@/lib/money";
 
 export type ReclassifyFiwindResult = {
   scanned: number;
@@ -16,14 +18,71 @@ export type ReclassifyFiwindResult = {
   incomesRemoved: number;
   /** Rainman: txs marked Transferencia interna */
   internalMarked: number;
+  /** Rainman: Consumos txs upserted from purged Variables incomes */
+  internalUpserted: number;
 };
+
+function n(v: unknown): number {
+  if (v == null || v === "") return 0;
+  const x = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(x) ? x : 0;
+}
+
+function foldDesc(s: string): string {
+  return s
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+}
+
+function moneyKey(v: unknown): string {
+  const x = n(v);
+  return x !== 0 ? Math.abs(x).toFixed(2) : "";
+}
+
+/** Stable fp so re-running reclassify does not duplicate Consumos rows. */
+export function internalTransferFingerprint(opts: {
+  date: string;
+  label: string;
+  amountArs: number | null | undefined;
+  amountUsd: number | null | undefined;
+}): string {
+  const base = fingerprintParts([
+    "reclass-internal",
+    opts.date,
+    foldDesc(opts.label),
+    moneyKey(opts.amountArs),
+    moneyKey(opts.amountUsd),
+  ]);
+  return createHash("sha256").update(base).digest("hex").slice(0, 32);
+}
+
+function amountsMatch(
+  aArs: unknown,
+  aUsd: unknown,
+  bArs: unknown,
+  bUsd: unknown,
+): boolean {
+  const aA = Math.abs(n(aArs));
+  const aU = Math.abs(n(aUsd));
+  const bA = Math.abs(n(bArs));
+  const bU = Math.abs(n(bUsd));
+  if (aA > 0 && bA > 0) return Math.abs(aA - bA) < 0.02;
+  if (aU > 0 && bU > 0) return Math.abs(aU - bU) < 0.02;
+  if (aA > 0 || bA > 0) return Math.abs(aA - bA) < 0.02;
+  if (aU > 0 || bU > 0) return Math.abs(aU - bU) < 0.02;
+  return false;
+}
 
 /**
  * One-shot: existing household rows whose description is Fiwind noise
  * (TRANSFERENCIA ARS, amount-only Tipo, Conversiones, Compra KO, …)
  * get the accounting category. Also Rainman:
  * self-transfer / own FX → Transferencia interna (isPayment, never Ingresos);
- * matching income labels are deleted so Variables stay clean.
+ * matching income labels are deleted and upserted as Consumos Transferencia
+ * interna so CR TBE / TRF / INM COE stay searchable (not wiped silently).
  * Never deletes transactions.
  */
 export async function reclassifyFiwindNoise(
@@ -43,6 +102,10 @@ export async function reclassifyFiwindNoise(
       categoryId: schema.transactions.categoryId,
       isPayment: schema.transactions.isPayment,
       isCredit: schema.transactions.isCredit,
+      date: schema.transactions.date,
+      amountArs: schema.transactions.amountArs,
+      amountUsd: schema.transactions.amountUsd,
+      externalFingerprint: schema.transactions.externalFingerprint,
     })
     .from(schema.transactions)
     .where(eq(schema.transactions.householdId, householdId));
@@ -55,38 +118,43 @@ export async function reclassifyFiwindNoise(
   const internalCat =
     bySlug.get("transferencia-interna") ?? bySlug.get("conversiones");
 
+  async function markInternal(row: (typeof rows)[number]): Promise<boolean> {
+    const patch: {
+      isPayment?: boolean;
+      isCredit?: boolean;
+      categoryId?: string;
+      updatedAt: Date;
+    } = { updatedAt: new Date() };
+    let needs = false;
+    if (!row.isPayment) {
+      patch.isPayment = true;
+      needs = true;
+    }
+    if (row.isCredit) {
+      patch.isCredit = false;
+      needs = true;
+    }
+    if (internalCat && row.categoryId !== internalCat.id) {
+      patch.categoryId = internalCat.id;
+      needs = true;
+    }
+    if (!needs) return false;
+    await db
+      .update(schema.transactions)
+      .set(patch)
+      .where(
+        and(
+          eq(schema.transactions.id, row.id),
+          eq(schema.transactions.householdId, householdId),
+        ),
+      );
+    return true;
+  }
+
   for (const row of rows) {
     const desc = row.descriptionNormalized;
     if (isInternalTransferDescription(desc)) {
-      const patch: {
-        isPayment?: boolean;
-        isCredit?: boolean;
-        categoryId?: string;
-        updatedAt: Date;
-      } = { updatedAt: new Date() };
-      let needs = false;
-      if (!row.isPayment) {
-        patch.isPayment = true;
-        needs = true;
-      }
-      if (row.isCredit) {
-        patch.isCredit = false;
-        needs = true;
-      }
-      if (internalCat && row.categoryId !== internalCat.id) {
-        patch.categoryId = internalCat.id;
-        needs = true;
-      }
-      if (needs) {
-        await db
-          .update(schema.transactions)
-          .set(patch)
-          .where(
-            and(
-              eq(schema.transactions.id, row.id),
-              eq(schema.transactions.householdId, householdId),
-            ),
-          );
+      if (await markInternal(row)) {
         internalMarked += 1;
         updated += 1;
       } else {
@@ -125,11 +193,16 @@ export async function reclassifyFiwindNoise(
   }
 
   let incomesRemoved = 0;
+  let internalUpserted = 0;
   if (opts?.userId) {
     const incomes = await db
       .select({
         id: schema.incomes.id,
         label: schema.incomes.label,
+        date: schema.incomes.date,
+        amountArs: schema.incomes.amountArs,
+        amountUsd: schema.incomes.amountUsd,
+        externalFingerprint: schema.incomes.externalFingerprint,
       })
       .from(schema.incomes)
       .where(
@@ -138,8 +211,102 @@ export async function reclassifyFiwindNoise(
           eq(schema.incomes.userId, opts.userId),
         ),
       );
+
+    // Refresh tx list after marking (same household scan for match/upsert).
+    const txRows = await db
+      .select({
+        id: schema.transactions.id,
+        descriptionNormalized: schema.transactions.descriptionNormalized,
+        categoryId: schema.transactions.categoryId,
+        isPayment: schema.transactions.isPayment,
+        isCredit: schema.transactions.isCredit,
+        date: schema.transactions.date,
+        amountArs: schema.transactions.amountArs,
+        amountUsd: schema.transactions.amountUsd,
+        externalFingerprint: schema.transactions.externalFingerprint,
+      })
+      .from(schema.transactions)
+      .where(eq(schema.transactions.householdId, householdId));
+
+    const byFp = new Map(txRows.map((t) => [t.externalFingerprint, t]));
+
     for (const inc of incomes) {
       if (!isNonIncomeTransferLabel(inc.label)) continue;
+
+      const labelNorm = foldDesc(inc.label);
+      const fp = internalTransferFingerprint({
+        date: inc.date,
+        label: inc.label,
+        amountArs: inc.amountArs != null ? n(inc.amountArs) : null,
+        amountUsd: inc.amountUsd != null ? n(inc.amountUsd) : null,
+      });
+
+      let matched =
+        byFp.get(fp) ??
+        txRows.find(
+          (t) =>
+            t.date === inc.date &&
+            foldDesc(t.descriptionNormalized) === labelNorm &&
+            amountsMatch(t.amountArs, t.amountUsd, inc.amountArs, inc.amountUsd),
+        );
+
+      if (matched) {
+        if (await markInternal(matched)) {
+          internalMarked += 1;
+          updated += 1;
+        }
+      } else {
+        const ars = n(inc.amountArs);
+        const usd = n(inc.amountUsd);
+        try {
+          const [created] = await db
+            .insert(schema.transactions)
+            .values({
+              householdId,
+              date: inc.date,
+              descriptionRaw: inc.label,
+              descriptionNormalized: inc.label.replace(/\s+/g, " ").trim(),
+              amountArs: ars !== 0 ? Math.abs(ars).toFixed(2) : null,
+              amountUsd: usd !== 0 ? Math.abs(usd).toFixed(2) : null,
+              isPayment: true,
+              isCredit: false,
+              categoryId: internalCat?.id ?? null,
+              ownership: "personal",
+              paidByUserId: opts.userId,
+              externalFingerprint: fp,
+              source: "reclassify_internal",
+              bank: "BBVA",
+            })
+            .returning({
+              id: schema.transactions.id,
+              descriptionNormalized: schema.transactions.descriptionNormalized,
+              categoryId: schema.transactions.categoryId,
+              isPayment: schema.transactions.isPayment,
+              isCredit: schema.transactions.isCredit,
+              date: schema.transactions.date,
+              amountArs: schema.transactions.amountArs,
+              amountUsd: schema.transactions.amountUsd,
+              externalFingerprint: schema.transactions.externalFingerprint,
+            });
+          if (created) {
+            txRows.push(created);
+            byFp.set(fp, created);
+            internalUpserted += 1;
+            internalMarked += 1;
+            updated += 1;
+          }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (!/unique|duplicate/i.test(msg)) throw e;
+          // Race / prior insert: mark existing fp row if present.
+          const existing = byFp.get(fp);
+          if (existing && (await markInternal(existing))) {
+            internalMarked += 1;
+            updated += 1;
+          }
+        }
+      }
+
       await db.delete(schema.incomes).where(eq(schema.incomes.id, inc.id));
       incomesRemoved += 1;
     }
@@ -152,5 +319,6 @@ export async function reclassifyFiwindNoise(
     skipped,
     incomesRemoved,
     internalMarked,
+    internalUpserted,
   };
 }

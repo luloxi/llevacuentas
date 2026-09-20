@@ -372,6 +372,66 @@ describe("computeCardDebt — no millions", () => {
     assert.equal(debt.totalPaidArs, 0);
     assert.equal(debt.openCharges.length, 0);
   });
+
+  it("newer bank CA CR TBE does not age TEMBICI out of snapshot (saldo_snapshot)", () => {
+    const rows: DebtTx[] = [
+      asTx(
+        {
+          date: "2026-09-19",
+          descriptionNormalized: "CR TBE INM COE",
+          amountArs: 300000,
+          amountUsd: null,
+          installment: null,
+          isPayment: true,
+          isCredit: false,
+          cardLast4: null,
+        },
+        "bbva_import",
+        "cr-tbe",
+      ),
+      asTx(
+        {
+          date: "2026-08-23",
+          descriptionNormalized: "MERPAGO*TEMBICI",
+          amountArs: 140,
+          amountUsd: null,
+          installment: null,
+          isPayment: false,
+          isCredit: false,
+          cardLast4: null,
+        },
+        "bbva_xlsx",
+        "tembici",
+      ),
+      asTx(
+        {
+          date: "2026-08-20",
+          descriptionNormalized: "SU PAGO EN PESOS",
+          amountArs: -5000,
+          amountUsd: null,
+          installment: null,
+          isPayment: true,
+          isCredit: false,
+          cardLast4: null,
+        },
+        "bbva_xlsx",
+        "recent-pay",
+      ),
+    ];
+    const debt = computeCardDebt(rows, { userId: "luciano" });
+    assert.equal(debt.mode, "snapshot");
+    assert.equal(debt.settled, false);
+    assert.equal(debt.currentBalanceArs, 140);
+    assert.equal(debt.saldoSnapshotArs, 140);
+    assert.equal(debt.netDebtArs, 140);
+    assert.equal(debt.totalPaidArs, 5000);
+    assert.ok(debt.openCharges.some((c) => /TEMBICI/i.test(c.description)));
+    assert.equal(
+      debt.payments.some((p) => /CR TBE/i.test(p.description)),
+      false,
+      "internal CR TBE must not count as card Pagado",
+    );
+  });
 });
 
 describe("strict dedupe", () => {

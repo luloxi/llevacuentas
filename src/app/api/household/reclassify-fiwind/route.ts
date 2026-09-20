@@ -18,6 +18,11 @@ export async function POST() {
       if (result.internalMarked > 0) {
         bits.push(`${result.internalMarked} Transferencia interna`);
       }
+      if ((result.internalUpserted ?? 0) > 0) {
+        bits.push(
+          `${result.internalUpserted} pasado${result.internalUpserted === 1 ? "" : "s"} a Consumos`,
+        );
+      }
       if (result.incomesRemoved > 0) {
         bits.push(
           `${result.incomesRemoved} ingreso${result.incomesRemoved === 1 ? "" : "s"} self/FX quitado${result.incomesRemoved === 1 ? "" : "s"}`,

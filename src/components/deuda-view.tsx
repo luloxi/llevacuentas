@@ -50,6 +50,9 @@ type Summary = {
   forceSettled?: boolean;
   mode?: string;
   primaryCardLast4?: string | null;
+  /** Live snapshot / installments open saldo when present. */
+  saldoSnapshotArs?: number;
+  netDebtArs?: number;
 };
 
 type DebtSettings = {
@@ -260,9 +263,17 @@ export function DeudaView() {
   const hasSnapshot = mode === "snapshot";
   // Never infer Saldada from a $0 balance — empty / no snapshot is not settled.
   const settled = Boolean(summary?.settled);
-  const missingSnapshot = !forced && !hasSnapshot;
+  // Prompt Excel only when there is no snapshot AND no period cuotas.
+  // Existing saldo_snapshot / installments must never fall through to upload.
+  const missingSnapshot = !forced && mode === "empty";
   const paymentRows = onlyPayments.length ? onlyPayments : payments;
-  const balance = Math.max(summary?.currentBalanceArs ?? 0, 0);
+  const balance = Math.max(
+    summary?.saldoSnapshotArs ??
+      summary?.netDebtArs ??
+      summary?.currentBalanceArs ??
+      0,
+    0,
+  );
   const interestEst = estimateMonthlyInterest(balance, settings.ratePct);
   const dueLabel = nextDueLabel(settings.dueDay);
 
