@@ -4,6 +4,7 @@ import {
   amountSearchDigitStrings,
   digitsOnly,
   periodFilterAppliesForSearch,
+  queryMatchesBbvaInternalTransferTokens,
   transactionMatchesQuery,
 } from "./transactions";
 
@@ -60,6 +61,88 @@ describe("transactionMatchesQuery (Consumos search)", () => {
   it("amountSearchDigitStrings includes absolute integer digits", () => {
     const hay = amountSearchDigitStrings(300000);
     assert.ok(hay.some((h) => h.includes("300000")));
+  });
+});
+
+describe("transactionMatchesQuery BBVA token → Transferencia interna", () => {
+  it("q=CR TBE matches slug transferencia-interna without CR TBE letters in desc", () => {
+    assert.equal(
+      transactionMatchesQuery(
+        {
+          descriptionNormalized: "De una cuenta tuya",
+          amountArs: 300000,
+          amountUsd: null,
+          categorySlug: "transferencia-interna",
+        },
+        "CR TBE",
+      ),
+      true,
+    );
+    assert.equal(
+      transactionMatchesQuery(
+        {
+          descriptionNormalized: "Transferencia inmediata",
+          amountArs: 300000,
+          amountUsd: null,
+          categorySlug: "transferencia-interna",
+        },
+        "cr tbe",
+      ),
+      true,
+    );
+  });
+
+  it("q=CR TBE matches via isInternalTransferDescription when slug missing", () => {
+    assert.equal(
+      transactionMatchesQuery(
+        {
+          descriptionNormalized: "Transferencia inmediata",
+          amountArs: 300000,
+          amountUsd: null,
+          categorySlug: null,
+        },
+        "CR TBE",
+      ),
+      true,
+    );
+  });
+
+  it("q=300000 still matches amount on interna rows", () => {
+    assert.equal(
+      transactionMatchesQuery(
+        {
+          descriptionNormalized: "De una cuenta tuya",
+          amountArs: 300000,
+          amountUsd: null,
+          categorySlug: "transferencia-interna",
+        },
+        "300000",
+      ),
+      true,
+    );
+  });
+
+  it("q=pizza does not match all internas", () => {
+    assert.equal(
+      transactionMatchesQuery(
+        {
+          descriptionNormalized: "De una cuenta tuya",
+          amountArs: 300000,
+          amountUsd: null,
+          categorySlug: "transferencia-interna",
+        },
+        "pizza",
+      ),
+      false,
+    );
+  });
+
+  it("queryMatchesBbvaInternalTransferTokens detects CR TBE / TRF / INM COE", () => {
+    assert.equal(queryMatchesBbvaInternalTransferTokens("CR TBE"), true);
+    assert.equal(queryMatchesBbvaInternalTransferTokens("cr trf"), true);
+    assert.equal(queryMatchesBbvaInternalTransferTokens("INM COE"), true);
+    assert.equal(queryMatchesBbvaInternalTransferTokens("pizza"), false);
+    assert.equal(queryMatchesBbvaInternalTransferTokens("300000"), false);
   });
 });
 

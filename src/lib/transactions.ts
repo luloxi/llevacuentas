@@ -57,14 +57,43 @@ export function amountSearchDigitStrings(
 }
 
 /**
+ * Fold query the same way bank-entries folds transfer memos.
+ */
+function foldSearchQuery(s: string): string {
+  return s
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * BBVA credit-transfer ticket tokens (same spirit as isOwnAccountTransferDescription).
+ * When Monk searches `CR TBE` / `CR TRF` / `INM COE`, match Transferencia interna
+ * rows even if descriptionNormalized was rewritten (e.g. "De una cuenta tuya").
+ */
+export function queryMatchesBbvaInternalTransferTokens(q: string): boolean {
+  const u = foldSearchQuery(q);
+  if (!u) return false;
+  if (/\bCR\s+(TBE|TRF)\b/.test(u)) return true;
+  if (/\bINM\s+COE\b/.test(u)) return true;
+  return false;
+}
+
+/**
  * Consumos `q` match: description substring OR amount digits (partial).
  * Monk types `300000` while desc is `CR TBE INM COE` — amount must hit.
+ * Also: q with BBVA ticket tokens matches transferencia-interna / internal-desc
+ * even when descriptionNormalized lacks the letters CR TBE.
  */
 export function transactionMatchesQuery(
   row: {
     descriptionNormalized: string;
     amountArs?: number | string | null;
     amountUsd?: number | string | null;
+    /** Category slug when available (listTransactions has byId). */
+    categorySlug?: string | null;
   },
   q: string,
 ): boolean {
@@ -72,6 +101,12 @@ export function transactionMatchesQuery(
   if (!needle) return true;
   const upper = needle.toUpperCase();
   if (row.descriptionNormalized.toUpperCase().includes(upper)) return true;
+
+  if (queryMatchesBbvaInternalTransferTokens(needle)) {
+    const slug = (row.categorySlug ?? "").trim().toLowerCase();
+    if (slug === "transferencia-interna") return true;
+    if (isInternalTransferDescription(row.descriptionNormalized)) return true;
+  }
 
   const qDigits = digitsOnly(needle);
   if (qDigits.length === 0) return false;
@@ -188,7 +223,15 @@ export async function listTransactions(
       if (!bare) return false;
     }
     if (opts?.q) {
-      if (!transactionMatchesQuery(r, opts.q)) return false;
+      const slug = r.categoryId ? byId.get(r.categoryId)?.slug : null;
+      if (
+        !transactionMatchesQuery(
+          { ...r, categorySlug: slug },
+          opts.q,
+        )
+      ) {
+        return false;
+      }
     }
     return true;
   });

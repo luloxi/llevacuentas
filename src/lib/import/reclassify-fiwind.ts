@@ -141,11 +141,14 @@ export async function reclassifyFiwindNoise(
   async function markInternal(
     row: (typeof rows)[number],
     targetHouseholdId: string = householdId,
+    opts?: { bankLabel?: string | null },
   ): Promise<boolean> {
     const patch: {
       isPayment?: boolean;
       isCredit?: boolean;
       categoryId?: string;
+      descriptionNormalized?: string;
+      descriptionRaw?: string;
       updatedAt: Date;
     } = { updatedAt: new Date() };
     let needs = false;
@@ -161,6 +164,18 @@ export async function reclassifyFiwindNoise(
       patch.categoryId = internalCat.id;
       needs = true;
     }
+    // Optional polish: mark-only with empty/weak desc → keep CR TBE/TRF/INM COE label
+    const bankLabel = (opts?.bankLabel ?? "").replace(/\s+/g, " ").trim();
+    const weakDesc = !(row.descriptionNormalized ?? "").replace(/\s+/g, " ").trim();
+    if (
+      bankLabel &&
+      weakDesc &&
+      isNonIncomeTransferLabel(bankLabel)
+    ) {
+      patch.descriptionNormalized = bankLabel;
+      patch.descriptionRaw = bankLabel;
+      needs = true;
+    }
     if (!needs) return false;
     await db
       .update(schema.transactions)
@@ -171,6 +186,9 @@ export async function reclassifyFiwindNoise(
           eq(schema.transactions.householdId, targetHouseholdId),
         ),
       );
+    if (patch.descriptionNormalized) {
+      row.descriptionNormalized = patch.descriptionNormalized;
+    }
     return true;
   }
 
@@ -288,7 +306,7 @@ export async function reclassifyFiwindNoise(
         );
 
       if (matched) {
-        if (await markInternal(matched, personalId)) {
+        if (await markInternal(matched, personalId, { bankLabel: inc.label })) {
           internalMarked += 1;
           updated += 1;
         }
