@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   amountSearchDigitStrings,
   digitsOnly,
+  periodFilterAppliesForSearch,
   transactionMatchesQuery,
 } from "./transactions";
 
@@ -59,5 +60,28 @@ describe("transactionMatchesQuery (Consumos search)", () => {
   it("amountSearchDigitStrings includes absolute integer digits", () => {
     const hay = amountSearchDigitStrings(300000);
     assert.ok(hay.some((h) => h.includes("300000")));
+  });
+});
+
+describe("periodFilterAppliesForSearch (q ignores period)", () => {
+  it("q match ignores period", () => {
+    assert.equal(
+      periodFilterAppliesForSearch({ period: "2026-09", q: "300000" }),
+      false,
+    );
+    assert.equal(
+      periodFilterAppliesForSearch({ period: "2026-09", q: "CR TBE" }),
+      false,
+    );
+    assert.equal(
+      periodFilterAppliesForSearch({ period: "2026-09", q: "  " }),
+      true,
+    );
+    assert.equal(
+      periodFilterAppliesForSearch({ period: "2026-09", q: "" }),
+      true,
+    );
+    assert.equal(periodFilterAppliesForSearch({ period: "2026-09" }), true);
+    assert.equal(periodFilterAppliesForSearch({ q: "300000" }), false);
   });
 });

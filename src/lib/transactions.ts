@@ -89,6 +89,20 @@ export function transactionMatchesQuery(
  * List household transactions for Consumos / analysis APIs.
  * Kept free of PDF/xlsx import deps so /api/transactions can load on serverless.
  */
+
+/**
+ * Consumos search: non-empty `q` spans all months.
+ * Period filter would hide cross-month CR TBE / Transferencia interna.
+ */
+export function periodFilterAppliesForSearch(opts?: {
+  period?: string;
+  q?: string;
+}): boolean {
+  if (!opts?.period) return false;
+  if (opts.q != null && String(opts.q).trim() !== "") return false;
+  return true;
+}
+
 export async function listTransactions(
   householdId: string,
   opts?: {
@@ -162,8 +176,9 @@ export async function listTransactions(
       if (!isVisibleToUser(r, opts.viewerUserId)) return false;
     }
 
-    if (opts?.period) {
-      if (periodFromDateString(r.date) !== opts.period) return false;
+    // When q is set, do not apply period — search finds cross-month rows.
+    if (periodFilterAppliesForSearch({ period: opts?.period, q: opts?.q })) {
+      if (periodFromDateString(r.date) !== opts!.period) return false;
     }
     if (opts?.categoryId && r.categoryId !== opts.categoryId) return false;
     if (opts?.uncategorizedOnly) {

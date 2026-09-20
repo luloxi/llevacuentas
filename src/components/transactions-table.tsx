@@ -259,8 +259,10 @@ export function TransactionsTable() {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     const params = new URLSearchParams();
-    if (period) params.set("period", period);
-    if (q) params.set("q", q);
+    const qTrim = q.trim();
+    // Search spans months — omit period so API returns all q matches.
+    if (period && !qTrim) params.set("period", period);
+    if (qTrim) params.set("q", qTrim);
     try {
       const res = await fetch(`/api/transactions?${params}`, { credentials: "include" });
       const data = await parseJson<{
@@ -274,9 +276,11 @@ export function TransactionsTable() {
           ownership: t.ownership === "shared" ? "shared" as const : "personal" as const,
         }));
 
-      const filtered = period
-        ? list.filter((t) => periodFromDateString(t.date) === period)
-        : list;
+      // When q is set, API already returns all matches — do not client-filter by period.
+      const filtered =
+        period && !qTrim
+          ? list.filter((t) => periodFromDateString(t.date) === period)
+          : list;
 
       setRows(filtered);
       setCategories(data.categories ?? []);

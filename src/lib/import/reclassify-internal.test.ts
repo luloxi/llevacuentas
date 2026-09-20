@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { internalTransferFingerprint } from "@/lib/import/reclassify-fiwind";
+import {
+  internalTransferFingerprint,
+  reclassifyIncomeTargetHouseholdId,
+} from "@/lib/import/reclassify-fiwind";
 
 describe("internalTransferFingerprint", () => {
   it("is stable for CR TBE 300k (Consumos upsert key)", () => {
@@ -37,5 +40,18 @@ describe("backfill Transferencia interna without income row", () => {
       amountUsd: undefined,
     });
     assert.equal(fp, fp2);
+  });
+});
+
+describe("reclassifyIncomeTargetHouseholdId", () => {
+  it("prefers Personal over active Casita for income→interna upsert", () => {
+    assert.equal(
+      reclassifyIncomeTargetHouseholdId("casita-id", "personal-id"),
+      "personal-id",
+    );
+    assert.equal(
+      reclassifyIncomeTargetHouseholdId("casita-id", null),
+      "casita-id",
+    );
   });
 });
