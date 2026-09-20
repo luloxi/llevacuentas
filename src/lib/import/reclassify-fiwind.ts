@@ -218,10 +218,11 @@ export async function reclassifyFiwindNoise(
   let incomesRemoved = 0;
   let internalUpserted = 0;
   // Incomes land on Personal via resolvePersonalHouseholdId; active may be Casita.
+  const userId = opts?.userId;
   let personalId: string | null = null;
-  if (opts?.userId) {
+  if (userId) {
     personalId =
-      (await resolvePersonalHouseholdId(opts.userId)) ?? householdId;
+      (await resolvePersonalHouseholdId(userId)) ?? householdId;
 
     // Scan incomes on Personal (and active if different — belt for mis-routed rows).
     const incomeHhIds = [...new Set([personalId, householdId].filter(Boolean))];
@@ -241,7 +242,7 @@ export async function reclassifyFiwindNoise(
           .where(
             and(
               eq(schema.incomes.householdId, hh),
-              eq(schema.incomes.userId, opts.userId),
+              eq(schema.incomes.userId, userId),
             ),
           ),
       ),
@@ -308,7 +309,7 @@ export async function reclassifyFiwindNoise(
               isCredit: false,
               categoryId: internalCat?.id ?? null,
               ownership: "personal",
-              paidByUserId: opts.userId,
+              paidByUserId: userId,
               externalFingerprint: fp,
               source: "reclassify_internal",
               bank: "BBVA",
