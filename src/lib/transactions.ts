@@ -1,5 +1,8 @@
 import { and, desc, eq } from "drizzle-orm";
-import { isBankAccountingEntry } from "@/lib/bbva/bank-entries";
+import {
+  isBankAccountingEntry,
+  isInternalTransferDescription,
+} from "@/lib/bbva/bank-entries";
 import { isPeriodDebtSource } from "@/lib/import/source";
 import { getDb, schema } from "@/lib/db";
 import { getCategoryMap } from "@/lib/household";
@@ -66,15 +69,26 @@ export async function listTransactions(
     }
     if (!opts?.includePayments && r.isCredit) {
       const slug = r.categoryId ? byId.get(r.categoryId)?.slug : null;
-      if (slug !== "transferencia-interna") return false;
+      if (
+        slug !== "transferencia-interna" &&
+        !isInternalTransferDescription(r.descriptionNormalized)
+      ) {
+        return false;
+      }
     }
     if (
       !opts?.includePayments &&
       isBankAccountingEntry(r.descriptionNormalized)
     ) {
-      // Rainman: Transferencia interna stays listed (out of neta).
+      // Rainman: Transferencia interna stays listed (out of neta) —
+      // by slug OR description when category was never seeded.
       const slug = r.categoryId ? byId.get(r.categoryId)?.slug : null;
-      if (slug !== "transferencia-interna") return false;
+      if (
+        slug !== "transferencia-interna" &&
+        !isInternalTransferDescription(r.descriptionNormalized)
+      ) {
+        return false;
+      }
     }
     if (!opts?.includePayments && isPeriodDebtSource(r.source)) {
       return false;

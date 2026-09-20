@@ -173,6 +173,14 @@ export default async function DashboardPage() {
     settings: {
       forceSettled: debtSettingsRows[0]?.forceSettled ?? false,
       cardLast4: debtSettingsRows[0]?.cardLast4 ?? null,
+      saldoDeudaArs:
+        debtSettingsRows[0]?.saldoDeudaArs != null
+          ? Number(debtSettingsRows[0].saldoDeudaArs)
+          : null,
+      saldoDeudaUsd:
+        debtSettingsRows[0]?.saldoDeudaUsd != null
+          ? Number(debtSettingsRows[0].saldoDeudaUsd)
+          : null,
     },
     usdRate: rateNow,
   });

@@ -142,7 +142,7 @@ function toSheet(rows: Tx[], members: Member[]) {
     Categoría: categoryLabel(r.category?.name),
     Tipo: isReintegroHogarTipo(r.isPayment, r.descriptionNormalized)
       ? "Reintegro hogar"
-      : isTransferenciaInternaTipo(r.isPayment, r.category)
+      : isTransferenciaInternaTipo(r.isPayment, r.category, r.descriptionNormalized)
         ? "Transferencia interna"
         : isGastoCubiertoTipo(r.isPayment, r.category)
           ? "Cubierto"
@@ -625,7 +625,7 @@ export function TransactionsTable() {
 
   function assignValueFor(r: Tx): string {
     if (isReintegroHogarTipo(r.isPayment, r.descriptionNormalized)) return "reintegro";
-    if (isTransferenciaInternaTipo(r.isPayment, r.category)) return "internal";
+    if (isTransferenciaInternaTipo(r.isPayment, r.category, r.descriptionNormalized)) return "internal";
     if (isGastoCubiertoTipo(r.isPayment, r.category)) return "cubierto";
     if (r.ownership === "personal") return "personal";
     return activeHouseholdId ?? "shared";
@@ -635,7 +635,7 @@ export function TransactionsTable() {
     if (value === "personal") {
       const wasSpecial =
         isReintegroHogarTipo(r.isPayment, r.descriptionNormalized) ||
-        isTransferenciaInternaTipo(r.isPayment, r.category) ||
+        isTransferenciaInternaTipo(r.isPayment, r.category, r.descriptionNormalized) ||
         isGastoCubiertoTipo(r.isPayment, r.category);
       if (r.ownership === "personal" && !wasSpecial) return;
       setError(null);
@@ -747,7 +747,7 @@ export function TransactionsTable() {
       }
       const wasSpecial =
         isReintegroHogarTipo(r.isPayment, r.descriptionNormalized) ||
-        isTransferenciaInternaTipo(r.isPayment, r.category) ||
+        isTransferenciaInternaTipo(r.isPayment, r.category, r.descriptionNormalized) ||
         isGastoCubiertoTipo(r.isPayment, r.category);
       if (r.ownership !== "shared" || wasSpecial) {
         void patch(r.id, {

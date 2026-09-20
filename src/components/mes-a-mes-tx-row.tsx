@@ -61,7 +61,7 @@ export function MesAMesTxRow({
     t.descriptionNormalized,
   )
     ? "reintegro"
-    : isTransferenciaInternaTipo(Boolean(t.isPayment), t.category)
+    : isTransferenciaInternaTipo(Boolean(t.isPayment), t.category, t.descriptionNormalized)
       ? "internal"
       : isGastoCubiertoTipo(Boolean(t.isPayment), t.category)
         ? "cubierto"

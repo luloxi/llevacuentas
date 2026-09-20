@@ -20,6 +20,8 @@ function serialize(row: typeof schema.debtSettings.$inferSelect | undefined) {
       forceSettled: false,
       clearedAt: null as string | null,
       cardLast4: null as string | null,
+      saldoDeudaArs: null as number | null,
+      saldoDeudaUsd: null as number | null,
       updatedAt: null as string | null,
     };
   }
@@ -31,6 +33,8 @@ function serialize(row: typeof schema.debtSettings.$inferSelect | undefined) {
     forceSettled: Boolean(row.forceSettled),
     clearedAt: row.clearedAt?.toISOString() ?? null,
     cardLast4: row.cardLast4 ?? null,
+    saldoDeudaArs: row.saldoDeudaArs != null ? Number(row.saldoDeudaArs) : null,
+    saldoDeudaUsd: row.saldoDeudaUsd != null ? Number(row.saldoDeudaUsd) : null,
     updatedAt: row.updatedAt?.toISOString() ?? null,
   };
 }
@@ -71,6 +75,8 @@ export async function PATCH(req: Request) {
       notes?: string | null;
       forceSettled?: boolean | null;
       cardLast4?: string | null;
+      saldoDeudaArs?: number | null;
+      saldoDeudaUsd?: number | null;
     };
 
     let dueDay: number | null | undefined = undefined;
@@ -116,6 +122,11 @@ export async function PATCH(req: Request) {
       }
     }
 
+    const saldoDeudaArs =
+      body.saldoDeudaArs !== undefined ? n(body.saldoDeudaArs) : undefined;
+    const saldoDeudaUsd =
+      body.saldoDeudaUsd !== undefined ? n(body.saldoDeudaUsd) : undefined;
+
     if (ratePct != null && (ratePct < 0 || ratePct > 1000)) {
       return NextResponse.json(
         { error: "La tasa parece rara (0–1000%)" },
@@ -154,6 +165,18 @@ export async function PATCH(req: Request) {
         clearedAt !== undefined ? clearedAt : existing?.clearedAt ?? null,
       cardLast4:
         cardLast4 !== undefined ? cardLast4 : existing?.cardLast4 ?? null,
+      saldoDeudaArs:
+        saldoDeudaArs !== undefined
+          ? saldoDeudaArs != null
+            ? String(saldoDeudaArs)
+            : null
+          : existing?.saldoDeudaArs ?? null,
+      saldoDeudaUsd:
+        saldoDeudaUsd !== undefined
+          ? saldoDeudaUsd != null
+            ? String(saldoDeudaUsd)
+            : null
+          : existing?.saldoDeudaUsd ?? null,
       updatedAt: new Date(),
     };
 
@@ -170,6 +193,8 @@ export async function PATCH(req: Request) {
           forceSettled: values.forceSettled,
           clearedAt: values.clearedAt,
           cardLast4: values.cardLast4,
+          saldoDeudaArs: values.saldoDeudaArs,
+          saldoDeudaUsd: values.saldoDeudaUsd,
           updatedAt: values.updatedAt,
         },
       })

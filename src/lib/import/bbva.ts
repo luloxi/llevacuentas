@@ -180,6 +180,37 @@ export async function importBbvaFile(opts: {
       });
   }
 
+  // Rainman: card statement SALDO ACTUAL → saldo_deuda (CA$ checking is ignored by parser).
+  const cardSaldo = parsed.cardSaldo ?? null;
+  if (cardSaldo && cardSaldo.ars > 0) {
+    await db
+      .insert(schema.debtSettings)
+      .values({
+        userId: opts.userId,
+        cardLast4: primaryCardLast4 ?? settingsRow?.cardLast4 ?? null,
+        saldoDeudaArs: cardSaldo.ars.toFixed(2),
+        saldoDeudaUsd:
+          cardSaldo.usd != null && cardSaldo.usd > 0
+            ? cardSaldo.usd.toFixed(2)
+            : null,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: schema.debtSettings.userId,
+        set: {
+          saldoDeudaArs: cardSaldo.ars.toFixed(2),
+          saldoDeudaUsd:
+            cardSaldo.usd != null && cardSaldo.usd > 0
+              ? cardSaldo.usd.toFixed(2)
+              : null,
+          updatedAt: new Date(),
+          ...(primaryCardLast4 && !settingsRow?.cardLast4
+            ? { cardLast4: primaryCardLast4 }
+            : {}),
+        },
+      });
+  }
+
   if (movements.length === 0) {
     const empty = emptyParseMessage({
       fileName: opts.fileName,

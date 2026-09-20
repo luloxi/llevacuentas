@@ -4,6 +4,7 @@
  * UI must not echo full legal names.
  */
 
+import { isInternalTransferDescription } from "@/lib/bbva/bank-entries";
 import { isHogarUtilitySlug } from "@/lib/gasto-cubierto";
 
 const HOGAR_REINTEGRO_PAYEE_TOKENS = [
@@ -86,10 +87,12 @@ export function isConsumosHiddenPayment(
   if (!isPayment) return false;
   if (isHogarReintegroDescription(descriptionNormalized)) return false;
   if (isHogarUtilitySlug(categorySlug)) return false;
-  // Rainman: Transferencia interna stays visible (out of neta) like Cubierto.
+  // Rainman: Transferencia interna stays visible (out of neta) like Cubierto —
+  // by category slug OR description (CR TBE / cuenta tuya) if category never seeded.
   if ((categorySlug ?? "").trim().toLowerCase() === "transferencia-interna") {
     return false;
   }
+  if (isInternalTransferDescription(descriptionNormalized)) return false;
   return true;
 }
 

@@ -148,28 +148,36 @@ describe("computeCardDebt — no millions", () => {
       `old ledger of period+ultimos should be millions, got ${ledgerCharges}`,
     );
 
-    const debt = computeCardDebt(rows, { userId: "luciano" });
+    // Without saldo_deuda → Sin snapshot (never invent from TEMBICI / CA).
+    const emptyDebt = computeCardDebt(rows, { userId: "luciano" });
+    assert.equal(emptyDebt.mode, "empty");
+    assert.equal(emptyDebt.currentBalanceArs, 0);
+    assert.equal(emptyDebt.settled, false);
     assert.ok(
-      debt.currentBalanceArs < 10_000,
-      `expected <10k, got ${debt.currentBalanceArs}`,
+      emptyDebt.openCharges.some((c) => /TEMBICI/i.test(c.description)),
+      "TEMBICI still listed as open charge context",
     );
-    assert.ok(debt.currentBalanceArs < INCOMPLETE_LEDGER_ARS);
-    assert.ok(
-      debt.openCharges.some((c) => /TEMBICI/i.test(c.description)),
-      "TEMBICI should still show as a real open charge",
+    assert.equal(
+      emptyDebt.openInstallments.some((p) => /PENGUIN/i.test(p.description)),
+      false,
+      "other card 4/6 must not leak into his debt",
     );
-    assert.ok(debt.currentBalanceArs > 0, "not force-zero when TEMBICI exists");
+
+    // With saldo_deuda → that amount is the hero (Rainman SoT).
+    const debt = computeCardDebt(rows, {
+      userId: "luciano",
+      settings: { saldoDeudaArs: 4200, saldoDeudaUsd: null },
+    });
+    assert.equal(debt.mode, "manual");
+    assert.equal(debt.currentBalanceArs, 4200);
+    assert.equal(debt.saldoSnapshotArs, 4200);
+    assert.equal(debt.netDebtArs, 4200);
     assert.equal(debt.forceSettled, false);
     assert.equal(debt.settled, false);
-    assert.equal(debt.mode, "snapshot");
+    assert.ok(debt.currentBalanceArs < INCOMPLETE_LEDGER_ARS);
     assert.ok(
       debt.totalPaidArs < 1_000_000,
       `Pagado must be the 21d snapshot window, not lifetime, got ${debt.totalPaidArs}`,
-    );
-    assert.equal(
-      debt.openInstallments.some((p) => /PENGUIN/i.test(p.description)),
-      false,
-      "other card 4/6 must not leak into his debt",
     );
   });
 
@@ -242,9 +250,9 @@ describe("computeCardDebt — no millions", () => {
     ];
     const debt = computeCardDebt(rows, {
       userId: "luciano",
-      settings: { cardLast4: "8958" },
+      settings: { cardLast4: "8958", saldoDeudaArs: 140 },
     });
-    assert.equal(debt.mode, "snapshot");
+    assert.equal(debt.mode, "manual");
     assert.equal(debt.settled, false);
     assert.equal(debt.currentBalanceArs, 140);
     assert.equal(debt.openCharges.length, 1);
@@ -288,7 +296,7 @@ describe("computeCardDebt — no millions", () => {
     ];
     const debt = computeCardDebt(rows, {
       userId: "luciano",
-      settings: { cardLast4: "8958" },
+      settings: { cardLast4: "8958", saldoDeudaArs: 140 },
     });
     assert.equal(debt.settled, false);
     assert.ok(debt.openCharges.some((c) => /TEMBICI/i.test(c.description)));
@@ -354,8 +362,18 @@ describe("computeCardDebt — no millions", () => {
         "tembici",
       ),
     ];
-    const debt = computeCardDebt(rows, { userId: "luciano" });
-    assert.equal(debt.mode, "snapshot");
+    // Without saldo → empty hero; charges still listed.
+    const bare = computeCardDebt(rows, { userId: "luciano" });
+    assert.equal(bare.mode, "empty");
+    assert.equal(bare.currentBalanceArs, 0);
+    assert.ok(bare.openCharges.some((c) => /TEMBICI/i.test(c.description)));
+
+    const debt = computeCardDebt(rows, {
+      userId: "luciano",
+      settings: { saldoDeudaArs: 140 },
+    });
+    assert.equal(debt.mode, "manual");
+    assert.equal(debt.currentBalanceArs, 140);
     assert.equal(debt.settled, false);
     assert.equal(debt.totalPaidArs, 5000);
     assert.ok(debt.totalPaidArs < 1_000_000);
@@ -373,7 +391,7 @@ describe("computeCardDebt — no millions", () => {
     assert.equal(debt.openCharges.length, 0);
   });
 
-  it("newer bank CA CR TBE does not age TEMBICI out of snapshot (saldo_snapshot)", () => {
+  it("CR TBE bank CA noise never invents debt; saldo_deuda is SoT", () => {
     const rows: DebtTx[] = [
       asTx(
         {
@@ -418,18 +436,84 @@ describe("computeCardDebt — no millions", () => {
         "recent-pay",
       ),
     ];
-    const debt = computeCardDebt(rows, { userId: "luciano" });
-    assert.equal(debt.mode, "snapshot");
+    // No saldo_deuda → Sin snapshot (do not invent 140 from TEMBICI).
+    const bare = computeCardDebt(rows, { userId: "luciano" });
+    assert.equal(bare.mode, "empty");
+    assert.equal(bare.currentBalanceArs, 0);
+    assert.equal(bare.saldoSnapshotArs, 0);
+    assert.ok(bare.openCharges.some((c) => /TEMBICI/i.test(c.description)));
+    assert.equal(
+      bare.payments.some((p) => /CR TBE/i.test(p.description)),
+      false,
+      "internal CR TBE must not count as card Pagado",
+    );
+
+    // User / import filled saldo_deuda → that is the debt.
+    const debt = computeCardDebt(rows, {
+      userId: "luciano",
+      settings: { saldoDeudaArs: 2895037.06, saldoDeudaUsd: 20.09 },
+    });
+    assert.equal(debt.mode, "manual");
+    assert.equal(debt.currentBalanceArs, 2895037.06);
+    assert.equal(debt.currentBalanceUsd, 20.09);
+    assert.equal(debt.saldoSnapshotArs, 2895037.06);
+    assert.equal(debt.netDebtArs, 2895037.06);
     assert.equal(debt.settled, false);
-    assert.equal(debt.currentBalanceArs, 140);
-    assert.equal(debt.saldoSnapshotArs, 140);
-    assert.equal(debt.netDebtArs, 140);
+  });
+
+  it("debt window is not anchored on CR TBE for Pagado list", () => {
+    const rows: DebtTx[] = [
+      asTx(
+        {
+          date: "2026-09-19",
+          descriptionNormalized: "CR TBE INM COE",
+          amountArs: 300000,
+          amountUsd: null,
+          installment: null,
+          isPayment: true,
+          isCredit: false,
+          cardLast4: null,
+        },
+        "bbva_import",
+        "cr-tbe",
+      ),
+      asTx(
+        {
+          date: "2026-08-20",
+          descriptionNormalized: "SU PAGO EN PESOS",
+          amountArs: -5000,
+          amountUsd: null,
+          installment: null,
+          isPayment: true,
+          isCredit: false,
+          cardLast4: null,
+        },
+        "bbva_xlsx",
+        "recent-pay",
+      ),
+      asTx(
+        {
+          date: "2026-08-23",
+          descriptionNormalized: "MERPAGO*TEMBICI",
+          amountArs: 140,
+          amountUsd: null,
+          installment: null,
+          isPayment: false,
+          isCredit: false,
+          cardLast4: null,
+        },
+        "bbva_xlsx",
+        "tembici",
+      ),
+    ];
+    const debt = computeCardDebt(rows, {
+      userId: "luciano",
+      settings: { saldoDeudaArs: 140 },
+    });
     assert.equal(debt.totalPaidArs, 5000);
-    assert.ok(debt.openCharges.some((c) => /TEMBICI/i.test(c.description)));
     assert.equal(
       debt.payments.some((p) => /CR TBE/i.test(p.description)),
       false,
-      "internal CR TBE must not count as card Pagado",
     );
   });
 });

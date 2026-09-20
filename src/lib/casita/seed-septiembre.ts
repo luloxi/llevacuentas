@@ -497,6 +497,7 @@ async function backfillCasitaSeptOwnAccountTransfers(
   userId: string,
 ) {
   const db = getDb();
+  await ensureCategoriesSeeded();
   const { bySlug } = await getCategoryMap({
     householdId,
     includeHidden: true,

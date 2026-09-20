@@ -180,12 +180,20 @@ export function isNonIncomeTransferLabel(
 export function isTransferenciaInternaTipo(
   isPayment: boolean,
   category?: { slug?: string | null; name?: string | null } | null,
+  descriptionNormalized?: string | null,
 ): boolean {
   if (!isPayment) return false;
   const slug = (category?.slug ?? "").trim().toLowerCase();
   if (slug === "transferencia-interna") return true;
   const name = foldDesc(category?.name ?? "");
-  return name === "TRANSFERENCIA INTERNA";
+  if (name === "TRANSFERENCIA INTERNA") return true;
+  if (
+    descriptionNormalized &&
+    isInternalTransferDescription(descriptionNormalized)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**

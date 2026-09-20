@@ -5,7 +5,7 @@ import {
   isNonIncomeTransferLabel,
 } from "@/lib/bbva/bank-entries";
 import { getDb, schema } from "@/lib/db";
-import { getCategoryMap } from "@/lib/household";
+import { ensureCategoriesSeeded, getCategoryMap } from "@/lib/household";
 import { reclassifyTargetForDescription } from "@/lib/import/fiwind";
 import { fingerprintParts } from "@/lib/money";
 
@@ -90,7 +90,9 @@ export async function reclassifyFiwindNoise(
   opts?: { userId?: string | null },
 ): Promise<ReclassifyFiwindResult> {
   const db = getDb();
-  const { bySlug, byId } = await getCategoryMap({
+  // Rainman: category must exist before mark/upsert — otherwise Consumos stays empty.
+  await ensureCategoriesSeeded();
+  let { bySlug, byId } = await getCategoryMap({
     householdId,
     includeHidden: true,
   });
@@ -115,8 +117,17 @@ export async function reclassifyFiwindNoise(
   let skipped = 0;
   let internalMarked = 0;
 
-  const internalCat =
-    bySlug.get("transferencia-interna") ?? bySlug.get("conversiones");
+  let internalCat = bySlug.get("transferencia-interna");
+  if (!internalCat) {
+    // Seed race / old DB: re-seed and refresh map once.
+    await ensureCategoriesSeeded();
+    ({ bySlug, byId } = await getCategoryMap({
+      householdId,
+      includeHidden: true,
+    }));
+    internalCat =
+      bySlug.get("transferencia-interna") ?? bySlug.get("conversiones");
+  }
 
   async function markInternal(row: (typeof rows)[number]): Promise<boolean> {
     const patch: {
@@ -309,6 +320,57 @@ export async function reclassifyFiwindNoise(
 
       await db.delete(schema.incomes).where(eq(schema.incomes.id, inc.id));
       incomesRemoved += 1;
+    }
+  }
+
+  // Rainman backfill when incomes already gone: re-scan txs and ensure
+  // Transferencia interna category + isPayment so Consumos search finds $300k.
+  if (internalCat) {
+    const fresh = await db
+      .select({
+        id: schema.transactions.id,
+        descriptionNormalized: schema.transactions.descriptionNormalized,
+        categoryId: schema.transactions.categoryId,
+        isPayment: schema.transactions.isPayment,
+        isCredit: schema.transactions.isCredit,
+        date: schema.transactions.date,
+        amountArs: schema.transactions.amountArs,
+        amountUsd: schema.transactions.amountUsd,
+        externalFingerprint: schema.transactions.externalFingerprint,
+      })
+      .from(schema.transactions)
+      .where(eq(schema.transactions.householdId, householdId));
+
+    for (const row of fresh) {
+      if (!isInternalTransferDescription(row.descriptionNormalized)) continue;
+      const needsCat = row.categoryId !== internalCat.id;
+      const needsPay = !row.isPayment;
+      const needsCredit = Boolean(row.isCredit);
+      const needsFp = !row.externalFingerprint;
+      if (!needsCat && !needsPay && !needsCredit && !needsFp) continue;
+      const fp = internalTransferFingerprint({
+        date: row.date,
+        label: row.descriptionNormalized,
+        amountArs: row.amountArs != null ? n(row.amountArs) : null,
+        amountUsd: row.amountUsd != null ? n(row.amountUsd) : null,
+      });
+      await db
+        .update(schema.transactions)
+        .set({
+          isPayment: true,
+          isCredit: false,
+          categoryId: internalCat.id,
+          ...(needsFp ? { externalFingerprint: fp } : {}),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(schema.transactions.id, row.id),
+            eq(schema.transactions.householdId, householdId),
+          ),
+        );
+      internalMarked += 1;
+      updated += 1;
     }
   }
 

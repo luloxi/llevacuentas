@@ -144,4 +144,19 @@ describe("isBankAccountingEntry internal transfers", () => {
       false,
     );
   });
+
+  it("Tipo by description without category (Consumos visible path)", () => {
+    assert.equal(
+      isTransferenciaInternaTipo(true, null, "CR TBE INM COE"),
+      true,
+    );
+    assert.equal(
+      isTransferenciaInternaTipo(true, { slug: null }, "A una cuenta tuya"),
+      true,
+    );
+    assert.equal(
+      isTransferenciaInternaTipo(false, null, "CR TBE INM COE"),
+      false,
+    );
+  });
 });

@@ -130,7 +130,31 @@ describe("Consumos visibility for hogar reintegro isPayment", () => {
       isReintegroHogarTipo(true, "Katherine Fernanda Sanchez Carrasco"),
       true,
     );
-    assert.equal(isConsumosHiddenPayment(true, "A una cuenta tuya"), true);
+    assert.equal(isConsumosHiddenPayment(true, "SU PAGO EN PESOS"), true);
     assert.equal(isConsumosHiddenPayment(false, "DIA"), false);
+  });
+
+  it("Rainman: Transferencia interna visible by description even without category", () => {
+    assert.equal(
+      isConsumosHiddenPayment(true, "CR TBE INM COE", null),
+      false,
+    );
+    assert.equal(
+      isConsumosHiddenPayment(true, "CR TRF INM COE", undefined),
+      false,
+    );
+    assert.equal(
+      isConsumosHiddenPayment(true, "A una cuenta tuya", null),
+      false,
+    );
+    assert.equal(
+      isConsumosHiddenPayment(true, "BBVA CA$ TRANSFERENCIA", null),
+      false,
+    );
+    // Still hidden when category is plain pagos
+    assert.equal(
+      isConsumosHiddenPayment(true, "SU PAGO EN PESOS", "pagos"),
+      true,
+    );
   });
 });

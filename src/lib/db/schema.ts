@@ -286,6 +286,13 @@ export const debtSettings = pgTable("debt_settings", {
   clearedAt: timestamp("cleared_at", { mode: "date" }),
   /** Last 4 of the card that belongs to this user (period xls may list two). */
   cardLast4: text("card_last4"),
+  /**
+   * Rainman: editable card debt source of truth (ARS). Without it → Sin snapshot.
+   * Filled by card statement import (SALDO ACTUAL) or typed by the user.
+   */
+  saldoDeudaArs: numeric("saldo_deuda_ars", { precision: 14, scale: 2 }),
+  /** Optional USD leg of the card saldo. */
+  saldoDeudaUsd: numeric("saldo_deuda_usd", { precision: 14, scale: 2 }),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
 });
 

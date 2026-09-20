@@ -39,6 +39,14 @@ export async function GET() {
       settings: {
         forceSettled: settings?.forceSettled ?? false,
         cardLast4: settings?.cardLast4 ?? null,
+        saldoDeudaArs:
+          settings?.saldoDeudaArs != null
+            ? Number(settings.saldoDeudaArs)
+            : null,
+        saldoDeudaUsd:
+          settings?.saldoDeudaUsd != null
+            ? Number(settings.saldoDeudaUsd)
+            : null,
       },
       usdRate,
     });

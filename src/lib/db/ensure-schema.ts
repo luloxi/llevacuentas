@@ -244,6 +244,8 @@ export async function ensureSchema() {
           force_settled boolean NOT NULL DEFAULT false,
           cleared_at timestamp,
           card_last4 text,
+          saldo_deuda_ars numeric(14,2),
+          saldo_deuda_usd numeric(14,2),
           updated_at timestamp DEFAULT now() NOT NULL
         )
       `,

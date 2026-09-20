@@ -674,7 +674,7 @@ export function MesAMesView({
     if (value === "personal") {
       const wasSpecial =
         isReintegroHogarTipo(Boolean(r.isPayment), r.descriptionNormalized) ||
-        isTransferenciaInternaTipo(Boolean(r.isPayment), r.category) ||
+        isTransferenciaInternaTipo(Boolean(r.isPayment), r.category, r.descriptionNormalized) ||
         isGastoCubiertoTipo(Boolean(r.isPayment), r.category);
       if (r.ownership === "personal" && !wasSpecial) return;
       setError(null);
@@ -763,7 +763,7 @@ export function MesAMesView({
       }
       const wasSpecial =
         isReintegroHogarTipo(Boolean(r.isPayment), r.descriptionNormalized) ||
-        isTransferenciaInternaTipo(Boolean(r.isPayment), r.category) ||
+        isTransferenciaInternaTipo(Boolean(r.isPayment), r.category, r.descriptionNormalized) ||
         isGastoCubiertoTipo(Boolean(r.isPayment), r.category);
       if (r.ownership !== "shared" || wasSpecial) {
         void patchTx(r.id, {

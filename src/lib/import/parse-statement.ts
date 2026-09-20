@@ -1,6 +1,11 @@
 import type { BbvaMovement } from "@/lib/bbva/parse";
 import { parseStatementWorkbook } from "@/lib/bbva/parse";
 import {
+  parseCardStatementSaldoFromRows,
+  parseCardStatementSaldoFromText,
+  type CardStatementSaldo,
+} from "@/lib/stats/saldo-deuda";
+import {
   detectBankFromFileName,
   detectBankFromText,
   detectFileKind,
@@ -15,6 +20,8 @@ export type StatementParseResult = {
   fileKind: StatementFileKind;
   pdfTextLength?: number;
   hint: string | null;
+  /** Rainman: card SALDO ACTUAL / total a pagar (not CA$ checking). */
+  cardSaldo?: CardStatementSaldo | null;
 };
 
 function workbookSource(
@@ -52,6 +59,7 @@ export async function parseStatementFile(
     const text = await extractPdfText(buffer);
     const detectedBank = detectBankFromText(text) ?? fromName;
     const pdfTextLength = text.length;
+    const cardSaldo = parseCardStatementSaldoFromText(text);
 
     const bbvaMovements = parseBbvaPdfText(text);
     if (bbvaMovements.length > 0) {
@@ -64,6 +72,7 @@ export async function parseStatementFile(
         fileKind,
         pdfTextLength,
         hint: null,
+        cardSaldo,
       };
     }
 
@@ -76,6 +85,7 @@ export async function parseStatementFile(
         fileKind,
         pdfTextLength,
         hint: null,
+        cardSaldo,
       };
     }
 
@@ -93,6 +103,7 @@ export async function parseStatementFile(
             fileKind,
             pdfTextLength,
             hint: null,
+            cardSaldo,
           };
         }
       } catch (e) {
@@ -121,6 +132,7 @@ export async function parseStatementFile(
       fileKind,
       pdfTextLength,
       hint: empty.hint,
+      cardSaldo,
     };
   }
 
@@ -139,11 +151,31 @@ export async function parseStatementFile(
       ? emptyParseMessage({ fileName, fileKind: kind }).hint
       : null;
 
+  let cardSaldo = null as CardStatementSaldo | null;
+  try {
+    const XLSX = await import("xlsx");
+    const wb = XLSX.read(buffer, { type: "buffer" });
+    const rows: unknown[][] = [];
+    for (const sn of wb.SheetNames) {
+      const sheet = wb.Sheets[sn];
+      if (!sheet) continue;
+      const matrix = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: "",
+      }) as unknown[][];
+      rows.push(...matrix);
+    }
+    cardSaldo = parseCardStatementSaldoFromRows(rows);
+  } catch {
+    cardSaldo = null;
+  }
+
   return {
     movements: parsed.movements,
     source,
     detectedBank,
     fileKind: kind,
     hint,
+    cardSaldo,
   };
 }

@@ -42,6 +42,9 @@ export type DebtTx = {
 export type DebtSettingsInput = {
   forceSettled?: boolean | null;
   cardLast4?: string | null;
+  /** Rainman: editable card saldo — source of truth for Deuda hero. */
+  saldoDeudaArs?: number | null;
+  saldoDeudaUsd?: number | null;
 };
 
 export type OpenInstallment = {
@@ -93,7 +96,7 @@ export type CardDebtResult = {
   /** Rainman: deuda_neta = saldo_snapshot − pagos_aplicados (floored at 0). */
   netDebtArs: number;
   primaryCardLast4: string | null;
-  mode: "forced" | "snapshot" | "installments" | "empty";
+  mode: "forced" | "snapshot" | "installments" | "manual" | "empty";
 };
 
 function n(v: unknown): number {
@@ -452,40 +455,35 @@ export function computeCardDebt(
     mode = "empty";
   }
 
-  const instArs = openInstallments.reduce((s, p) => s + p.remainingArs, 0);
   const chargeSum = sumCharges(openCharges, usdRate);
-  let balanceArs = instArs + chargeSum.combined;
-  let balanceUsd = chargeSum.usd;
 
-  // Incomplete period history must never surface as millions / tens of thousands.
-  if (balanceArs >= INCOMPLETE_LEDGER_ARS) {
-    const snapOnly = sumCharges(snapshotCharges, usdRate).combined;
-    if (snapOnly < INCOMPLETE_LEDGER_ARS) {
-      openInstallments = snapshotInstallments;
-      openCharges = snapshotCharges;
-      balanceArs = snapOnly;
-      balanceUsd = sumCharges(snapshotCharges, usdRate).usd;
-      mode = snapshot.length > 0 ? "snapshot" : "empty";
-    } else {
-      openInstallments = [];
-      openCharges = [];
-      balanceArs = 0;
-      balanceUsd = 0;
-      mode = "empty";
-    }
+  // Rainman minimal path: editable saldo_deuda is the only balance source of truth.
+  // Without it → Sin snapshot (mode empty). Never invent from CA noise / TEMBICI sum.
+  const saldoArsRaw = opts.settings?.saldoDeudaArs;
+  const saldoUsdRaw = opts.settings?.saldoDeudaUsd;
+  const hasSaldo = saldoArsRaw != null || saldoUsdRaw != null;
+
+  let currentBalanceArs = 0;
+  let currentBalanceUsd = 0;
+  let settled = false;
+
+  if (hasSaldo) {
+    const balanceArs = Math.abs(n(saldoArsRaw));
+    const balanceUsd = Math.abs(n(saldoUsdRaw));
+    currentBalanceArs =
+      balanceArs < SETTLED_THRESHOLD_ARS && balanceUsd < 0.01 ? 0 : balanceArs;
+    currentBalanceUsd = currentBalanceArs === 0 ? 0 : balanceUsd;
+    settled = currentBalanceArs === 0 && currentBalanceUsd === 0;
+    mode = "manual";
+  } else {
+    // Keep cuotas/cargos lists for context, but do not invent a hero balance.
+    currentBalanceArs = 0;
+    currentBalanceUsd = 0;
+    settled = false;
+    mode = "empty";
   }
 
-  const currentBalanceArs =
-    balanceArs < SETTLED_THRESHOLD_ARS ? 0 : balanceArs;
-  const currentBalanceUsd = currentBalanceArs === 0 ? 0 : balanceUsd;
-  // Saldada only with a live snapshot whose balance is under the threshold.
-  // Empty / period-only / discarded ledger must not fake it.
-  const settled = mode === "snapshot" && currentBalanceArs === 0;
-
-  const saldoSnapshotArs =
-    mode === "snapshot" || mode === "installments" ? currentBalanceArs : 0;
-  // Open remaining is already the live debt; Pagado is informational (window).
-  // Rainman: never invent negative neta; self credits never raise it.
+  const saldoSnapshotArs = hasSaldo ? currentBalanceArs : 0;
   const netDebtArs = saldoSnapshotArs;
 
   return {

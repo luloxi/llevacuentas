@@ -20,3 +20,22 @@ describe("internalTransferFingerprint", () => {
     assert.equal(a.length, 32);
   });
 });
+
+describe("backfill Transferencia interna without income row", () => {
+  it("fingerprint for CR TBE 300k is stable so Consumos upsert is searchable", () => {
+    const fp = internalTransferFingerprint({
+      date: "2026-09-10",
+      label: "CR TBE INM COE",
+      amountArs: 300000,
+      amountUsd: null,
+    });
+    // Same amount typed as search "300000" / "300000.00"
+    const fp2 = internalTransferFingerprint({
+      date: "2026-09-10",
+      label: "CR TBE INM COE",
+      amountArs: 300000.0,
+      amountUsd: undefined,
+    });
+    assert.equal(fp, fp2);
+  });
+});

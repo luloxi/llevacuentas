@@ -62,6 +62,8 @@ type DebtSettings = {
   notes: string | null;
   forceSettled?: boolean;
   cardLast4?: string | null;
+  saldoDeudaArs?: number | null;
+  saldoDeudaUsd?: number | null;
 };
 
 type DebtTab = "evolucion" | "pagos";
@@ -156,11 +158,15 @@ export function DeudaView() {
     dueDay: null,
     notes: null,
     forceSettled: false,
+    saldoDeudaArs: null,
+    saldoDeudaUsd: null,
   });
   const [rateInput, setRateInput] = useState("");
   const [minInput, setMinInput] = useState("");
   const [dueInput, setDueInput] = useState("");
   const [notesInput, setNotesInput] = useState("");
+  const [saldoArsInput, setSaldoArsInput] = useState("");
+  const [saldoUsdInput, setSaldoUsdInput] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
 
@@ -197,6 +203,12 @@ export function DeudaView() {
         setMinInput(s.minPaymentArs != null ? String(s.minPaymentArs) : "");
         setDueInput(s.dueDay != null ? String(s.dueDay) : "");
         setNotesInput(s.notes ?? "");
+        setSaldoArsInput(
+          s.saldoDeudaArs != null ? String(s.saldoDeudaArs) : "",
+        );
+        setSaldoUsdInput(
+          s.saldoDeudaUsd != null ? String(s.saldoDeudaUsd) : "",
+        );
       }
       setError(null);
     } catch (e) {
@@ -225,6 +237,12 @@ export function DeudaView() {
             : null,
           dueDay: dueInput.trim() ? Number(dueInput) : null,
           notes: notesInput.trim() || null,
+          saldoDeudaArs: saldoArsInput.trim()
+            ? Number(saldoArsInput.replace(",", "."))
+            : null,
+          saldoDeudaUsd: saldoUsdInput.trim()
+            ? Number(saldoUsdInput.replace(",", "."))
+            : null,
           forceSettled:
             patch?.forceSettled !== undefined
               ? patch.forceSettled
@@ -235,10 +253,15 @@ export function DeudaView() {
       if (!res.ok) throw new Error(data.error || "Error");
       const s = data.settings as DebtSettings;
       setSettings(s);
+      setSaldoArsInput(
+        s.saldoDeudaArs != null ? String(s.saldoDeudaArs) : "",
+      );
+      setSaldoUsdInput(
+        s.saldoDeudaUsd != null ? String(s.saldoDeudaUsd) : "",
+      );
       setSettingsMsg("Guardado");
-      if (patch?.forceSettled !== undefined) {
-        await load();
-      }
+      // Saldo / forceSettled change the hero — refresh summary.
+      await load();
     } catch (e) {
       setSettingsMsg(e instanceof Error ? e.message : "Error");
     } finally {
@@ -260,12 +283,16 @@ export function DeudaView() {
   const onlyPayments = payments.filter((p) => p.kind === "payment");
   const forced = Boolean(settings.forceSettled || summary?.forceSettled);
   const mode = summary?.mode ?? "empty";
-  const hasSnapshot = mode === "snapshot";
-  // Never infer Saldada from a $0 balance — empty / no snapshot is not settled.
+  // Rainman: saldo_deuda (manual / import) is the only balance SoT.
+  const hasSaldo =
+    mode === "manual" ||
+    mode === "snapshot" ||
+    settings.saldoDeudaArs != null ||
+    settings.saldoDeudaUsd != null;
+  // Never infer Saldada from a $0 balance — empty / no saldo is not settled.
   const settled = Boolean(summary?.settled);
-  // Prompt Excel only when there is no snapshot AND no period cuotas.
-  // Existing saldo_snapshot / installments must never fall through to upload.
-  const missingSnapshot = !forced && mode === "empty";
+  // Without saldo_deuda → Sin snapshot. User can type it or import card resumen.
+  const missingSnapshot = !forced && !hasSaldo && mode === "empty";
   const paymentRows = onlyPayments.length ? onlyPayments : payments;
   const balance = Math.max(
     summary?.saldoSnapshotArs ??
@@ -280,12 +307,12 @@ export function DeudaView() {
   const heroLabel = settled ? "Estado" : "Deuda";
   const heroValue = settled
     ? "Saldada"
-    : mode === "empty"
+    : !hasSaldo || mode === "empty"
       ? "Sin snapshot"
       : formatArs(balance);
   const heroTone: "neutral" | "brand" | "danger" = settled
     ? "brand"
-    : mode === "empty"
+    : !hasSaldo || mode === "empty"
       ? "neutral"
       : "danger";
 
@@ -295,8 +322,8 @@ export function DeudaView() {
         <div>
           <h2 className="text-sm font-semibold tracking-tight">Tu tarjeta</h2>
           <p className="text-[11px] text-zinc-500">
-            Solo cuotas abiertas y cargos del último snapshot. El historial
-            incompleto del banco no inventa millones.
+            El saldo de deuda lo cargás vos (o el resumen de tarjeta). No
+            inventamos números desde la cuenta corriente.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -337,6 +364,28 @@ export function DeudaView() {
               placeholder="opcional"
               value={notesInput}
               onChange={(e) => setNotesInput(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div>
+            <FieldLabel>Saldo deuda ARS</FieldLabel>
+            <input
+              className="lc-input w-full"
+              inputMode="decimal"
+              placeholder="ej. 2895037"
+              value={saldoArsInput}
+              onChange={(e) => setSaldoArsInput(e.target.value)}
+            />
+          </div>
+          <div>
+            <FieldLabel>Saldo deuda USD</FieldLabel>
+            <input
+              className="lc-input w-full"
+              inputMode="decimal"
+              placeholder="opcional"
+              value={saldoUsdInput}
+              onChange={(e) => setSaldoUsdInput(e.target.value)}
             />
           </div>
         </div>
@@ -420,11 +469,13 @@ export function DeudaView() {
 
       {missingSnapshot && (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-          Falta el Excel de Últimos movimientos BBVA. Importalo en{" "}
+          Sin saldo de deuda. Escribí el{" "}
+          <span className="font-semibold">Saldo actual</span> de tu tarjeta
+          arriba, o importá el resumen PDF/Excel en{" "}
           <Link href="/cargas" className="font-semibold underline underline-offset-2">
             Cargas
-          </Link>{" "}
-          para ver la deuda actual. Sin ese snapshot no marcamos Saldada.
+          </Link>
+          . El saldo de la cuenta corriente no cuenta como deuda.
         </p>
       )}
 
